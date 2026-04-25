@@ -19,7 +19,7 @@ curl -sS -X POST 'http://localhost:9010/admin/auth/login' \
   -H 'Content-Type: application/json' \
   -d '{
     "username": "admin",
-    "password": "pass123456"
+    "password": "admin123"
   }'
 ```
 

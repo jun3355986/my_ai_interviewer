@@ -1,21 +1,24 @@
 package com.aiinterviewer.admin.smoke;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.aiinterviewer.admin.common.security.JwtService;
 import com.aiinterviewer.admin.support.AdminPostgresIntegrationTest;
-import java.util.List;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.MockMvc;
 
 @AutoConfigureMockMvc
@@ -27,14 +30,29 @@ class AdminApiSmokeTest extends AdminPostgresIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private JwtService jwtService;
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private String adminToken;
 
     @BeforeEach
-    void seedAdminToken() {
-        Long adminUserId = createAdminUser();
-        adminToken = jwtService.generateAccessToken(adminUserId, List.of("ROLE_ADMIN"));
+    void seedAdminAndLogin() throws Exception {
+        createAdminUser();
+        MvcResult result = mockMvc.perform(post("/admin/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "smoke_admin",
+                                  "password": "admin123"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").isString())
+                .andReturn();
+        JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
+        adminToken = response.path("data").path("accessToken").asText();
     }
 
     @ParameterizedTest(name = "GET {0} returns success wrapper")
@@ -70,7 +88,7 @@ class AdminApiSmokeTest extends AdminPostgresIntegrationTest {
                 ADMIN_USERNAME,
                 "smoke.admin@example.com",
                 "13900000000",
-                "{noop}unused-for-token-smoke",
+                passwordEncoder.encode("admin123"),
                 "Smoke Admin");
         Long roleId = jdbcTemplate.queryForObject(
                 """

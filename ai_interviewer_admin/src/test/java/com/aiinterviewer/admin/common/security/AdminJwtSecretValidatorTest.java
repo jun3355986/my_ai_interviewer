@@ -31,6 +31,30 @@ class AdminJwtSecretValidatorTest {
     }
 
     @Test
+    void rejectsComposeLocalSecretInProdProfile() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setActiveProfiles("prod");
+        AdminJwtSecretValidator validator =
+                new AdminJwtSecretValidator(AdminJwtSecretValidator.LOCAL_COMPOSE_SECRET, environment);
+
+        assertThatThrownBy(validator::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("admin.jwt.secret must be overridden");
+    }
+
+    @Test
+    void rejectsExampleSecretInProdProfile() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setActiveProfiles("production");
+        AdminJwtSecretValidator validator =
+                new AdminJwtSecretValidator(AdminJwtSecretValidator.EXAMPLE_SECRET, environment);
+
+        assertThatThrownBy(validator::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("admin.jwt.secret must be overridden");
+    }
+
+    @Test
     void allowsCustomSecretInProductionProfile() {
         MockEnvironment environment = new MockEnvironment();
         environment.setActiveProfiles("production");
