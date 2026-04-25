@@ -5,6 +5,7 @@ import com.aiinterviewer.admin.questionbank.QuestionService;
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
 import com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch;
 import com.aiinterviewer.admin.questionbank.entity.QuestionTag;
+import com.aiinterviewer.admin.questionbank.entity.QuestionVectorSyncRecord;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -58,4 +59,13 @@ public interface QuestionMapper {
             @Param("errorMessage") String errorMessage);
 
     QuestionImportBatch selectImportBatchById(@Param("batchId") Long batchId);
+
+    List<QuestionBankItem> selectQuestionsEligibleForVectorSync();
+
+    int updateQuestionVectorSyncStatus(
+            @Param("questionId") Long questionId,
+            @Param("syncStatus") String syncStatus,
+            @Param("errorMessage") String errorMessage);
+
+    int upsertQuestionVectorSyncRecord(@Param("record") QuestionVectorSyncRecord record);
 }

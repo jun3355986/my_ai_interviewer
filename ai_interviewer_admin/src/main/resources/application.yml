@@ -51,6 +51,9 @@ admin:
     secret: ${ADMIN_JWT_SECRET:ai-interviewer-admin-default-secret-key-change-me-in-production}
     access-token-expiration: ${ADMIN_JWT_ACCESS_TOKEN_EXPIRATION:7200000}
 
+python-ai:
+  question-bank-sync-url: ${PYTHON_AI_QUESTION_BANK_SYNC_URL:http://localhost:8000/admin/question-bank/sync}
+
 management:
   endpoints:
     web:

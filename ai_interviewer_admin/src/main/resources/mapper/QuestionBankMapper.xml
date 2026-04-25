@@ -60,6 +60,18 @@
         <result property="deletedAt" column="deleted_at"/>
     </resultMap>
 
+    <resultMap id="QuestionVectorSyncRecordMap" type="com.aiinterviewer.admin.questionbank.entity.QuestionVectorSyncRecord">
+        <id property="id" column="id"/>
+        <result property="questionId" column="question_id"/>
+        <result property="syncStatus" column="sync_status"/>
+        <result property="vectorStoreId" column="vector_store_id"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="lastSyncedAt" column="last_synced_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
     <sql id="QuestionColumns">
         id, question_code, question_text, answer_reference, question_type, difficulty,
         skill_area, job_id, status, vector_sync_status, vector_sync_error, source_type,
@@ -252,4 +264,49 @@
         WHERE id = #{batchId}
           AND deleted_at IS NULL
     </select>
+
+    <select id="selectQuestionsEligibleForVectorSync" resultMap="QuestionBankItemMap">
+        SELECT
+        <include refid="QuestionColumns"/>
+        FROM t_question_bank
+        WHERE deleted_at IS NULL
+          AND status = 1
+          AND vector_sync_status IN ('PENDING', 'FAILED')
+        ORDER BY id ASC
+    </select>
+
+    <update id="updateQuestionVectorSyncStatus">
+        UPDATE t_question_bank
+        SET vector_sync_status = #{syncStatus},
+            vector_sync_error = #{errorMessage},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{questionId}
+          AND deleted_at IS NULL
+    </update>
+
+    <insert id="upsertQuestionVectorSyncRecord" useGeneratedKeys="true" keyProperty="record.id">
+        INSERT INTO t_question_vector_sync_record
+            (question_id, sync_status, vector_store_id, error_message, retry_count,
+             last_synced_at, created_at, updated_at)
+        VALUES
+            (#{record.questionId}, #{record.syncStatus}, #{record.vectorStoreId}, #{record.errorMessage},
+             CASE WHEN #{record.syncStatus} = 'FAILED' THEN 1 ELSE 0 END,
+             CASE WHEN #{record.syncStatus} = 'SYNCED' THEN CURRENT_TIMESTAMP ELSE NULL END,
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (question_id) DO UPDATE
+        SET sync_status = EXCLUDED.sync_status,
+            vector_store_id = EXCLUDED.vector_store_id,
+            error_message = EXCLUDED.error_message,
+            retry_count = CASE
+                WHEN EXCLUDED.sync_status = 'FAILED'
+                    THEN t_question_vector_sync_record.retry_count + 1
+                ELSE 0
+            END,
+            last_synced_at = CASE
+                WHEN EXCLUDED.sync_status = 'SYNCED'
+                    THEN CURRENT_TIMESTAMP
+                ELSE t_question_vector_sync_record.last_synced_at
+            END,
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
 </mapper>
