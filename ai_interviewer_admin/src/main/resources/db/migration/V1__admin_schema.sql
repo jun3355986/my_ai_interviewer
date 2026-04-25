@@ -196,6 +196,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_admin_menu_code ON t_admin_menu (menu_code)
 CREATE UNIQUE INDEX IF NOT EXISTS uk_admin_permission_code ON t_admin_permission (permission_code) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_question_bank_code ON t_question_bank (question_code) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_question_tag_code ON t_question_tag (tag_code) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_question_tag_name_lower ON t_question_tag (lower(tag_name)) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_question_import_batch_no ON t_question_import_batch (batch_no) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_notification_template_code ON t_notification_template (template_code) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_system_config_key ON t_system_config (config_key) WHERE deleted_at IS NULL;
@@ -212,6 +213,7 @@ CREATE INDEX IF NOT EXISTS idx_question_bank_job_id ON t_question_bank (job_id);
 CREATE INDEX IF NOT EXISTS idx_question_bank_vector_sync_status ON t_question_bank (vector_sync_status);
 CREATE INDEX IF NOT EXISTS idx_question_bank_source_batch_id ON t_question_bank (source_batch_id);
 CREATE INDEX IF NOT EXISTS idx_question_tag_type ON t_question_tag (tag_type);
+CREATE INDEX IF NOT EXISTS idx_question_tag_relation_tag_id ON t_question_tag_relation (tag_id);
 CREATE INDEX IF NOT EXISTS idx_question_import_batch_status ON t_question_import_batch (status);
 CREATE INDEX IF NOT EXISTS idx_question_vector_sync_status ON t_question_vector_sync_record (sync_status);
 CREATE INDEX IF NOT EXISTS idx_notification_template_channel ON t_notification_template (channel);

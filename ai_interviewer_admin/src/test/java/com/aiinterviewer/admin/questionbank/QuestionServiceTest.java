@@ -43,25 +43,44 @@ class QuestionServiceTest extends AdminPostgresIntegrationTest {
     @Test
     void updateQuestionChangesAnswerReferenceTagsDifficultyAndStatus() {
         Long questionId = questionService.createQuestion(createRequest());
+        QuestionBankItem beforeUpdate = questionService.getQuestion(questionId);
 
         QuestionUpdateRequest update = new QuestionUpdateRequest();
-        update.setQuestionText("请说明 JVM 类加载机制");
         update.setAnswerReference("双亲委派、加载、验证、准备、解析、初始化");
-        update.setQuestionType("TECHNICAL");
         update.setDifficulty("HARD");
-        update.setSkillArea("Java");
-        update.setJobId(101L);
         update.setStatus(0);
         update.setTags(List.of("JVM", "架构"));
         questionService.updateQuestion(questionId, update);
 
         QuestionBankItem updated = questionService.getQuestion(questionId);
 
+        assertThat(updated.getQuestionText()).isEqualTo(beforeUpdate.getQuestionText());
+        assertThat(updated.getQuestionType()).isEqualTo(beforeUpdate.getQuestionType());
+        assertThat(updated.getSkillArea()).isEqualTo(beforeUpdate.getSkillArea());
+        assertThat(updated.getJobId()).isEqualTo(beforeUpdate.getJobId());
         assertThat(updated.getAnswerReference()).contains("双亲委派");
         assertThat(updated.getDifficulty()).isEqualTo("HARD");
         assertThat(updated.getStatus()).isZero();
+        assertThat(updated.getVectorSyncStatus()).isEqualTo("DELETE_PENDING");
+        assertThat(updated.getVectorSyncError()).isNull();
         assertThat(updated.getTags()).containsExactly("JVM", "架构");
         assertThat(updated.isEligibleForVectorSync()).isFalse();
+    }
+
+    @Test
+    void updateQuestionCanClearAnswerReferenceAndLeaveTagsUnchangedWhenTagsAreNull() {
+        Long questionId = questionService.createQuestion(createRequest());
+
+        QuestionUpdateRequest update = new QuestionUpdateRequest();
+        update.setAnswerReference(null);
+        update.setTags(null);
+        questionService.updateQuestion(questionId, update);
+
+        QuestionBankItem updated = questionService.getQuestion(questionId);
+
+        assertThat(updated.getAnswerReference()).isNull();
+        assertThat(updated.getTags()).containsExactly("Java", "数据库");
+        assertThat(updated.getVectorSyncStatus()).isEqualTo("PENDING");
     }
 
     @Test
@@ -92,6 +111,29 @@ class QuestionServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void tagsAreReusedAndFilteredCaseInsensitively() {
+        Long firstId = questionService.createQuestion(createRequest());
+
+        QuestionCreateRequest second = createRequest();
+        second.setQuestionText("请说明 Java Stream 的常见使用场景");
+        second.setTags(List.of(" java ", "JAVA"));
+        Long secondId = questionService.createQuestion(second);
+
+        Integer javaTagCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM t_question_tag WHERE lower(tag_name) = 'java' AND deleted_at IS NULL",
+                Integer.class);
+        QuestionQuery query = new QuestionQuery();
+        query.setTag("java");
+
+        PageResult<QuestionBankItem> result = questionService.listQuestions(query);
+
+        assertThat(javaTagCount).isOne();
+        assertThat(result.getTotal()).isEqualTo(2);
+        assertThat(result.getRecords()).extracting(QuestionBankItem::getId).containsExactly(secondId, firstId);
+        assertThat(result.getRecords()).allSatisfy(question -> assertThat(question.getTags()).contains("Java"));
+    }
+
+    @Test
     void disabledQuestionIsNotEligibleForVectorSync() {
         QuestionCreateRequest request = createRequest();
         request.setStatus(0);
@@ -101,6 +143,56 @@ class QuestionServiceTest extends AdminPostgresIntegrationTest {
 
         assertThat(disabled.getStatus()).isZero();
         assertThat(disabled.isEligibleForVectorSync()).isFalse();
+    }
+
+    @Test
+    void syncedQuestionUpdateInvalidatesVectorSyncAsPendingWhenEnabled() {
+        Long questionId = questionService.createQuestion(createRequest());
+        jdbcTemplate.update(
+                "UPDATE t_question_bank SET vector_sync_status = 'SYNCED', vector_sync_error = 'old error' WHERE id = ?",
+                questionId);
+
+        QuestionUpdateRequest update = new QuestionUpdateRequest();
+        update.setDifficulty("HARD");
+        update.setStatus(1);
+        questionService.updateQuestion(questionId, update);
+
+        QuestionBankItem updated = questionService.getQuestion(questionId);
+
+        assertThat(updated.getDifficulty()).isEqualTo("HARD");
+        assertThat(updated.getStatus()).isEqualTo(1);
+        assertThat(updated.getVectorSyncStatus()).isEqualTo("PENDING");
+        assertThat(updated.getVectorSyncError()).isNull();
+        assertThat(updated.isEligibleForVectorSync()).isTrue();
+    }
+
+    @Test
+    void disabledOrDeletedQuestionBecomesDeletePendingAndNotEligible() {
+        Long disabledId = questionService.createQuestion(createRequest());
+        QuestionUpdateRequest disable = new QuestionUpdateRequest();
+        disable.setStatus(0);
+        questionService.updateQuestion(disabledId, disable);
+
+        QuestionBankItem disabled = questionService.getQuestion(disabledId);
+
+        assertThat(disabled.getVectorSyncStatus()).isEqualTo("DELETE_PENDING");
+        assertThat(disabled.getVectorSyncError()).isNull();
+        assertThat(disabled.isEligibleForVectorSync()).isFalse();
+
+        Long deletedId = questionService.createQuestion(createRequest());
+        questionService.deleteQuestion(deletedId);
+
+        String deletedVectorStatus = jdbcTemplate.queryForObject(
+                "SELECT vector_sync_status FROM t_question_bank WHERE id = ?",
+                String.class,
+                deletedId);
+        String deletedVectorError = jdbcTemplate.queryForObject(
+                "SELECT vector_sync_error FROM t_question_bank WHERE id = ?",
+                String.class,
+                deletedId);
+
+        assertThat(deletedVectorStatus).isEqualTo("DELETE_PENDING");
+        assertThat(deletedVectorError).isNull();
     }
 
     @Test

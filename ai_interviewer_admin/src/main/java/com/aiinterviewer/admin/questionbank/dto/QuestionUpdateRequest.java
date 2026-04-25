@@ -14,5 +14,17 @@ public class QuestionUpdateRequest {
     private Long jobId;
     private Integer status;
     private Long updatedBy;
-    private List<String> tags = List.of();
+    private List<String> tags;
+    private boolean answerReferenceSet;
+    private boolean tagsSet;
+
+    public void setAnswerReference(String answerReference) {
+        this.answerReference = answerReference;
+        this.answerReferenceSet = true;
+    }
+
+    public void setTags(List<String> tags) {
+        this.tags = tags;
+        this.tagsSet = true;
+    }
 }

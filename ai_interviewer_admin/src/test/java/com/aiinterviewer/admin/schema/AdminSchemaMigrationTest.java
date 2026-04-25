@@ -105,6 +105,13 @@ class AdminSchemaMigrationTest {
                         .as("index %s should only constrain active rows", indexName)
                         .contains("WHERE (deleted_at IS NULL)");
             });
+
+            String normalizedTagIndex = indexDefinition(connection, "uk_question_tag_name_lower");
+            assertThat(normalizedTagIndex)
+                    .as("normalized active tag names should be unique")
+                    .contains("CREATE UNIQUE INDEX")
+                    .contains("lower((tag_name)::text)")
+                    .contains("WHERE (deleted_at IS NULL)");
         }
     }
 

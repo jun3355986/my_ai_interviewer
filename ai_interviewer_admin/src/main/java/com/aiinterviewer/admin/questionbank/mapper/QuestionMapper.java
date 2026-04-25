@@ -26,7 +26,11 @@ public interface QuestionMapper {
 
     int insertQuestion(@Param("item") QuestionBankItem item);
 
-    int updateQuestion(@Param("item") QuestionBankItem item);
+    int updateQuestion(
+            @Param("item") QuestionBankItem item,
+            @Param("updateAnswerReference") boolean updateAnswerReference,
+            @Param("updateDifficulty") boolean updateDifficulty,
+            @Param("updateStatus") boolean updateStatus);
 
     int softDeleteQuestion(@Param("questionId") Long questionId);
 

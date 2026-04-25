@@ -81,19 +81,26 @@ public class QuestionService {
         validateUpdateRequest(request);
         QuestionBankItem item = new QuestionBankItem();
         item.setId(questionId);
-        item.setQuestionText(request.getQuestionText().trim());
-        item.setAnswerReference(trimToNull(request.getAnswerReference()));
-        item.setQuestionType(request.getQuestionType().trim());
-        item.setDifficulty(request.getDifficulty().trim());
-        item.setSkillArea(trimToNull(request.getSkillArea()));
-        item.setJobId(request.getJobId());
+        if (request.isAnswerReferenceSet()) {
+            item.setAnswerReference(trimToNull(request.getAnswerReference()));
+        }
+        if (request.getDifficulty() != null) {
+            item.setDifficulty(request.getDifficulty().trim());
+        }
         item.setStatus(request.getStatus());
         item.setUpdatedBy(request.getUpdatedBy());
-        int updated = questionMapper.updateQuestion(item);
+        item.setVectorSyncStatus(vectorStatusForUpdate(request.getStatus()));
+        int updated = questionMapper.updateQuestion(
+                item,
+                request.isAnswerReferenceSet(),
+                request.getDifficulty() != null,
+                request.getStatus() != null);
         if (updated == 0) {
             throw new AdminBusinessException(500, "题目更新失败");
         }
-        replaceTags(questionId, request.getTags());
+        if (request.isTagsSet() && request.getTags() != null) {
+            replaceTags(questionId, request.getTags());
+        }
     }
 
     @Transactional
@@ -117,7 +124,12 @@ public class QuestionService {
         if (request == null) {
             throw new AdminBusinessException(400, "题目参数不能为空");
         }
-        validateRequiredFields(request.getQuestionText(), request.getQuestionType(), request.getDifficulty(), request.getStatus());
+        if (request.getDifficulty() != null && !StringUtils.hasText(request.getDifficulty())) {
+            throw new AdminBusinessException(400, "难度不能为空");
+        }
+        if (request.getStatus() != null && request.getStatus() != 0 && request.getStatus() != 1) {
+            throw new AdminBusinessException(400, "状态不合法");
+        }
     }
 
     private void validateRequiredFields(String questionText, String questionType, String difficulty, Integer status) {
@@ -189,6 +201,12 @@ public class QuestionService {
             normalized.putIfAbsent(trimmed.toLowerCase(Locale.ROOT), trimmed);
         }
         return new ArrayList<>(normalized.values());
+    }
+
+    private String vectorStatusForUpdate(Integer status) {
+        return status != null && status == 0
+                ? QuestionBankItem.VECTOR_SYNC_DELETE_PENDING
+                : QuestionBankItem.VECTOR_SYNC_PENDING;
     }
 
     private void hydrateTags(List<QuestionBankItem> questions) {

@@ -8,6 +8,9 @@ import lombok.Data;
 public class QuestionBankItem {
 
     public static final int STATUS_ENABLED = 1;
+    public static final String VECTOR_SYNC_PENDING = "PENDING";
+    public static final String VECTOR_SYNC_FAILED = "FAILED";
+    public static final String VECTOR_SYNC_DELETE_PENDING = "DELETE_PENDING";
 
     private Long id;
     private String questionCode;
@@ -30,6 +33,8 @@ public class QuestionBankItem {
     private List<String> tags = List.of();
 
     public boolean isEligibleForVectorSync() {
-        return STATUS_ENABLED == (status == null ? 0 : status) && deletedAt == null;
+        return STATUS_ENABLED == (status == null ? 0 : status)
+                && deletedAt == null
+                && (VECTOR_SYNC_PENDING.equals(vectorSyncStatus) || VECTOR_SYNC_FAILED.equals(vectorSyncStatus));
     }
 }
