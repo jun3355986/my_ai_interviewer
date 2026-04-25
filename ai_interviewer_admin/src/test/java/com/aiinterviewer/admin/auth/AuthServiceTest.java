@@ -38,7 +38,7 @@ class AuthServiceTest extends AdminPostgresIntegrationTest {
 
         assertThatThrownBy(() -> authService.login(new AdminLoginRequest("candidate", "pass123456")))
                 .isInstanceOf(AdminBusinessException.class)
-                .hasMessageContaining("管理员权限");
+                .hasMessageContaining("用户名或密码错误");
     }
 
     @Test
@@ -47,10 +47,20 @@ class AuthServiceTest extends AdminPostgresIntegrationTest {
 
         assertThatThrownBy(() -> authService.login(new AdminLoginRequest("disabled_admin", "pass123456")))
                 .isInstanceOf(AdminBusinessException.class)
-                .hasMessageContaining("已禁用");
+                .hasMessageContaining("用户名或密码错误");
     }
 
-    private void createUserWithRole(String username, String nickname, int status, String roleCode) {
+    @Test
+    void getAdminUserRejectsUserAfterAdminRoleRemoved() {
+        Long userId = createUserWithRole("role_removed", "Role Removed", 1, "ROLE_ADMIN");
+        jdbcTemplate.update("DELETE FROM t_user_role WHERE user_id = ?", userId);
+
+        assertThatThrownBy(() -> authService.getAdminUser(userId))
+                .isInstanceOf(AdminBusinessException.class)
+                .hasMessageContaining("管理员权限");
+    }
+
+    private Long createUserWithRole(String username, String nickname, int status, String roleCode) {
         Long userId = jdbcTemplate.queryForObject(
                 """
                 INSERT INTO t_user (username, password_hash, nickname, status)
@@ -72,5 +82,6 @@ class AuthServiceTest extends AdminPostgresIntegrationTest {
                 roleCode,
                 roleCode);
         jdbcTemplate.update("INSERT INTO t_user_role (user_id, role_id) VALUES (?, ?)", userId, roleId);
+        return userId;
     }
 }

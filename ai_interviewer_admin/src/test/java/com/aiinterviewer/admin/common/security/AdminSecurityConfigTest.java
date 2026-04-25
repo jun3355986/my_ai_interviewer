@@ -54,6 +54,22 @@ class AdminSecurityConfigTest {
     }
 
     @Test
+    void protectedEndpointWithRoleUserTokenReturnsForbidden() throws Exception {
+        String token = jwtService.generateAccessToken(1001L, List.of("ROLE_USER"));
+
+        mockMvc.perform(get("/admin/protected").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void protectedEndpointWithEmptyRolesTokenReturnsForbidden() throws Exception {
+        String token = jwtService.generateAccessToken(1001L, List.of());
+
+        mockMvc.perform(get("/admin/protected").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void protectedEndpointWithInvalidTokenReturnsUnauthorized() throws Exception {
         mockMvc.perform(get("/admin/protected").header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token"))
                 .andExpect(status().isUnauthorized());

@@ -19,6 +19,7 @@ public class AuthService {
 
     private static final int USER_STATUS_ENABLED = 1;
     private static final String ADMIN_ROLE = "ROLE_ADMIN";
+    private static final String LOGIN_FAILED_MESSAGE = "用户名或密码错误";
 
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
@@ -27,15 +28,15 @@ public class AuthService {
     public AdminLoginResponse login(AdminLoginRequest request) {
         AdminUser user = findUser(request.getUsername());
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.passwordHash())) {
-            throw new AdminBusinessException(401, "用户名或密码错误");
+            throw new AdminBusinessException(401, LOGIN_FAILED_MESSAGE);
         }
         if (user.status() != USER_STATUS_ENABLED) {
-            throw new AdminBusinessException(403, "账号已禁用");
+            throw new AdminBusinessException(401, LOGIN_FAILED_MESSAGE);
         }
 
         List<String> roles = listRoleCodes(user.id());
         if (!roles.contains(ADMIN_ROLE)) {
-            throw new AdminBusinessException(403, "缺少管理员权限");
+            throw new AdminBusinessException(401, LOGIN_FAILED_MESSAGE);
         }
 
         jdbcTemplate.update("UPDATE t_user SET last_login_time = CURRENT_TIMESTAMP WHERE id = ?", user.id());
@@ -52,6 +53,10 @@ public class AuthService {
         AdminUser user = findUserById(userId);
         if (user == null || user.status() != USER_STATUS_ENABLED) {
             throw new AdminBusinessException(404, "管理员不存在或已禁用");
+        }
+        List<String> roles = listRoleCodes(user.id());
+        if (!roles.contains(ADMIN_ROLE)) {
+            throw new AdminBusinessException(403, "缺少管理员权限");
         }
         return user.toSummary();
     }

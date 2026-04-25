@@ -64,7 +64,7 @@ public class AdminSecurityConfig {
                                 "/doc.html",
                                 "/webjars/**")
                         .permitAll()
-                        .requestMatchers("/admin/**").authenticated()
+                        .requestMatchers("/admin/**").hasAuthority("ROLE_ADMIN")
                         .anyRequest().denyAll())
                 .addFilterBefore(new AdminJwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
 
