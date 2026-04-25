@@ -3,6 +3,7 @@ package com.aiinterviewer.admin;
 import com.aiinterviewer.admin.evaluation.mapper.AdminEvaluationMapper;
 import com.aiinterviewer.admin.interview.mapper.AdminInterviewMapper;
 import com.aiinterviewer.admin.job.mapper.AdminJobMapper;
+import com.aiinterviewer.admin.questionbank.mapper.QuestionMapper;
 import com.aiinterviewer.admin.resume.mapper.AdminResumeMapper;
 import com.aiinterviewer.admin.user.mapper.AdminUserMapper;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,9 @@ class AdminApplicationTests {
 
     @MockBean
     private AdminEvaluationMapper adminEvaluationMapper;
+
+    @MockBean
+    private QuestionMapper questionMapper;
 
     @Test
     void contextLoads() {

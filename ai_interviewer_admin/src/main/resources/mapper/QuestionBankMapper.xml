@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiinterviewer.admin.questionbank.mapper.QuestionMapper">
+
+    <resultMap id="QuestionBankItemMap" type="com.aiinterviewer.admin.questionbank.entity.QuestionBankItem">
+        <id property="id" column="id"/>
+        <result property="questionCode" column="question_code"/>
+        <result property="questionText" column="question_text"/>
+        <result property="answerReference" column="answer_reference"/>
+        <result property="questionType" column="question_type"/>
+        <result property="difficulty" column="difficulty"/>
+        <result property="skillArea" column="skill_area"/>
+        <result property="jobId" column="job_id"/>
+        <result property="status" column="status"/>
+        <result property="vectorSyncStatus" column="vector_sync_status"/>
+        <result property="vectorSyncError" column="vector_sync_error"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="sourceBatchId" column="source_batch_id"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="updatedBy" column="updated_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="deletedAt" column="deleted_at"/>
+    </resultMap>
+
+    <resultMap id="QuestionTagMap" type="com.aiinterviewer.admin.questionbank.entity.QuestionTag">
+        <id property="id" column="id"/>
+        <result property="tagCode" column="tag_code"/>
+        <result property="tagName" column="tag_name"/>
+        <result property="tagType" column="tag_type"/>
+        <result property="color" column="color"/>
+        <result property="description" column="description"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="deletedAt" column="deleted_at"/>
+    </resultMap>
+
+    <resultMap id="QuestionTagNameRowMap" type="com.aiinterviewer.admin.questionbank.QuestionService$QuestionTagNameRow">
+        <result property="questionId" column="question_id"/>
+        <result property="tagName" column="tag_name"/>
+    </resultMap>
+
+    <sql id="QuestionColumns">
+        id, question_code, question_text, answer_reference, question_type, difficulty,
+        skill_area, job_id, status, vector_sync_status, vector_sync_error, source_type,
+        source_batch_id, created_by, updated_by,
+        created_at::timestamp AS created_at,
+        updated_at::timestamp AS updated_at,
+        deleted_at::timestamp AS deleted_at
+    </sql>
+
+    <sql id="QuestionFilter">
+        FROM t_question_bank q
+        WHERE q.deleted_at IS NULL
+        <if test="query.questionType != null and query.questionType != ''">
+            AND q.question_type = #{query.questionType}
+        </if>
+        <if test="query.difficulty != null and query.difficulty != ''">
+            AND q.difficulty = #{query.difficulty}
+        </if>
+        <if test="query.status != null">
+            AND q.status = #{query.status}
+        </if>
+        <if test="query.jobId != null">
+            AND q.job_id = #{query.jobId}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (
+                q.question_text ILIKE CONCAT('%', #{query.keyword}, '%')
+                OR q.answer_reference ILIKE CONCAT('%', #{query.keyword}, '%')
+                OR q.skill_area ILIKE CONCAT('%', #{query.keyword}, '%')
+            )
+        </if>
+        <if test="query.tag != null and query.tag != ''">
+            AND EXISTS (
+                SELECT 1
+                FROM t_question_tag_relation qtr
+                INNER JOIN t_question_tag qt ON qt.id = qtr.tag_id
+                WHERE qtr.question_id = q.id
+                  AND qt.deleted_at IS NULL
+                  AND qt.tag_name = #{query.tag}
+            )
+        </if>
+    </sql>
+
+    <select id="countQuestions" resultType="long">
+        SELECT COUNT(*)
+        <include refid="QuestionFilter"/>
+    </select>
+
+    <select id="selectQuestions" resultMap="QuestionBankItemMap">
+        SELECT
+        <include refid="QuestionColumns"/>
+        <include refid="QuestionFilter"/>
+        ORDER BY q.created_at DESC, q.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectQuestionById" resultMap="QuestionBankItemMap">
+        SELECT
+        <include refid="QuestionColumns"/>
+        FROM t_question_bank
+        WHERE id = #{questionId}
+          AND deleted_at IS NULL
+    </select>
+
+    <select id="countExistingQuestion" resultType="int">
+        SELECT COUNT(*)
+        FROM t_question_bank
+        WHERE id = #{questionId}
+          AND deleted_at IS NULL
+    </select>
+
+    <insert id="insertQuestion" useGeneratedKeys="true" keyProperty="item.id">
+        INSERT INTO t_question_bank
+            (question_code, question_text, answer_reference, question_type, difficulty,
+             skill_area, job_id, status, vector_sync_status, source_type, created_by,
+             created_at, updated_at)
+        VALUES
+            (#{item.questionCode}, #{item.questionText}, #{item.answerReference}, #{item.questionType},
+             #{item.difficulty}, #{item.skillArea}, #{item.jobId}, #{item.status},
+             #{item.vectorSyncStatus}, #{item.sourceType}, #{item.createdBy},
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateQuestion">
+        UPDATE t_question_bank
+        SET question_text = #{item.questionText},
+            answer_reference = #{item.answerReference},
+            question_type = #{item.questionType},
+            difficulty = #{item.difficulty},
+            skill_area = #{item.skillArea},
+            job_id = #{item.jobId},
+            status = #{item.status},
+            updated_by = #{item.updatedBy},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{item.id}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="softDeleteQuestion">
+        UPDATE t_question_bank
+        SET deleted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{questionId}
+          AND deleted_at IS NULL
+    </update>
+
+    <select id="selectTagByName" resultMap="QuestionTagMap">
+        SELECT id, tag_code, tag_name, tag_type, color, description,
+               created_at::timestamp AS created_at,
+               updated_at::timestamp AS updated_at,
+               deleted_at::timestamp AS deleted_at
+        FROM t_question_tag
+        WHERE tag_name = #{tagName}
+          AND deleted_at IS NULL
+        ORDER BY id ASC
+        LIMIT 1
+    </select>
+
+    <insert id="insertTag" useGeneratedKeys="true" keyProperty="tag.id">
+        INSERT INTO t_question_tag
+            (tag_code, tag_name, tag_type, color, description, created_at, updated_at)
+        VALUES
+            (#{tag.tagCode}, #{tag.tagName}, #{tag.tagType}, #{tag.color}, #{tag.description},
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    </insert>
+
+    <delete id="deleteQuestionTags">
+        DELETE FROM t_question_tag_relation
+        WHERE question_id = #{questionId}
+    </delete>
+
+    <insert id="insertQuestionTag">
+        INSERT INTO t_question_tag_relation (question_id, tag_id, created_at)
+        VALUES (#{questionId}, #{tagId}, CURRENT_TIMESTAMP)
+        ON CONFLICT (question_id, tag_id) DO NOTHING
+    </insert>
+
+    <select id="selectTagNamesByQuestionIds" resultMap="QuestionTagNameRowMap">
+        SELECT qtr.question_id, qt.tag_name
+        FROM t_question_tag_relation qtr
+        INNER JOIN t_question_tag qt ON qt.id = qtr.tag_id
+        WHERE qt.deleted_at IS NULL
+          AND qtr.question_id IN
+          <foreach collection="questionIds" item="questionId" open="(" separator="," close=")">
+              #{questionId}
+          </foreach>
+        ORDER BY qtr.question_id ASC, qtr.id ASC
+    </select>
+</mapper>
