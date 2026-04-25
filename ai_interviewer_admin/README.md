@@ -47,3 +47,21 @@ mvn test
 ```
 
 The bootstrap context test disables external database, Flyway, MyBatis-Plus, and Nacos auto-configuration so it can run without PostgreSQL, Redis, or Nacos.
+
+With project-local JDK management:
+
+```bash
+JENV_ROOT="$HOME/.jenv" /opt/homebrew/bin/jenv version
+JENV_ROOT="$HOME/.jenv" /opt/homebrew/bin/jenv exec mvn test
+```
+
+Run the admin API smoke test only:
+
+```bash
+JENV_ROOT="$HOME/.jenv" /opt/homebrew/bin/jenv exec mvn -Dtest=AdminApiSmokeTest test
+```
+
+## API Smoke Documentation
+
+- Manual login and curl sequence: [docs/admin-api-smoke.md](docs/admin-api-smoke.md)
+- Covered authenticated GET routes: `/admin/auth/me`, `/admin/dashboard/overview`, `/admin/users`, `/admin/jobs`, `/admin/interviews`, `/admin/questions`, `/admin/audit/logs`
