@@ -48,6 +48,25 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void robustCsvBoundariesImportSuccessfully() {
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "robust.csv",
+                csv("\uFEFFquestion_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status\r\n"
+                        + "\"带逗号,题目\",\"第一行\r\n第二行 \"\"引用\"\"\",TECHNICAL,MEDIUM,Java;CSV,Java,101,1\r\n"),
+                11L);
+
+        assertThat(batch.getStatus()).isEqualTo("SUCCESS");
+        assertThat(batch.getTotalCount()).isOne();
+        assertThat(batch.getSuccessCount()).isOne();
+        assertThat(batch.getFailedCount()).isZero();
+        assertThat(batch.getErrorMessage()).isNull();
+
+        Long questionId = questionIdByText("带逗号,题目");
+        assertThat(questionService.getQuestion(questionId).getAnswerReference())
+                .isEqualTo("第一行\r\n第二行 \"引用\"");
+    }
+
+    @Test
     void rowMissingQuestionTextIsRejectedWithRowNumber() {
         QuestionImportBatch batch = questionImportService.importCsv(
                 "missing-question-text.csv",
@@ -108,6 +127,62 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
                 Integer.class)).isZero();
     }
 
+    @Test
+    void parseStageRowErrorsArePartialFailuresAndValidRowsStillImport() {
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "parse-partial-failure.csv",
+                csv("""
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
+                        解析有效题目一,参考答案一,TECHNICAL,MEDIUM,Java,Java,101,1
+                        job无效题目,参考答案二,TECHNICAL,MEDIUM,Java,Java,bad,1
+                        状态无效题目,参考答案三,TECHNICAL,MEDIUM,Java,Java,101,bad
+                        列数错误题目,参考答案四,TECHNICAL,MEDIUM,Java,Java,101
+                        解析有效题目二,参考答案五,BEHAVIORAL,EASY,Communication,Communication,,1
+                        """),
+                12L);
+
+        assertThat(batch.getStatus()).isEqualTo("PARTIAL_FAILED");
+        assertThat(batch.getTotalCount()).isEqualTo(5);
+        assertThat(batch.getSuccessCount()).isEqualTo(2);
+        assertThat(batch.getFailedCount()).isEqualTo(3);
+        assertThat(batch.getErrorMessage())
+                .contains("第3行")
+                .contains("job_id 必须是数字")
+                .contains("第4行")
+                .contains("status 必须是数字")
+                .contains("第5行")
+                .contains("列数不匹配");
+        assertThat(importedQuestionTexts(batch.getId())).containsExactlyInAnyOrder("解析有效题目一", "解析有效题目二");
+        assertThat(questionExists("job无效题目")).isFalse();
+        assertThat(questionExists("状态无效题目")).isFalse();
+        assertThat(questionExists("列数错误题目")).isFalse();
+    }
+
+    @Test
+    void manyInvalidRowsAreFailedAndErrorMessageIsTruncated() {
+        StringBuilder content = new StringBuilder(
+                "question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status\n");
+        for (int i = 0; i < 700; i++) {
+            content.append("错误题目")
+                    .append(i)
+                    .append(",参考答案,TECHNICAL,MEDIUM,Java,Java,bad,1\n");
+        }
+
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "many-invalid-rows.csv",
+                csv(content.toString()),
+                13L);
+
+        assertThat(batch.getStatus()).isEqualTo("FAILED");
+        assertThat(batch.getTotalCount()).isEqualTo(700);
+        assertThat(batch.getSuccessCount()).isZero();
+        assertThat(batch.getFailedCount()).isEqualTo(700);
+        assertThat(batch.getErrorMessage())
+                .hasSizeLessThanOrEqualTo(8000)
+                .endsWith("...(错误信息已截断)");
+        assertThat(importedQuestionTexts(batch.getId())).isEmpty();
+    }
+
     private ByteArrayInputStream csv(String content) {
         return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
     }
@@ -131,5 +206,12 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
                 "SELECT id FROM t_question_bank WHERE question_text = ? AND deleted_at IS NULL",
                 Long.class,
                 questionText);
+    }
+
+    private boolean questionExists(String questionText) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM t_question_bank WHERE question_text = ? AND deleted_at IS NULL",
+                Integer.class,
+                questionText) > 0;
     }
 }
