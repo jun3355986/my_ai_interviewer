@@ -1,7 +1,9 @@
 package com.aiinterviewer.admin.interview;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.aiinterviewer.admin.common.exception.AdminBusinessException;
 import com.aiinterviewer.admin.common.model.PageResult;
 import com.aiinterviewer.admin.interview.dto.InterviewDiagnosisResponse;
 import com.aiinterviewer.admin.support.AdminPostgresIntegrationTest;
@@ -62,6 +64,20 @@ class AdminInterviewServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void blankStageFilterBehavesAsNoFilter() {
+        seedInterviewFixtures();
+
+        AdminInterviewService.AdminInterviewQuery blankStageQuery = new AdminInterviewService.AdminInterviewQuery();
+        blankStageQuery.setStage("  ");
+        PageResult<AdminInterviewService.AdminInterviewListItem> sessions =
+                adminInterviewService.listInterviews(blankStageQuery);
+
+        assertThat(sessions.getRecords())
+                .extracting(AdminInterviewService.AdminInterviewListItem::getId)
+                .containsExactly("session-003", "session-002", "session-001");
+    }
+
+    @Test
     void interviewDetailIncludesSessionMessagesScoresAndEvaluationSummary() {
         seedInterviewFixtures();
 
@@ -110,7 +126,73 @@ class AdminInterviewServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
-    void cancelSessionChangesStatusToCanceledAndWritesAuditLog() {
+    void inProgressProjectStageWithoutTechnicalDataDoesNotReportTechnicalFindings() {
+        seedInterviewFixtures();
+
+        InterviewDiagnosisResponse diagnosis = adminInterviewService.diagnoseInterview("session-003");
+
+        assertThat(diagnosis.isMissingTechnicalQuestions()).isFalse();
+        assertThat(diagnosis.isEmptyTechnicalPool()).isFalse();
+        assertThat(diagnosis.getFindings())
+                .doesNotContain("MISSING_TECHNICAL_QUESTIONS", "EMPTY_TECHNICAL_POOL");
+    }
+
+    @Test
+    void nonArrayTechnicalPoolOnCompletedTechnicalSessionReportsEmptyInvalidPool() {
+        seedInterviewFixtures();
+        jdbcTemplate.update(
+                """
+                INSERT INTO t_interview_session
+                    (id, user_id, job_id, candidate_name, stage, status, technical_questions_pool,
+                     started_at, finished_at, created_at, updated_at)
+                VALUES
+                    ('session-004', 1, 1, 'Alice', 'technical', 2, CAST('{"question":"JVM?"}' AS jsonb),
+                     TIMESTAMP '2026-04-25 14:00:00', TIMESTAMP '2026-04-25 14:10:00',
+                     TIMESTAMP '2026-04-25 14:00:00', TIMESTAMP '2026-04-25 14:10:00')
+                """);
+
+        InterviewDiagnosisResponse diagnosis = adminInterviewService.diagnoseInterview("session-004");
+
+        assertThat(diagnosis.isEmptyTechnicalPool()).isTrue();
+        assertThat(diagnosis.getFindings()).contains("EMPTY_TECHNICAL_POOL");
+    }
+
+    @Test
+    void completedSessionCancelRejectedAndStatusRemainsCompleted() {
+        seedInterviewFixtures();
+
+        assertThatThrownBy(() -> adminInterviewService.cancelInterview("session-001"))
+                .isInstanceOf(AdminBusinessException.class)
+                .hasMessage("已完成面试不能取消")
+                .satisfies(ex -> assertThat(((AdminBusinessException) ex).getCode()).isEqualTo(409));
+
+        Integer status = jdbcTemplate.queryForObject(
+                "SELECT status FROM t_interview_session WHERE id = 'session-001'",
+                Integer.class);
+        assertThat(status).isEqualTo(2);
+    }
+
+    @Test
+    void alreadyCanceledSessionCancelRejected() {
+        seedInterviewFixtures();
+        jdbcTemplate.update(
+                """
+                INSERT INTO t_interview_session
+                    (id, user_id, job_id, candidate_name, stage, status, started_at, finished_at, created_at, updated_at)
+                VALUES
+                    ('session-004', 1, 1, 'Alice', 'canceled', 3,
+                     TIMESTAMP '2026-04-25 14:00:00', TIMESTAMP '2026-04-25 14:05:00',
+                     TIMESTAMP '2026-04-25 14:00:00', TIMESTAMP '2026-04-25 14:05:00')
+                """);
+
+        assertThatThrownBy(() -> adminInterviewService.cancelInterview("session-004"))
+                .isInstanceOf(AdminBusinessException.class)
+                .hasMessage("面试会话已取消")
+                .satisfies(ex -> assertThat(((AdminBusinessException) ex).getCode()).isEqualTo(409));
+    }
+
+    @Test
+    void cancelSessionChangesStatusToCanceledSetsFinishedAtAndWritesAuditLog() {
         seedInterviewFixtures();
 
         adminInterviewService.cancelInterview("session-003");
@@ -118,6 +200,9 @@ class AdminInterviewServiceTest extends AdminPostgresIntegrationTest {
         Integer status = jdbcTemplate.queryForObject(
                 "SELECT status FROM t_interview_session WHERE id = 'session-003'",
                 Integer.class);
+        LocalDateTime finishedAt = jdbcTemplate.queryForObject(
+                "SELECT finished_at FROM t_interview_session WHERE id = 'session-003'",
+                LocalDateTime.class);
         String auditTargetId = jdbcTemplate.queryForObject(
                 """
                 SELECT target_id
@@ -130,6 +215,7 @@ class AdminInterviewServiceTest extends AdminPostgresIntegrationTest {
                 """,
                 String.class);
         assertThat(status).isEqualTo(3);
+        assertThat(finishedAt).isNotNull();
         assertThat(auditTargetId).isEqualTo("session-003");
     }
 

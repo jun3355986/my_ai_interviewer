@@ -8,6 +8,7 @@ import java.util.List;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +23,7 @@ public class AdminEvaluationService {
 
     public PageResult<AdminEvaluationListItem> listEvaluations(AdminEvaluationQuery query) {
         AdminEvaluationQuery safeQuery = query == null ? new AdminEvaluationQuery() : query;
+        safeQuery.normalizeFilters();
         long current = safeQuery.normalizedCurrent();
         long size = safeQuery.normalizedSize();
         Long total = adminEvaluationMapper.countEvaluations(safeQuery);
@@ -38,6 +40,13 @@ public class AdminEvaluationService {
         }
     }
 
+    private static String normalizeText(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim().toLowerCase();
+    }
+
     @Data
     public static class AdminEvaluationQuery {
 
@@ -46,6 +55,10 @@ public class AdminEvaluationService {
         private Integer maxOverallScore;
         private Long current = DEFAULT_CURRENT;
         private Long size = DEFAULT_SIZE;
+
+        void normalizeFilters() {
+            recommendation = normalizeText(recommendation);
+        }
 
         long normalizedCurrent() {
             if (current == null || current < 1) {

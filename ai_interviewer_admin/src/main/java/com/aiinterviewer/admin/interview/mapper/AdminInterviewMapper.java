@@ -27,7 +27,7 @@ public interface AdminInterviewMapper {
 
     AdminInterviewService.AdminEvaluationSummary selectEvaluationSummary(@Param("sessionId") String sessionId);
 
-    Integer countExistingSession(@Param("sessionId") String sessionId);
+    Integer selectSessionStatus(@Param("sessionId") String sessionId);
 
     int cancelSession(@Param("sessionId") String sessionId);
 }

@@ -34,8 +34,8 @@
         LEFT JOIN t_user u ON u.id = e.user_id
         LEFT JOIN t_job j ON j.id = e.job_id
         WHERE 1 = 1
-        <if test="query.recommendation != null and query.recommendation != ''">
-            AND LOWER(e.recommendation) = LOWER(TRIM(#{query.recommendation}))
+        <if test="query.recommendation != null">
+            AND LOWER(e.recommendation) = #{query.recommendation}
         </if>
         <if test="query.minOverallScore != null">
             AND e.overall_score &gt;= #{query.minOverallScore}

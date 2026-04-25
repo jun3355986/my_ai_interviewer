@@ -110,8 +110,8 @@
         <if test="query.jobId != null">
             AND s.job_id = #{query.jobId}
         </if>
-        <if test="query.stage != null and query.stage != ''">
-            AND LOWER(s.stage) = LOWER(TRIM(#{query.stage}))
+        <if test="query.stage != null">
+            AND LOWER(s.stage) = #{query.stage}
         </if>
         <if test="query.status != null">
             AND s.status = #{query.status}
@@ -189,8 +189,8 @@
         GROUP BY s.id, s.stage, s.status, s.technical_questions_pool, s.started_at, s.finished_at
     </select>
 
-    <select id="countExistingSession" resultType="int">
-        SELECT COUNT(*)
+    <select id="selectSessionStatus" resultType="int">
+        SELECT status
         FROM t_interview_session
         WHERE id = #{sessionId}
     </select>
@@ -198,8 +198,9 @@
     <update id="cancelSession">
         UPDATE t_interview_session
         SET status = 3,
+            finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{sessionId}
-          AND status != 3
+          AND status = 1
     </update>
 </mapper>

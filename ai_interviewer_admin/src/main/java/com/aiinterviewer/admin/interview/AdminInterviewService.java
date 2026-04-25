@@ -23,6 +23,8 @@ import org.springframework.util.StringUtils;
 public class AdminInterviewService {
 
     private static final int STATUS_COMPLETED = 2;
+    private static final int STATUS_IN_PROGRESS = 1;
+    private static final int STATUS_CANCELED = 3;
     private static final long DEFAULT_CURRENT = 1L;
     private static final long DEFAULT_SIZE = 20L;
     private static final long MAX_SIZE = 100L;
@@ -34,6 +36,7 @@ public class AdminInterviewService {
 
     public PageResult<AdminInterviewListItem> listInterviews(AdminInterviewQuery query) {
         AdminInterviewQuery safeQuery = query == null ? new AdminInterviewQuery() : query;
+        safeQuery.normalizeFilters();
         long current = safeQuery.normalizedCurrent();
         long size = safeQuery.normalizedSize();
         Long total = adminInterviewMapper.countInterviews(safeQuery);
@@ -64,8 +67,10 @@ public class AdminInterviewService {
 
         InterviewDiagnosisResponse response = new InterviewDiagnosisResponse();
         response.setSessionId(sessionId);
-        response.setMissingTechnicalQuestions(!snapshot.hasTechnicalScoreRecord());
-        response.setEmptyTechnicalPool(isEmptyJsonArray(snapshot.getTechnicalQuestionsPoolJson()));
+        boolean technicalDiagnosisApplicable = isTechnicalDiagnosisApplicable(snapshot);
+        response.setMissingTechnicalQuestions(technicalDiagnosisApplicable && !snapshot.hasTechnicalScoreRecord());
+        response.setEmptyTechnicalPool(
+                technicalDiagnosisApplicable && isEmptyOrInvalidJsonArray(snapshot.getTechnicalQuestionsPoolJson()));
         response.setMissingScores(isMissingScores(snapshot));
         response.setEarlyConcludedStage(isEarlyConcluded(snapshot));
 
@@ -89,11 +94,24 @@ public class AdminInterviewService {
     @Transactional
     @AdminAudit(module = "INTERVIEW", operation = "CANCEL", targetType = "INTERVIEW_SESSION", targetIdParam = "sessionId")
     public void cancelInterview(String sessionId) {
-        ensureExistingSession(sessionId);
+        ensureCancelableSession(sessionId);
         int updated = adminInterviewMapper.cancelSession(sessionId);
         if (updated == 0) {
-            throw new AdminBusinessException(400, "面试会话已取消");
+            ensureCancelableSession(sessionId);
+            throw new AdminBusinessException(409, "当前面试状态不能取消");
         }
+    }
+
+    private boolean isTechnicalDiagnosisApplicable(DiagnosisSessionSnapshot snapshot) {
+        if (snapshot.getStatus() != null && snapshot.getStatus() == STATUS_COMPLETED) {
+            return true;
+        }
+        String stage = normalizeText(snapshot.getStage());
+        return stage != null
+                && (stage.contains("technical")
+                        || stage.equals("concluded")
+                        || stage.equals("completed")
+                        || stage.equals("final"));
     }
 
     private boolean isMissingScores(DiagnosisSessionSnapshot snapshot) {
@@ -119,23 +137,32 @@ public class AdminInterviewService {
                         || stage.equalsIgnoreCase("final"));
     }
 
-    private boolean isEmptyJsonArray(String json) {
+    private boolean isEmptyOrInvalidJsonArray(String json) {
         if (!StringUtils.hasText(json)) {
             return true;
         }
         try {
             JsonNode node = objectMapper.readTree(json);
-            return node == null || node.isNull() || node.isArray() && node.isEmpty();
+            return node == null || node.isNull() || !node.isArray() || node.isEmpty();
         } catch (Exception ex) {
             return true;
         }
     }
 
-    private void ensureExistingSession(String sessionId) {
+    private void ensureCancelableSession(String sessionId) {
         ensureSessionId(sessionId);
-        Integer count = adminInterviewMapper.countExistingSession(sessionId);
-        if (count == null || count == 0) {
+        Integer status = adminInterviewMapper.selectSessionStatus(sessionId);
+        if (status == null) {
             throw new AdminBusinessException(404, "面试会话不存在");
+        }
+        if (status == STATUS_COMPLETED) {
+            throw new AdminBusinessException(409, "已完成面试不能取消");
+        }
+        if (status == STATUS_CANCELED) {
+            throw new AdminBusinessException(409, "面试会话已取消");
+        }
+        if (status != STATUS_IN_PROGRESS) {
+            throw new AdminBusinessException(409, "当前面试状态不能取消");
         }
     }
 
@@ -143,6 +170,13 @@ public class AdminInterviewService {
         if (!StringUtils.hasText(sessionId)) {
             throw new AdminBusinessException(400, "面试会话ID不能为空");
         }
+    }
+
+    private static String normalizeText(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim().toLowerCase();
     }
 
     private long safeOffset(long current, long size) {
@@ -164,6 +198,10 @@ public class AdminInterviewService {
         private LocalDateTime startedTo;
         private Long current = DEFAULT_CURRENT;
         private Long size = DEFAULT_SIZE;
+
+        void normalizeFilters() {
+            stage = normalizeText(stage);
+        }
 
         long normalizedCurrent() {
             if (current == null || current < 1) {

@@ -37,6 +37,37 @@ class AdminEvaluationServiceTest extends AdminPostgresIntegrationTest {
                 .containsExactly("eval-session-002");
     }
 
+    @Test
+    void blankRecommendationFilterBehavesAsNoFilter() {
+        seedEvaluationFixtures();
+
+        AdminEvaluationService.AdminEvaluationQuery blankRecommendationQuery =
+                new AdminEvaluationService.AdminEvaluationQuery();
+        blankRecommendationQuery.setRecommendation("  ");
+        PageResult<AdminEvaluationService.AdminEvaluationListItem> evaluations =
+                adminEvaluationService.listEvaluations(blankRecommendationQuery);
+
+        assertThat(evaluations.getRecords())
+                .extracting(AdminEvaluationService.AdminEvaluationListItem::getSessionId)
+                .containsExactly("eval-session-003", "eval-session-002", "eval-session-001");
+    }
+
+    @Test
+    void scoreRangeFiltersAreInclusiveAtBoundaries() {
+        seedEvaluationFixtures();
+
+        AdminEvaluationService.AdminEvaluationQuery boundaryQuery =
+                new AdminEvaluationService.AdminEvaluationQuery();
+        boundaryQuery.setMinOverallScore(72);
+        boundaryQuery.setMaxOverallScore(91);
+        PageResult<AdminEvaluationService.AdminEvaluationListItem> evaluations =
+                adminEvaluationService.listEvaluations(boundaryQuery);
+
+        assertThat(evaluations.getRecords())
+                .extracting(AdminEvaluationService.AdminEvaluationListItem::getSessionId)
+                .containsExactly("eval-session-002", "eval-session-001");
+    }
+
     private void seedEvaluationFixtures() {
         jdbcTemplate.update(
                 """
