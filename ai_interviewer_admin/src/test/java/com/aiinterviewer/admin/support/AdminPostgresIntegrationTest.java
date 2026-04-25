@@ -44,6 +44,7 @@ public abstract class AdminPostgresIntegrationTest {
                 "t_score_record",
                 "t_evaluation",
                 "t_interview_session",
+                "t_resume_version",
                 "t_resume",
                 "t_job",
                 "t_admin_operation_log",
@@ -139,6 +140,22 @@ public abstract class AdminPostgresIntegrationTest {
                     parsed_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute(
+                """
+                CREATE TABLE IF NOT EXISTS t_resume_version (
+                    id BIGSERIAL PRIMARY KEY,
+                    resume_id BIGINT NOT NULL REFERENCES t_resume(id) ON DELETE CASCADE,
+                    version INT NOT NULL,
+                    file_path VARCHAR(500),
+                    file_name VARCHAR(255),
+                    file_size BIGINT,
+                    parsed_content JSONB,
+                    operation_type VARCHAR(20),
+                    operator_id BIGINT,
+                    remark TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
         jdbcTemplate.execute(

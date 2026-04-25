@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiinterviewer.admin.user.mapper.AdminUserMapper">
+
+    <resultMap id="AdminUserListItemMap" type="com.aiinterviewer.admin.user.AdminUserService$AdminUserListItem">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="email" column="email"/>
+        <result property="phone" column="phone"/>
+        <result property="nickname" column="nickname"/>
+        <result property="avatarUrl" column="avatar_url"/>
+        <result property="status" column="status"/>
+        <result property="lastLoginTime" column="last_login_time"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="UserFilter">
+        FROM t_user
+        WHERE deleted_at IS NULL
+        <if test="query.username != null and query.username != ''">
+            AND username ILIKE CONCAT('%', #{query.username}, '%')
+        </if>
+        <if test="query.email != null and query.email != ''">
+            AND email ILIKE CONCAT('%', #{query.email}, '%')
+        </if>
+        <if test="query.phone != null and query.phone != ''">
+            AND phone ILIKE CONCAT('%', #{query.phone}, '%')
+        </if>
+        <if test="query.status != null">
+            AND status = #{query.status}
+        </if>
+    </sql>
+
+    <select id="countUsers" resultType="long">
+        SELECT COUNT(*)
+        <include refid="UserFilter"/>
+    </select>
+
+    <select id="selectUsers" resultMap="AdminUserListItemMap">
+        SELECT id, username, email, phone, nickname, avatar_url, status,
+               last_login_time, created_at, updated_at
+        <include refid="UserFilter"/>
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countExistingUser" resultType="int">
+        SELECT COUNT(*)
+        FROM t_user
+        WHERE id = #{userId}
+          AND deleted_at IS NULL
+    </select>
+
+    <update id="disableUser">
+        UPDATE t_user
+        SET status = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{userId}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="resetPassword">
+        UPDATE t_user
+        SET password_hash = #{passwordHash},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{userId}
+          AND deleted_at IS NULL
+    </update>
+</mapper>

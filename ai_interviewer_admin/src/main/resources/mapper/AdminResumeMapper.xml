@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiinterviewer.admin.resume.mapper.AdminResumeMapper">
+
+    <resultMap id="AdminResumeListItemMap" type="com.aiinterviewer.admin.resume.AdminResumeService$AdminResumeListItem">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="username" column="username"/>
+        <result property="originalFileName" column="original_file_name"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="contentType" column="content_type"/>
+        <result property="parseStatus" column="parse_status"/>
+        <result property="parseError" column="parse_error"/>
+        <result property="defaultResume" column="is_default"/>
+        <result property="versionCount" column="version_count"/>
+        <result property="parsedAt" column="parsed_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="AdminResumeDetailMap" type="com.aiinterviewer.admin.resume.AdminResumeService$AdminResumeDetail">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="username" column="username"/>
+        <result property="originalFileName" column="original_file_name"/>
+        <result property="fileName" column="file_name"/>
+        <result property="filePath" column="file_path"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="contentType" column="content_type"/>
+        <result property="parsedContent" column="parsed_content"/>
+        <result property="rawText" column="raw_text"/>
+        <result property="parseStatus" column="parse_status"/>
+        <result property="parseError" column="parse_error"/>
+        <result property="defaultResume" column="is_default"/>
+        <result property="versionCount" column="version_count"/>
+        <result property="parsedAt" column="parsed_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="AdminResumeVersionItemMap" type="com.aiinterviewer.admin.resume.AdminResumeService$AdminResumeVersionItem">
+        <id property="id" column="id"/>
+        <result property="resumeId" column="resume_id"/>
+        <result property="version" column="version"/>
+        <result property="filePath" column="file_path"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="parsedContent" column="parsed_content"/>
+        <result property="operationType" column="operation_type"/>
+        <result property="operatorId" column="operator_id"/>
+        <result property="remark" column="remark"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <sql id="ResumeFilter">
+        FROM t_resume r
+        INNER JOIN t_user u ON u.id = r.user_id
+        WHERE u.deleted_at IS NULL
+        <if test="query.userId != null">
+            AND r.user_id = #{query.userId}
+        </if>
+        <if test="query.parseStatus != null">
+            AND r.parse_status = #{query.parseStatus}
+        </if>
+    </sql>
+
+    <select id="countResumes" resultType="long">
+        SELECT COUNT(*)
+        <include refid="ResumeFilter"/>
+    </select>
+
+    <select id="selectResumes" resultMap="AdminResumeListItemMap">
+        SELECT r.id, r.user_id, u.username, r.original_file_name, r.file_name,
+               r.file_size, r.content_type, r.parse_status, r.parse_error,
+               r.is_default, r.version_count, r.parsed_at, r.created_at, r.updated_at
+        <include refid="ResumeFilter"/>
+        ORDER BY r.created_at ASC, r.id ASC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectResumeDetail" resultMap="AdminResumeDetailMap">
+        SELECT r.id, r.user_id, u.username, r.original_file_name, r.file_name, r.file_path,
+               r.file_size, r.content_type, r.parsed_content::text AS parsed_content,
+               r.raw_text, r.parse_status, r.parse_error, r.is_default, r.version_count,
+               r.parsed_at, r.created_at, r.updated_at
+        FROM t_resume r
+        INNER JOIN t_user u ON u.id = r.user_id
+        WHERE r.id = #{resumeId}
+          AND u.deleted_at IS NULL
+    </select>
+
+    <select id="selectResumeVersions" resultMap="AdminResumeVersionItemMap">
+        SELECT id, resume_id, version, file_path, file_name, file_size,
+               parsed_content::text AS parsed_content, operation_type, operator_id,
+               remark, created_at
+        FROM t_resume_version
+        WHERE resume_id = #{resumeId}
+        ORDER BY version DESC, id DESC
+    </select>
+</mapper>
