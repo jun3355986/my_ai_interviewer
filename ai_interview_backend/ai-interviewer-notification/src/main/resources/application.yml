@@ -1,0 +1,52 @@
+server:
+  port: 9006
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: ai-interviewer-notification
+  config:
+    import: optional:nacos:ai-interviewer-notification.yaml
+
+  # 邮件配置
+  mail:
+    host: ${MAIL_HOST:smtp.example.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:noreply@aiinterviewer.com}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  # RocketMQ配置
+  cloud:
+    stream:
+      rocketmq:
+        binder:
+          namesrv-addr: ${ROCKETMQ_NAMESRV_ADDR:localhost:9876}
+      bindings:
+        interview-completed:
+          destination: interview-completed
+        report-ready:
+          destination: report-ready
+
+logging:
+  level:
+    com.aiinterviewer: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# OpenAPI配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  use-forwarded-headers: true

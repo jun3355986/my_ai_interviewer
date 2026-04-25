@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="ai_interviewer_front">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>ai_interviewer_front</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <script>
+    // Local debugging only: clear stale Flutter service workers/caches that can keep old bundles.
+    (function () {
+      var isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      if (!isLocalhost) {
+        return;
+      }
+
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (registrations) {
+          registrations.forEach(function (registration) {
+            registration.unregister();
+          });
+        }).catch(function () {
+          // no-op
+        });
+      }
+
+      if ("caches" in window && typeof window.caches.keys === "function") {
+        window.caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (key) {
+            return window.caches.delete(key);
+          }));
+        }).catch(function () {
+          // no-op
+        });
+      }
+    })();
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    (function () {
+      var maxAttempts = 8;
+      var attempts = 0;
+      var retryDelayMs = 1500;
+      var startDelayMs = 10000;
+
+      function wrapDartRunMainOnce() {
+        if (window.__dartRunMainWrapped || typeof window.$dartRunMain !== "function") {
+          return;
+        }
+
+        var original = window.$dartRunMain;
+        window.$dartRunMain = function () {
+          if (window.__dartMainStarted) {
+            return;
+          }
+          window.__dartMainStarted = true;
+          return original.apply(this, arguments);
+        };
+        window.__dartRunMainWrapped = true;
+      }
+
+      function hasVisibleFlutterSurface() {
+        var surface = document.querySelector("flutter-view, flt-glass-pane, flt-scene-host, canvas");
+        if (!surface) {
+          return false;
+        }
+
+        var rect = surface.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+
+      function ensureDartMainStarted() {
+        wrapDartRunMainOnce();
+        attempts += 1;
+
+        if (hasVisibleFlutterSurface() || window.__dartMainStarted) {
+          return;
+        }
+
+        if (typeof window.$dartRunMain === "function") {
+          try {
+            window.$dartRunMain();
+            return;
+          } catch (_) {
+          }
+        }
+
+        if (attempts < maxAttempts) {
+          window.setTimeout(ensureDartMainStarted, retryDelayMs);
+        }
+      }
+
+      window.addEventListener("load", function () {
+        window.setTimeout(ensureDartMainStarted, startDelayMs);
+      });
+    })();
+  </script>
+</body>
+</html>

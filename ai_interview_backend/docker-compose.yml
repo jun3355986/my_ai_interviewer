@@ -1,0 +1,394 @@
+services:
+  # ============================================
+  # 基础设施服务
+  # ============================================
+  nacos:
+    image: nacos/nacos-server:v2.3.0
+    platform: linux/amd64
+    container_name: ai-interviewer-nacos
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      JVM_XMS: 1024m
+      JVM_XMX: 1024m
+    volumes:
+      - nacos_data:/home/nacos/data
+    networks:
+      - ai-interviewer-net
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+        reservations:
+          memory: 512M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-interviewer-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ai_interviewer
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-interviewer-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  minio:
+    image: minio/minio:latest
+    container_name: ai-interviewer-minio
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+
+  # ============================================
+  # Python AI 服务
+  # ============================================
+  python-ai:
+    image: ai-interviewer-python-ai:local
+    container_name: ai-interviewer-python-ai
+    build:
+      context: ../ai_interviewer
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-test-key}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-https://liuwe-m7o7yvmk-eastus2.services.ai.azure.com/openai/v1/}
+      AZURE_OPENAI_CHAT_MODEL: ${AZURE_OPENAI_CHAT_MODEL:-grok-4-20-reasoning}
+      AZURE_OPENAI_BACKUP_CHAT_MODEL: ${AZURE_OPENAI_BACKUP_CHAT_MODEL:-gpt-5.4}
+      AZURE_OPENAI_EMBEDDING_MODEL: ${AZURE_OPENAI_EMBEDDING_MODEL:-embed-v-4-0}
+      AZURE_OPENAI_EMBEDDING_DIMENSION: ${AZURE_OPENAI_EMBEDDING_DIMENSION:-1024}
+    volumes:
+      - ../ai_interviewer/storage:/app/storage
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ============================================
+  # Java 微服务
+  # 使用同一个镜像，按 APP_MODULE 启动不同服务
+  # ============================================
+  gateway:
+    image: ai-interviewer-backend-app:local
+    container_name: ai-interviewer-gateway
+    build:
+      context: .
+      dockerfile: docker/java-services.Dockerfile
+    ports:
+      - "9000:9000"
+    environment:
+      APP_MODULE: ai-interviewer-gateway
+      NACOS_SERVER_ADDR: nacos:8848
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-your-256-bit-secret-key-for-jwt-signing-must-be-at-least-32-characters}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user:
+        condition: service_started
+      job:
+        condition: service_started
+      resume:
+        condition: service_started
+      interview:
+        condition: service_started
+      evaluation:
+        condition: service_started
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 25s
+
+  user:
+    image: ai-interviewer-backend-app:local
+    container_name: ai-interviewer-user
+    build:
+      context: .
+      dockerfile: docker/java-services.Dockerfile
+    ports:
+      - "9001:9001"
+    environment:
+      APP_MODULE: ai-interviewer-user
+      NACOS_SERVER_ADDR: nacos:8848
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ai_interviewer
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-your-256-bit-secret-key-for-jwt-signing-must-be-at-least-32-characters}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
+    depends_on:
+      nacos:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+
+  resume:
+    image: ai-interviewer-backend-app:local
+    container_name: ai-interviewer-resume
+    build:
+      context: .
+      dockerfile: docker/java-services.Dockerfile
+    ports:
+      - "9002:9002"
+    environment:
+      APP_MODULE: ai-interviewer-resume
+      NACOS_SERVER_ADDR: nacos:8848
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ai_interviewer
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHON_AI_BASE_URL: http://python-ai:8000
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-ai-interviewer}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
+    depends_on:
+      nacos:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      python-ai:
+        condition: service_healthy
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+
+  interview:
+    image: ai-interviewer-backend-app:local
+    container_name: ai-interviewer-interview
+    build:
+      context: .
+      dockerfile: docker/java-services.Dockerfile
+    ports:
+      - "9003:9003"
+    environment:
+      APP_MODULE: ai-interviewer-interview
+      NACOS_SERVER_ADDR: nacos:8848
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ai_interviewer
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHON_AI_BASE_URL: http://python-ai:8000
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
+    depends_on:
+      nacos:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      python-ai:
+        condition: service_healthy
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+
+  job:
+    image: ai-interviewer-backend-app:local
+    container_name: ai-interviewer-job
+    build:
+      context: .
+      dockerfile: docker/java-services.Dockerfile
+    ports:
+      - "9004:9004"
+    environment:
+      APP_MODULE: ai-interviewer-job
+      NACOS_SERVER_ADDR: nacos:8848
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ai_interviewer
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
+    depends_on:
+      nacos:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+
+  evaluation:
+    image: ai-interviewer-backend-app:local
+    container_name: ai-interviewer-evaluation
+    build:
+      context: .
+      dockerfile: docker/java-services.Dockerfile
+    ports:
+      - "9005:9005"
+    environment:
+      APP_MODULE: ai-interviewer-evaluation
+      NACOS_SERVER_ADDR: nacos:8848
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ai_interviewer
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
+    depends_on:
+      nacos:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+
+  # Notification 服务依赖 RocketMQ。当前 Compose 未内置 RocketMQ（ARM 机器兼容性问题）。
+  # 如需启用，请先提供可用 RocketMQ，再启动 notification profile：
+  # docker compose --profile notification up -d notification
+  notification:
+    image: ai-interviewer-backend-app:local
+    container_name: ai-interviewer-notification
+    profiles: ["notification"]
+    build:
+      context: .
+      dockerfile: docker/java-services.Dockerfile
+    ports:
+      - "9006:9006"
+    environment:
+      APP_MODULE: ai-interviewer-notification
+      ROCKETMQ_NAMESRV_ADDR: ${ROCKETMQ_NAMESRV_ADDR:-localhost:9876}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
+    depends_on:
+      nacos:
+        condition: service_healthy
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+
+  # ============================================
+  # Flutter Web 前端
+  # 统一通过 gateway 转发后端 API
+  # ============================================
+  frontend:
+    image: ai-interviewer-frontend:local
+    container_name: ai-interviewer-frontend
+    build:
+      context: ../ai_interviewer_front
+      dockerfile: Dockerfile
+      args:
+        GATEWAY_BASE_URL: ${FRONTEND_GATEWAY_BASE_URL:-/}
+    ports:
+      - "8088:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  ai-interviewer-net:
+    driver: bridge
+
+volumes:
+  nacos_data:
+  postgres_data:
+  redis_data:
+  minio_data:

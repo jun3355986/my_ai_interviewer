@@ -1,0 +1,199 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: ai-interviewer-gateway
+  profiles:
+    active: dev
+  config:
+    import: optional:nacos:ai-interviewer-gateway.yaml
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        # 用户服务路由
+        - id: user-service
+          uri: lb://ai-interviewer-user
+          predicates:
+            - Path=/api/v1/users/**,/api/v1/auth/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@ipKeyResolver}"
+
+        # 简历服务路由
+        - id: resume-service
+          uri: lb://ai-interviewer-resume
+          predicates:
+            - Path=/api/v1/resumes/**
+          filters:
+            - StripPrefix=2
+
+        # 面试服务路由(支持SSE)
+        - id: interview-service
+          uri: lb://ai-interviewer-interview
+          predicates:
+            - Path=/api/v1/interviews/**
+          filters:
+            - StripPrefix=2
+          metadata:
+            response-timeout: 600000  # 10分钟，SSE长连接
+
+        # 职位服务路由
+        - id: job-service
+          uri: lb://ai-interviewer-job
+          predicates:
+            - Path=/api/v1/jobs/**
+          filters:
+            - StripPrefix=2
+
+        # 评估服务路由
+        - id: evaluation-service
+          uri: lb://ai-interviewer-evaluation
+          predicates:
+            - Path=/api/v1/evaluations/**
+          filters:
+            - StripPrefix=2
+
+        # 通知服务路由
+        - id: notification-service
+          uri: lb://ai-interviewer-notification
+          predicates:
+            - Path=/api/v1/notifications/**
+          filters:
+            - StripPrefix=2
+
+      # 全局CORS配置
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+
+      # 默认过滤器
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+
+# Knife4j Gateway 聚合配置
+knife4j:
+  gateway:
+    enabled: true
+    # 使用手动配置模式，避免与现有路由冲突
+    strategy: manual
+    routes:
+      - name: 用户管理服务
+        service-name: ai-interviewer-user
+        url: /ai-interviewer-user/v3/api-docs
+        context-path: /api/v1
+        order: 1
+      - name: 简历管理服务
+        service-name: ai-interviewer-resume
+        url: /ai-interviewer-resume/v3/api-docs
+        context-path: /api/v1
+        order: 2
+      - name: 面试管理服务
+        service-name: ai-interviewer-interview
+        url: /ai-interviewer-interview/v3/api-docs
+        context-path: /api/v1
+        order: 3
+      - name: 职位管理服务
+        service-name: ai-interviewer-job
+        url: /ai-interviewer-job/v3/api-docs
+        context-path: /api/v1
+        order: 4
+      - name: 评估分析服务
+        service-name: ai-interviewer-evaluation
+        url: /ai-interviewer-evaluation/v3/api-docs
+        context-path: /api/v1
+        order: 5
+      - name: 通知推送服务
+        service-name: ai-interviewer-notification
+        url: /ai-interviewer-notification/v3/api-docs
+        context-path: /api/v1
+        order: 6
+
+# JWT配置
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-for-jwt-signing-must-be-at-least-32-characters}
+  access-token-expiration: 7200000    # 2小时
+  refresh-token-expiration: 604800000  # 7天
+
+# 白名单配置(无需认证)
+gateway:
+  white-list:
+    - /api/v1/auth/login
+    - /api/v1/auth/register
+    - /api/v1/auth/refresh
+    - /api/v1/**/v3/api-docs
+    - /actuator/**
+    # Knife4j 文档相关
+    - /doc.html
+    - /swagger-ui.html
+    - /swagger-ui/**
+    - /v3/api-docs/**
+    - /webjars/**
+    # 服务发现路由 - 用于Knife4j获取各服务的api-docs
+    - /ai-interviewer-*/v3/api-docs
+    - /ai-interviewer-*/v3/api-docs/**
+
+# Sentinel配置
+spring.cloud.sentinel:
+  transport:
+    dashboard: ${SENTINEL_DASHBOARD:localhost:8080}
+    port: 8719
+  eager: true
+
+# 日志配置
+logging:
+  level:
+    com.aiinterviewer: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+    org.springdoc: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
