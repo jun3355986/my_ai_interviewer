@@ -68,6 +68,31 @@ class SystemConfigServiceTest extends AdminPostgresIntegrationTest {
         assertThat(auditCount).isEqualTo(1);
     }
 
+    @Test
+    void maskedSensitiveConfigUpdateKeepsExistingValue() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO t_system_config
+                    (config_key, config_value, config_type, config_group, description, encrypted, editable)
+                VALUES ('deepseek.api.key', 'sk-real', 'STRING', 'AI', 'DeepSeek API key', FALSE, TRUE)
+                """);
+        SystemConfigService.SystemConfigUpdateRequest request = new SystemConfigService.SystemConfigUpdateRequest();
+        request.setConfigValue("******");
+        request.setConfigType("STRING");
+        request.setConfigGroup("AI");
+        request.setDescription("DeepSeek API key");
+        request.setEncrypted(false);
+        request.setEditable(true);
+        request.setUpdatedBy(42L);
+
+        systemConfigService.updateConfig("deepseek.api.key", request);
+
+        String value = jdbcTemplate.queryForObject(
+                "SELECT config_value FROM t_system_config WHERE config_key = 'deepseek.api.key'",
+                String.class);
+        assertThat(value).isEqualTo("sk-real");
+    }
+
     private String valueOf(List<SystemConfigService.SystemConfigResponse> configs, String configKey) {
         return configs.stream()
                 .filter(config -> configKey.equals(config.getConfigKey()))

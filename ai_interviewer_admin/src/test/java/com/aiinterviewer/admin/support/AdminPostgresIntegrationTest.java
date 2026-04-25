@@ -112,6 +112,7 @@ public abstract class AdminPostgresIntegrationTest {
                     id BIGSERIAL PRIMARY KEY,
                     user_id BIGINT NOT NULL REFERENCES t_user(id),
                     type VARCHAR(50) NOT NULL,
+                    template_code VARCHAR(100),
                     title VARCHAR(200),
                     content TEXT,
                     related_type VARCHAR(50),

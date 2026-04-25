@@ -98,6 +98,7 @@ public class SystemConfigService {
         if (Boolean.FALSE.equals(editable)) {
             throw new AdminBusinessException(400, "系统配置不允许编辑");
         }
+        String configValue = resolveUpdateValue(normalizedKey, request, existingId);
         jdbcTemplate.update(
                 """
                 UPDATE t_system_config
@@ -112,13 +113,30 @@ public class SystemConfigService {
                 WHERE id = ?
                   AND deleted_at IS NULL
                 """,
-                request.getConfigValue(),
+                configValue,
                 defaultIfBlank(request.getConfigType(), DEFAULT_CONFIG_TYPE),
                 defaultIfBlank(request.getConfigGroup(), DEFAULT_CONFIG_GROUP),
                 trimToNull(request.getDescription()),
                 Boolean.TRUE.equals(request.getEncrypted()),
                 request.getEditable() == null || Boolean.TRUE.equals(request.getEditable()),
                 request.getUpdatedBy(),
+                existingId);
+    }
+
+    private String resolveUpdateValue(String configKey, SystemConfigUpdateRequest request, Long existingId) {
+        if (!MASKED_VALUE.equals(request.getConfigValue())) {
+            return request.getConfigValue();
+        }
+        Boolean encrypted = jdbcTemplate.queryForObject(
+                "SELECT encrypted FROM t_system_config WHERE id = ?",
+                Boolean.class,
+                existingId);
+        if (!Boolean.TRUE.equals(encrypted) && !isSecretLikeKey(configKey)) {
+            return request.getConfigValue();
+        }
+        return jdbcTemplate.queryForObject(
+                "SELECT config_value FROM t_system_config WHERE id = ?",
+                String.class,
                 existingId);
     }
 

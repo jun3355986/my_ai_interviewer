@@ -10,11 +10,15 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +29,8 @@ import org.springframework.util.StringUtils;
 public class AdminNotificationService {
 
     private static final int STATUS_SENT = 1;
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\{\\{\\s*([^}]*)\\s*}}");
+    private static final Pattern VARIABLE_NAME_PATTERN = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -35,22 +41,29 @@ public class AdminNotificationService {
     public String createTemplate(TemplateRequest request) {
         validateTemplateRequest(request, true);
         String templateCode = request.getTemplateCode().trim();
-        jdbcTemplate.update(
-                """
-                INSERT INTO t_notification_template
-                    (template_code, template_name, channel, subject, content, variables,
-                     enabled, created_by, updated_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                """,
-                templateCode,
-                request.getTemplateName().trim(),
-                request.getChannel().trim(),
-                trimToNull(request.getSubject()),
-                request.getContent().trim(),
-                toVariablesJson(request.getVariables()),
-                request.getEnabled() == null || Boolean.TRUE.equals(request.getEnabled()),
-                request.getCreatedBy(),
-                request.getUpdatedBy() == null ? request.getCreatedBy() : request.getUpdatedBy());
+        if (activeTemplateExists(templateCode)) {
+            throw new AdminBusinessException(409, "通知模板编码已存在");
+        }
+        try {
+            jdbcTemplate.update(
+                    """
+                    INSERT INTO t_notification_template
+                        (template_code, template_name, channel, subject, content, variables,
+                         enabled, created_by, updated_by, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """,
+                    templateCode,
+                    request.getTemplateName().trim(),
+                    request.getChannel().trim(),
+                    trimToNull(request.getSubject()),
+                    request.getContent().trim(),
+                    toVariablesJson(request.getVariables()),
+                    request.getEnabled() == null || Boolean.TRUE.equals(request.getEnabled()),
+                    request.getCreatedBy(),
+                    request.getUpdatedBy() == null ? request.getCreatedBy() : request.getUpdatedBy());
+        } catch (DataIntegrityViolationException ex) {
+            throw new AdminBusinessException(409, "通知模板编码已存在", ex);
+        }
         return templateCode;
     }
 
@@ -125,18 +138,22 @@ public class AdminNotificationService {
     public SendNotificationResponse sendNotification(SendNotificationRequest request) {
         validateSendRequest(request);
         NotificationTemplate template = getEnabledTemplate(request.getTemplateCode());
+        validateSendVariables(template, request.getVariables());
         String title = render(template.getSubject(), request.getVariables());
         String content = render(template.getContent(), request.getVariables());
+        assertNoUnresolvedPlaceholders(title);
+        assertNoUnresolvedPlaceholders(content);
         Long notificationId = jdbcTemplate.queryForObject(
                 """
                 INSERT INTO t_notification
-                    (user_id, type, title, content, related_type, related_id, status, send_time, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    (user_id, type, template_code, title, content, related_type, related_id, status, send_time, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 RETURNING id
                 """,
                 Long.class,
                 request.getUserId(),
                 template.getChannel(),
+                template.getTemplateCode(),
                 title,
                 content,
                 trimToNull(request.getRelatedType()),
@@ -147,8 +164,7 @@ public class AdminNotificationService {
         response.setTemplateCode(template.getTemplateCode());
         response.setUserId(request.getUserId());
         response.setChannel(template.getChannel());
-        response.setTitle(title);
-        response.setContent(content);
+        response.setStatus(STATUS_SENT);
         return response;
     }
 
@@ -176,6 +192,10 @@ public class AdminNotificationService {
         if (!StringUtils.hasText(request.getContent())) {
             throw new AdminBusinessException(400, "模板内容不能为空");
         }
+        request.setVariables(validateAndNormalizeVariables(
+                request.getVariables(),
+                request.getSubject(),
+                request.getContent()));
     }
 
     private void validateSendRequest(SendNotificationRequest request) {
@@ -185,6 +205,74 @@ public class AdminNotificationService {
         normalizeTemplateCode(request.getTemplateCode());
         if (request.getUserId() == null) {
             throw new AdminBusinessException(400, "接收用户不能为空");
+        }
+    }
+
+    private List<String> validateAndNormalizeVariables(List<String> declaredVariables, String subject, String content) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        if (declaredVariables != null) {
+            for (String variable : declaredVariables) {
+                if (!StringUtils.hasText(variable)) {
+                    throw new AdminBusinessException(400, "模板变量不能为空");
+                }
+                String trimmed = variable.trim();
+                if (!VARIABLE_NAME_PATTERN.matcher(trimmed).matches()) {
+                    throw new AdminBusinessException(400, "模板变量名格式不合法");
+                }
+                if (!normalized.add(trimmed)) {
+                    throw new AdminBusinessException(400, "模板变量不能重复");
+                }
+            }
+        }
+
+        Set<String> placeholders = extractPlaceholders(subject, content);
+        if (!normalized.equals(placeholders)) {
+            throw new AdminBusinessException(400, "模板变量必须与占位符一致");
+        }
+        return List.copyOf(normalized);
+    }
+
+    private Set<String> extractPlaceholders(String... templates) {
+        LinkedHashSet<String> placeholders = new LinkedHashSet<>();
+        for (String template : templates) {
+            if (!StringUtils.hasText(template)) {
+                continue;
+            }
+            Matcher matcher = PLACEHOLDER_PATTERN.matcher(template);
+            while (matcher.find()) {
+                String variableName = matcher.group(1).trim();
+                if (!StringUtils.hasText(variableName)) {
+                    throw new AdminBusinessException(400, "模板占位符不能为空");
+                }
+                if (!VARIABLE_NAME_PATTERN.matcher(variableName).matches()) {
+                    throw new AdminBusinessException(400, "模板占位符格式不合法");
+                }
+                placeholders.add(variableName);
+            }
+        }
+        return placeholders;
+    }
+
+    private void validateSendVariables(NotificationTemplate template, Map<String, Object> providedVariables) {
+        Set<String> requiredVariables = new LinkedHashSet<>(template.getVariables());
+        Set<String> providedKeys = new LinkedHashSet<>();
+        if (providedVariables != null) {
+            for (String key : providedVariables.keySet()) {
+                if (!StringUtils.hasText(key)) {
+                    throw new AdminBusinessException(400, "通知变量名不能为空");
+                }
+                String normalizedKey = key.trim();
+                if (!VARIABLE_NAME_PATTERN.matcher(normalizedKey).matches()) {
+                    throw new AdminBusinessException(400, "通知变量名格式不合法");
+                }
+                providedKeys.add(normalizedKey);
+            }
+        }
+        if (!providedKeys.containsAll(requiredVariables)) {
+            throw new AdminBusinessException(400, "通知变量缺失");
+        }
+        if (!requiredVariables.containsAll(providedKeys)) {
+            throw new AdminBusinessException(400, "通知变量包含未知项");
         }
     }
 
@@ -214,11 +302,30 @@ public class AdminNotificationService {
             if (!StringUtils.hasText(entry.getKey())) {
                 continue;
             }
-            String placeholder = "{{" + entry.getKey().trim() + "}}";
+            String placeholder = "\\{\\{\\s*" + Pattern.quote(entry.getKey().trim()) + "\\s*}}";
             String value = entry.getValue() == null ? "" : String.valueOf(entry.getValue());
-            rendered = rendered.replaceAll(Pattern.quote(placeholder), java.util.regex.Matcher.quoteReplacement(value));
+            rendered = rendered.replaceAll(placeholder, java.util.regex.Matcher.quoteReplacement(value));
         }
         return rendered;
+    }
+
+    private void assertNoUnresolvedPlaceholders(String rendered) {
+        if (StringUtils.hasText(rendered) && PLACEHOLDER_PATTERN.matcher(rendered).find()) {
+            throw new AdminBusinessException(400, "通知内容存在未解析占位符");
+        }
+    }
+
+    private boolean activeTemplateExists(String templateCode) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM t_notification_template
+                WHERE template_code = ?
+                  AND deleted_at IS NULL
+                """,
+                Integer.class,
+                templateCode);
+        return count != null && count > 0;
     }
 
     private String normalizeTemplateCode(String templateCode) {
@@ -296,7 +403,6 @@ public class AdminNotificationService {
         private String templateCode;
         private Long userId;
         private String channel;
-        private String title;
-        private String content;
+        private Integer status;
     }
 }

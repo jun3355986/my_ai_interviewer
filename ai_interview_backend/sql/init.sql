@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS t_notification (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES t_user(id),
     type VARCHAR(50) NOT NULL,          -- email, sms, in_app
+    template_code VARCHAR(100),         -- 通知模板编码
     title VARCHAR(200),
     content TEXT,
     related_type VARCHAR(50),           -- interview, evaluation
