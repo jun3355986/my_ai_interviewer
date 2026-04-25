@@ -111,7 +111,10 @@
                 AND s.finished_at IS NOT NULL
                 AND s.finished_at &lt; s.started_at + INTERVAL '2 minutes'
             )
-           OR COALESCE(sc.score_count, 0) = 0
+           OR (
+                s.status = 2
+                AND COALESCE(sc.score_count, 0) = 0
+            )
         ORDER BY s.created_at DESC, s.id DESC
         LIMIT #{limit}
     </select>

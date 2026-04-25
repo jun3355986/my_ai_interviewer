@@ -25,7 +25,7 @@ class DashboardServiceTest extends AdminPostgresIntegrationTest {
         assertThat(overview.getUserCount()).isEqualTo(3);
         assertThat(overview.getJobCount()).isEqualTo(2);
         assertThat(overview.getResumeCount()).isEqualTo(2);
-        assertThat(overview.getInterviewCount()).isEqualTo(5);
+        assertThat(overview.getInterviewCount()).isEqualTo(6);
         assertThat(overview.getEvaluationCount()).isEqualTo(5);
     }
 
@@ -73,7 +73,7 @@ class DashboardServiceTest extends AdminPostgresIntegrationTest {
         assertThat(overview.getRecentErrors())
                 .extracting(DashboardOverviewResponse.RecentErrorSession::getSessionId)
                 .contains("short-session", "missing-score-session")
-                .doesNotContain("healthy-session", "in-progress-with-score");
+                .doesNotContain("healthy-session", "in-progress-with-score", "in-progress-without-score");
         Map<String, String> reasons = overview.getRecentErrors().stream()
                 .collect(Collectors.toMap(
                         DashboardOverviewResponse.RecentErrorSession::getSessionId,
@@ -115,6 +115,8 @@ class DashboardServiceTest extends AdminPostgresIntegrationTest {
                 LocalDateTime.now().minusDays(3), LocalDateTime.now().minusDays(3));
         insertSession("in-progress-with-score", 3, null, 2, 1, LocalDateTime.now().minusDays(10),
                 null, LocalDateTime.now().minusDays(10));
+        insertSession("in-progress-without-score", 3, null, 2, 1, LocalDateTime.now().minusDays(2),
+                null, LocalDateTime.now().minusDays(2));
         insertSession("old-session", 3, null, 2, 2, LocalDateTime.now().minusDays(31).minusMinutes(20),
                 LocalDateTime.now().minusDays(31), LocalDateTime.now().minusDays(31));
 
