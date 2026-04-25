@@ -57,6 +57,7 @@ class AdminSchemaMigrationTest {
             "uk_admin_permission_code", "permission_code",
             "uk_question_bank_code", "question_code",
             "uk_question_tag_code", "tag_code",
+            "uk_question_import_batch_no", "batch_no",
             "uk_notification_template_code", "template_code",
             "uk_system_config_key", "config_key",
             "uk_interview_strategy_config_code", "strategy_code");
