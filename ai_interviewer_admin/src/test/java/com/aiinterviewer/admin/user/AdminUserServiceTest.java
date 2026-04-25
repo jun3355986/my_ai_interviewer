@@ -89,6 +89,33 @@ class AdminUserServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void disableUserRejectsCurrentAdmin() {
+        seedUsers();
+        bindRequestAndAdmin("/admin/users/1/disable", "PATCH", 1);
+
+        assertThatThrownBy(() -> adminUserService.disableUser(1L))
+                .isInstanceOf(AdminBusinessException.class)
+                .hasMessage("不能禁用当前登录管理员")
+                .extracting("code")
+                .isEqualTo(409);
+    }
+
+    @Test
+    void disableUserRejectsLastEnabledRoleAdmin() {
+        seedUsers();
+        Long roleId = createRole("ROLE_ADMIN");
+        bindUserRole(1L, roleId);
+        bindUserRole(2L, roleId);
+        bindRequestAndAdmin("/admin/users/1/disable", "PATCH", 9001L);
+
+        assertThatThrownBy(() -> adminUserService.disableUser(1L))
+                .isInstanceOf(AdminBusinessException.class)
+                .hasMessage("至少保留一个启用管理员")
+                .extracting("code")
+                .isEqualTo(409);
+    }
+
+    @Test
     void resetPasswordUpdatesPasswordHashAndWritesAuditLog() {
         seedUsers();
         bindRequestAndAdmin("/admin/users/1/reset-password", "POST", 9002L);
@@ -108,6 +135,30 @@ class AdminUserServiceTest extends AdminPostgresIntegrationTest {
         assertThat(logs.getFirst().getTargetType()).isEqualTo("USER");
         assertThat(logs.getFirst().getTargetId()).isEqualTo("1");
         assertThat(logs.getFirst().getResult()).isEqualTo("SUCCESS");
+    }
+
+    @Test
+    void resetPasswordRejectsWeakPassword() {
+        seedUsers();
+        bindRequestAndAdmin("/admin/users/1/reset-password", "POST", 9002L);
+
+        assertThatThrownBy(() -> adminUserService.resetPassword(1L, "password"))
+                .isInstanceOf(AdminBusinessException.class)
+                .hasMessage("新密码至少包含字母和数字")
+                .extracting("code")
+                .isEqualTo(400);
+    }
+
+    @Test
+    void resetPasswordRejectsOverlongPassword() {
+        seedUsers();
+        bindRequestAndAdmin("/admin/users/1/reset-password", "POST", 9002L);
+
+        assertThatThrownBy(() -> adminUserService.resetPassword(1L, "A1" + "x".repeat(71)))
+                .isInstanceOf(AdminBusinessException.class)
+                .hasMessage("新密码长度不能超过72位")
+                .extracting("code")
+                .isEqualTo(400);
     }
 
     @Test
@@ -135,7 +186,23 @@ class AdminUserServiceTest extends AdminPostgresIntegrationTest {
                 """);
     }
 
-    private void bindRequestAndAdmin(String uri, String method, Long adminUserId) {
+    private Long createRole(String roleCode) {
+        return jdbcTemplate.queryForObject(
+                """
+                INSERT INTO t_role (role_code, role_name)
+                VALUES (?, ?)
+                RETURNING id
+                """,
+                Long.class,
+                roleCode,
+                roleCode);
+    }
+
+    private void bindUserRole(Long userId, Long roleId) {
+        jdbcTemplate.update("INSERT INTO t_user_role (user_id, role_id) VALUES (?, ?)", userId, roleId);
+    }
+
+    private void bindRequestAndAdmin(String uri, String method, Object adminUserId) {
         MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
         request.setRemoteAddr("127.0.0.1");
         request.addHeader("User-Agent", "AdminUserServiceTest/1.0");

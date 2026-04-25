@@ -19,6 +19,12 @@ public interface AdminUserMapper {
 
     Integer countExistingUser(@Param("userId") Long userId);
 
+    Integer countUserRole(
+            @Param("userId") Long userId,
+            @Param("roleCode") String roleCode);
+
+    Integer countEnabledUsersByRoleCode(@Param("roleCode") String roleCode);
+
     int disableUser(@Param("userId") Long userId);
 
     int resetPassword(

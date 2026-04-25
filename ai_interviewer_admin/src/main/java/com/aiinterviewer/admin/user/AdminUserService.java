@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +19,10 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class AdminUserService {
 
+    private static final String ADMIN_ROLE = "ROLE_ADMIN";
     private static final int DISABLED_STATUS = 0;
+    private static final int MIN_PASSWORD_LENGTH = 8;
+    private static final int MAX_PASSWORD_LENGTH = 72;
     private static final long DEFAULT_CURRENT = 1L;
     private static final long DEFAULT_SIZE = 20L;
     private static final long MAX_SIZE = 100L;
@@ -39,6 +44,12 @@ public class AdminUserService {
     @AdminAudit(module = "USER", operation = "DISABLE", targetType = "USER", targetIdParam = "userId")
     public void disableUser(Long userId) {
         ensureUserExists(userId);
+        if (userId.equals(currentAdminUserId())) {
+            throw new AdminBusinessException(409, "不能禁用当前登录管理员");
+        }
+        if (hasRole(userId, ADMIN_ROLE) && countEnabledAdmins() <= 1) {
+            throw new AdminBusinessException(409, "至少保留一个启用管理员");
+        }
         int updated = adminUserMapper.disableUser(userId);
         if (updated == 0) {
             throw new AdminBusinessException(500, "用户禁用失败");
@@ -49,9 +60,7 @@ public class AdminUserService {
     @AdminAudit(module = "USER", operation = "RESET_PASSWORD", targetType = "USER", targetIdParam = "userId")
     public void resetPassword(Long userId, String newPassword) {
         ensureUserExists(userId);
-        if (!StringUtils.hasText(newPassword)) {
-            throw new AdminBusinessException(400, "新密码不能为空");
-        }
+        validateResetPassword(newPassword);
         int updated = adminUserMapper.resetPassword(userId, passwordEncoder.encode(newPassword));
         if (updated == 0) {
             throw new AdminBusinessException(500, "密码重置失败");
@@ -65,6 +74,48 @@ public class AdminUserService {
         Integer count = adminUserMapper.countExistingUser(userId);
         if (count == null || count == 0) {
             throw new AdminBusinessException(404, "用户不存在或已删除");
+        }
+    }
+
+    private Long currentAdminUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof Long adminUserId) {
+            return adminUserId;
+        }
+        if (principal instanceof Number number) {
+            return number.longValue();
+        }
+        return null;
+    }
+
+    private boolean hasRole(Long userId, String roleCode) {
+        Integer count = adminUserMapper.countUserRole(userId, roleCode);
+        return count != null && count > 0;
+    }
+
+    private int countEnabledAdmins() {
+        Integer count = adminUserMapper.countEnabledUsersByRoleCode(ADMIN_ROLE);
+        return count == null ? 0 : count;
+    }
+
+    private void validateResetPassword(String newPassword) {
+        if (!StringUtils.hasText(newPassword)) {
+            throw new AdminBusinessException(400, "新密码不能为空");
+        }
+        if (newPassword.length() < MIN_PASSWORD_LENGTH) {
+            throw new AdminBusinessException(400, "新密码长度不能少于8位");
+        }
+        if (newPassword.length() > MAX_PASSWORD_LENGTH) {
+            throw new AdminBusinessException(400, "新密码长度不能超过72位");
+        }
+        boolean hasLetter = newPassword.chars().anyMatch(Character::isLetter);
+        boolean hasDigit = newPassword.chars().anyMatch(Character::isDigit);
+        if (!hasLetter || !hasDigit) {
+            throw new AdminBusinessException(400, "新密码至少包含字母和数字");
         }
     }
 
