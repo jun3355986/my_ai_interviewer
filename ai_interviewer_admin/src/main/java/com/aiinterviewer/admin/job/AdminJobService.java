@@ -10,7 +10,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -53,7 +56,7 @@ public class AdminJobService {
     }
 
     @Transactional
-    @AdminAudit(module = "JOB", operation = "CREATE", targetType = "JOB", targetIdParam = "arg0")
+    @AdminAudit(module = "JOB", operation = "CREATE", targetType = "JOB", targetIdFromResult = true)
     public Long createJob(AdminJobUpsertRequest request) {
         validateJobRequest(request);
         request.setSkillsJson(toJson(request.getSkills()));
@@ -74,9 +77,6 @@ public class AdminJobService {
         validateJobRequest(request);
         request.setId(jobId);
         request.setSkillsJson(toJson(request.getSkills()));
-        if (request.getStatus() == null) {
-            request.setStatus(OPEN_STATUS);
-        }
         int updated = adminJobMapper.updateJob(request);
         if (updated == 0) {
             throw new AdminBusinessException(500, "岗位更新失败");
@@ -149,10 +149,17 @@ public class AdminJobService {
         if (questions == null) {
             return;
         }
+        Set<String> seenQuestionTypes = new HashSet<>();
         for (JobQuestionConfigItem question : questions) {
             if (question == null || !StringUtils.hasText(question.getQuestionType())) {
                 throw new AdminBusinessException(400, "问题类型不能为空");
             }
+            String normalizedQuestionType = question.getQuestionType().trim();
+            String dedupeKey = normalizedQuestionType.toLowerCase(Locale.ROOT);
+            if (!seenQuestionTypes.add(dedupeKey)) {
+                throw new AdminBusinessException(400, "问题类型不能重复");
+            }
+            question.setQuestionType(normalizedQuestionType);
             if (question.getQuestionCount() == null || question.getQuestionCount() < 1) {
                 throw new AdminBusinessException(400, "问题数量必须大于0");
             }

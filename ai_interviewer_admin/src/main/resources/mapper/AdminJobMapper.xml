@@ -59,9 +59,10 @@
             AND status = #{query.status}
         </if>
         <if test="query.skill != null and query.skill != ''">
-            AND (
-                skills @> jsonb_build_array(#{query.skill})
-                OR skills::text ILIKE CONCAT('%', #{query.skill}, '%')
+            AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements_text(COALESCE(skills, '[]'::jsonb)) AS skill_value(value)
+                WHERE LOWER(TRIM(skill_value.value)) = LOWER(TRIM(#{query.skill}))
             )
         </if>
     </sql>
@@ -124,7 +125,7 @@
             description = #{request.description},
             requirements = #{request.requirements},
             skills = CAST(#{request.skillsJson} AS jsonb),
-            status = #{request.status},
+            status = COALESCE(CAST(#{request.status,jdbcType=SMALLINT} AS SMALLINT), status),
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{request.id}
           AND deleted_at IS NULL

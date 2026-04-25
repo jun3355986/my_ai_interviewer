@@ -47,14 +47,14 @@ public class AuditLogAspect {
         try {
             Object result = joinPoint.proceed();
             try {
-                writeLog(joinPoint, adminAudit, AuditLogService.RESULT_SUCCESS, null, elapsed(start));
+                writeLog(joinPoint, adminAudit, AuditLogService.RESULT_SUCCESS, null, elapsed(start), result);
             } catch (RuntimeException auditException) {
                 log.warn("Admin audit write failed after successful operation", auditException);
             }
             return result;
         } catch (Throwable ex) {
             try {
-                writeLog(joinPoint, adminAudit, AuditLogService.RESULT_FAILED, ex, elapsed(start));
+                writeLog(joinPoint, adminAudit, AuditLogService.RESULT_FAILED, ex, elapsed(start), null);
             } catch (RuntimeException auditException) {
                 log.warn("Admin audit write failed after failed operation", auditException);
                 ex.addSuppressed(auditException);
@@ -68,14 +68,15 @@ public class AuditLogAspect {
             AdminAudit adminAudit,
             String result,
             Throwable error,
-            long durationMs) {
+            long durationMs,
+            Object methodResult) {
         HttpServletRequest request = currentRequest();
         AdminOperationLog log = new AdminOperationLog();
         log.setAdminUserId(currentAdminUserId());
         log.setModule(adminAudit.module());
         log.setOperation(adminAudit.operation());
         log.setTargetType(adminAudit.targetType());
-        log.setTargetId(resolveTargetId(joinPoint, adminAudit));
+        log.setTargetId(resolveTargetId(joinPoint, adminAudit, methodResult));
         log.setRequestUri(request == null ? null : request.getRequestURI());
         log.setRequestMethod(request == null ? null : request.getMethod());
         log.setRequestParams(toRequestParamsJson(request));
@@ -102,7 +103,10 @@ public class AuditLogAspect {
         return null;
     }
 
-    private String resolveTargetId(ProceedingJoinPoint joinPoint, AdminAudit adminAudit) {
+    private String resolveTargetId(ProceedingJoinPoint joinPoint, AdminAudit adminAudit, Object methodResult) {
+        if (adminAudit.targetIdFromResult()) {
+            return truncate(stringify(methodResult), MAX_TARGET_ID_LENGTH);
+        }
         if (hasText(adminAudit.targetId())) {
             return truncate(adminAudit.targetId(), MAX_TARGET_ID_LENGTH);
         }

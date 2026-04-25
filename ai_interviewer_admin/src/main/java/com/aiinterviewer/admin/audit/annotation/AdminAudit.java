@@ -18,4 +18,6 @@ public @interface AdminAudit {
     String targetId() default "";
 
     String targetIdParam() default "";
+
+    boolean targetIdFromResult() default false;
 }

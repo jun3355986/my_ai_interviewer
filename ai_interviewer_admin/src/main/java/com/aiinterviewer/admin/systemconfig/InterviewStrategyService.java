@@ -9,9 +9,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -136,6 +139,7 @@ public class InterviewStrategyService {
         if (request.getQuestionTypes() == null || request.getQuestionTypes().isEmpty()) {
             throw new AdminBusinessException(400, "默认技术题型不能为空");
         }
+        request.setQuestionTypes(normalizeQuestionTypes(request.getQuestionTypes()));
         if (request.getQuestionCount() == null || request.getQuestionCount() < 1) {
             throw new AdminBusinessException(400, "默认题目数量必须大于0");
         }
@@ -145,12 +149,40 @@ public class InterviewStrategyService {
         if (request.getDifficultyRatio() == null || request.getDifficultyRatio().isEmpty()) {
             throw new AdminBusinessException(400, "难度比例不能为空");
         }
-        int ratioTotal = request.getDifficultyRatio().values().stream()
-                .mapToInt(value -> value == null ? 0 : value)
-                .sum();
+        request.setDifficultyRatio(normalizeDifficultyRatio(request.getDifficultyRatio()));
+        int ratioTotal = request.getDifficultyRatio().values().stream().mapToInt(Integer::intValue).sum();
         if (ratioTotal != 100) {
             throw new AdminBusinessException(400, "难度比例合计必须为100");
         }
+    }
+
+    private List<String> normalizeQuestionTypes(List<String> questionTypes) {
+        Set<String> seenQuestionTypes = new HashSet<>();
+        return questionTypes.stream()
+                .map(questionType -> questionType == null ? "" : questionType.trim())
+                .peek(questionType -> {
+                    if (!StringUtils.hasText(questionType)) {
+                        throw new AdminBusinessException(400, "默认技术题型不能为空");
+                    }
+                    if (!seenQuestionTypes.add(questionType.toLowerCase(Locale.ROOT))) {
+                        throw new AdminBusinessException(400, "默认技术题型不能重复");
+                    }
+                })
+                .toList();
+    }
+
+    private Map<String, Integer> normalizeDifficultyRatio(Map<String, Integer> difficultyRatio) {
+        Map<String, Integer> normalized = new LinkedHashMap<>();
+        difficultyRatio.forEach((difficulty, ratio) -> {
+            if (!StringUtils.hasText(difficulty)) {
+                throw new AdminBusinessException(400, "难度名称不能为空");
+            }
+            if (ratio == null || ratio < 0) {
+                throw new AdminBusinessException(400, "难度比例不能为负数");
+            }
+            normalized.put(difficulty.trim(), ratio);
+        });
+        return normalized;
     }
 
     private DefaultInterviewStrategyResponse mapDefaultStrategy(ResultSet rs, int rowNum) throws SQLException {
@@ -212,8 +244,13 @@ public class InterviewStrategyService {
         if (value == null) {
             return List.of();
         }
-        return objectMapper.convertValue(value, new TypeReference<>() {
-        });
+        try {
+            List<String> questionTypes = objectMapper.convertValue(value, new TypeReference<>() {
+            });
+            return questionTypes == null ? List.of() : questionTypes;
+        } catch (IllegalArgumentException ex) {
+            return List.of();
+        }
     }
 
     private Map<String, Integer> readDifficultyRatio(Map<String, Object> scoringRule) {
@@ -221,8 +258,13 @@ public class InterviewStrategyService {
         if (value == null) {
             return Map.of();
         }
-        return objectMapper.convertValue(value, new TypeReference<>() {
-        });
+        try {
+            Map<String, Integer> difficultyRatio = objectMapper.convertValue(value, new TypeReference<>() {
+            });
+            return difficultyRatio == null ? Map.of() : difficultyRatio;
+        } catch (IllegalArgumentException ex) {
+            return Map.of();
+        }
     }
 
     @Data

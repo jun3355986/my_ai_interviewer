@@ -1,7 +1,9 @@
 package com.aiinterviewer.admin.job;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.aiinterviewer.admin.audit.entity.AdminOperationLog;
 import com.aiinterviewer.admin.common.model.PageResult;
 import com.aiinterviewer.admin.support.AdminPostgresIntegrationTest;
 import java.math.BigDecimal;
@@ -45,6 +47,32 @@ class AdminJobServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void skillFilterMatchesExactJsonArrayElementIgnoringCase() {
+        seedJobs();
+        jdbcTemplate.update(
+                """
+                INSERT INTO t_job
+                    (title, company, department, location, job_type, experience_required,
+                     education_required, salary_min, salary_max, description, requirements,
+                     skills, status, created_by, created_at, updated_at)
+                VALUES
+                    ('Frontend JavaScript Engineer', 'Gamma UI', 'R&D', 'Shenzhen', 'full-time', '3 years',
+                     'Bachelor', 20000, 30000, 'Build frontend', 'JavaScript and React',
+                     CAST('["JavaScript","React"]' AS jsonb), 1, 1,
+                     CURRENT_TIMESTAMP + INTERVAL '1 day', CURRENT_TIMESTAMP + INTERVAL '1 day')
+                """);
+
+        AdminJobService.AdminJobQuery skillQuery = new AdminJobService.AdminJobQuery();
+        skillQuery.setSkill("java");
+        PageResult<AdminJobService.AdminJobListItem> javaJobs = adminJobService.listJobs(skillQuery);
+
+        assertThat(javaJobs.getTotal()).isEqualTo(1);
+        assertThat(javaJobs.getRecords())
+                .extracting(AdminJobService.AdminJobListItem::getTitle)
+                .containsExactly("Senior Java Engineer");
+    }
+
+    @Test
     void adminCanCreateAndUpdateJobRecords() {
         seedCreator();
         AdminJobService.AdminJobUpsertRequest request = jobRequest("Backend Engineer", "Acme");
@@ -66,6 +94,47 @@ class AdminJobServiceTest extends AdminPostgresIntegrationTest {
         assertThat(updated.getCompany()).isEqualTo("Acme Cloud");
         assertThat(updated.getLocation()).isEqualTo("Shenzhen");
         assertThat(updated.getSkills()).containsExactly("Kubernetes", "Java");
+    }
+
+    @Test
+    void updateClosedJobWithoutStatusKeepsItClosed() {
+        seedCreator();
+        AdminJobService.AdminJobUpsertRequest request = jobRequest("Backend Engineer", "Acme");
+        Long jobId = adminJobService.createJob(request);
+        adminJobService.closeJob(jobId);
+
+        AdminJobService.AdminJobUpsertRequest update = jobRequest("Platform Engineer", "Acme Cloud");
+        update.setStatus(null);
+        adminJobService.updateJob(jobId, update);
+
+        AdminJobService.AdminJobDetail updated = adminJobService.getJobDetail(jobId);
+        assertThat(updated.getStatus()).isZero();
+        assertThat(updated.getTitle()).isEqualTo("Platform Engineer");
+    }
+
+    @Test
+    void createJobAuditTargetIdUsesCreatedJobId() {
+        seedCreator();
+        AdminJobService.AdminJobUpsertRequest request = jobRequest("Backend Engineer", "Acme");
+
+        Long jobId = adminJobService.createJob(request);
+
+        AdminOperationLog log = jdbcTemplate.queryForObject(
+                """
+                SELECT target_id
+                FROM t_admin_operation_log
+                WHERE module = 'JOB'
+                  AND operation = 'CREATE'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (rs, rowNum) -> {
+                    AdminOperationLog operationLog = new AdminOperationLog();
+                    operationLog.setTargetId(rs.getString("target_id"));
+                    return operationLog;
+                });
+        assertThat(log).isNotNull();
+        assertThat(log.getTargetId()).isEqualTo(String.valueOf(jobId));
     }
 
     @Test
@@ -97,6 +166,18 @@ class AdminJobServiceTest extends AdminPostgresIntegrationTest {
         assertThat(detail.getQuestions())
                 .extracting(AdminJobService.JobQuestionConfigItem::getQuestionCount)
                 .containsExactly(8, 4, 2);
+    }
+
+    @Test
+    void duplicateQuestionTypeConfigIsRejectedIgnoringCaseAndWhitespace() {
+        seedJobs();
+        AdminJobService.JobQuestionConfigRequest request = new AdminJobService.JobQuestionConfigRequest();
+        request.setQuestions(List.of(
+                question("TECHNICAL", 8, 1),
+                question(" technical ", 4, 2)));
+
+        assertThatThrownBy(() -> adminJobService.configureQuestions(1L, request))
+                .hasMessageContaining("问题类型不能重复");
     }
 
     private void seedJobs() {
