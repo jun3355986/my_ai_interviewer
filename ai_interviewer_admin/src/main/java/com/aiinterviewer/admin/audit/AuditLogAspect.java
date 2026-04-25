@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -22,9 +23,20 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @Aspect
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class AuditLogAspect {
 
+    private static final int MAX_TARGET_ID_LENGTH = 100;
+    private static final int MAX_PARAM_KEY_LENGTH = 256;
+    private static final int MAX_PARAM_VALUE_LENGTH = 256;
+    private static final int MAX_PARAM_ARRAY_VALUES = 5;
+    private static final int MAX_REQUEST_PARAMS_JSON_LENGTH = 16_000;
     private static final int MAX_ERROR_MESSAGE_LENGTH = 2000;
+    private static final String MASKED_VALUE = "******";
+    private static final String TRUNCATED_MARKER = "_truncated";
+    private static final String[] SENSITIVE_PARAM_KEYWORDS = {
+        "password", "passwd", "token", "secret", "authorization", "credential"
+    };
 
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
@@ -34,12 +46,17 @@ public class AuditLogAspect {
         long start = System.currentTimeMillis();
         try {
             Object result = joinPoint.proceed();
-            writeLog(joinPoint, adminAudit, AuditLogService.RESULT_SUCCESS, null, elapsed(start));
+            try {
+                writeLog(joinPoint, adminAudit, AuditLogService.RESULT_SUCCESS, null, elapsed(start));
+            } catch (RuntimeException auditException) {
+                log.warn("Admin audit write failed after successful operation", auditException);
+            }
             return result;
         } catch (Throwable ex) {
             try {
                 writeLog(joinPoint, adminAudit, AuditLogService.RESULT_FAILED, ex, elapsed(start));
             } catch (RuntimeException auditException) {
+                log.warn("Admin audit write failed after failed operation", auditException);
                 ex.addSuppressed(auditException);
             }
             throw ex;
@@ -87,7 +104,7 @@ public class AuditLogAspect {
 
     private String resolveTargetId(ProceedingJoinPoint joinPoint, AdminAudit adminAudit) {
         if (hasText(adminAudit.targetId())) {
-            return adminAudit.targetId();
+            return truncate(adminAudit.targetId(), MAX_TARGET_ID_LENGTH);
         }
         if (!hasText(adminAudit.targetIdParam())) {
             return null;
@@ -96,17 +113,18 @@ public class AuditLogAspect {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         String[] parameterNames = signature.getParameterNames();
         Object[] args = joinPoint.getArgs();
+        if (adminAudit.targetIdParam().startsWith("arg")) {
+            return truncate(resolveByArgIndex(adminAudit.targetIdParam(), args), MAX_TARGET_ID_LENGTH);
+        }
         if (parameterNames != null) {
             for (int i = 0; i < parameterNames.length && i < args.length; i++) {
                 if (adminAudit.targetIdParam().equals(parameterNames[i])) {
-                    return stringify(args[i]);
+                    return truncate(stringify(args[i]), MAX_TARGET_ID_LENGTH);
                 }
             }
         }
-        if (adminAudit.targetIdParam().startsWith("arg")) {
-            return resolveByArgIndex(adminAudit.targetIdParam(), args);
-        }
-        return args.length == 1 ? stringify(args[0]) : null;
+        log.debug("Admin audit targetIdParam '{}' did not match method arguments", adminAudit.targetIdParam());
+        return null;
     }
 
     private String resolveByArgIndex(String targetIdParam, Object[] args) {
@@ -126,15 +144,26 @@ public class AuditLogAspect {
             return null;
         }
         Map<String, Object> params = new LinkedHashMap<>();
-        request.getParameterMap().forEach((key, values) -> {
-            Object value = values == null || values.length != 1 ? values : values[0];
+        boolean truncated = false;
+        for (Map.Entry<String, String[]> entry : request.getParameterMap().entrySet()) {
+            String key = truncate(entry.getKey(), MAX_PARAM_KEY_LENGTH);
+            Object value = sanitizeParamValue(entry.getKey(), entry.getValue());
+            Map<String, Object> candidate = new LinkedHashMap<>(params);
+            candidate.put(key, value);
+            if (toJson(candidate).length() > MAX_REQUEST_PARAMS_JSON_LENGTH) {
+                truncated = true;
+                break;
+            }
             params.put(key, value);
-        });
-        try {
-            return objectMapper.writeValueAsString(params);
-        } catch (JsonProcessingException ex) {
-            return null;
         }
+        if (truncated) {
+            params.put(TRUNCATED_MARKER, true);
+        }
+        String json = toJson(params);
+        if (json.length() <= MAX_REQUEST_PARAMS_JSON_LENGTH) {
+            return json;
+        }
+        return "{\"" + TRUNCATED_MARKER + "\":true}";
     }
 
     private HttpServletRequest currentRequest() {
@@ -164,6 +193,43 @@ public class AuditLogAspect {
         return value == null ? null : String.valueOf(value);
     }
 
+    private Object sanitizeParamValue(String key, String[] values) {
+        if (isSensitiveKey(key)) {
+            return MASKED_VALUE;
+        }
+        if (values == null) {
+            return null;
+        }
+        if (values.length == 1) {
+            return truncate(values[0], MAX_PARAM_VALUE_LENGTH);
+        }
+        int valueCount = Math.min(values.length, MAX_PARAM_ARRAY_VALUES);
+        String[] sanitized = new String[values.length > MAX_PARAM_ARRAY_VALUES ? valueCount + 1 : valueCount];
+        for (int i = 0; i < valueCount; i++) {
+            sanitized[i] = truncate(values[i], MAX_PARAM_VALUE_LENGTH);
+        }
+        if (values.length > MAX_PARAM_ARRAY_VALUES) {
+            sanitized[valueCount] = "...";
+        }
+        return sanitized;
+    }
+
+    private boolean isSensitiveKey(String key) {
+        if (key == null) {
+            return false;
+        }
+        String lowerKey = key.toLowerCase();
+        return Arrays.stream(SENSITIVE_PARAM_KEYWORDS).anyMatch(lowerKey::contains);
+    }
+
+    private String toJson(Map<String, Object> params) {
+        try {
+            return objectMapper.writeValueAsString(params);
+        } catch (JsonProcessingException ex) {
+            return "{}";
+        }
+    }
+
     private long elapsed(long start) {
         return Math.max(0L, System.currentTimeMillis() - start);
     }
@@ -173,6 +239,13 @@ public class AuditLogAspect {
             return message;
         }
         return message.substring(0, MAX_ERROR_MESSAGE_LENGTH);
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private boolean hasText(String value) {

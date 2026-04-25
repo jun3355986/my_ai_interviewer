@@ -2,6 +2,8 @@ package com.aiinterviewer.admin.audit;
 
 import com.aiinterviewer.admin.audit.entity.AdminOperationLog;
 import com.aiinterviewer.admin.common.model.PageResult;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -11,6 +13,8 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -19,8 +23,25 @@ public class AuditLogService {
     public static final String RESULT_SUCCESS = "SUCCESS";
     public static final String RESULT_FAILED = "FAILED";
 
-    private final JdbcTemplate jdbcTemplate;
+    private static final int MAX_TARGET_TYPE_LENGTH = 100;
+    private static final int MAX_TARGET_ID_LENGTH = 100;
+    private static final int MAX_REQUEST_URI_LENGTH = 500;
+    private static final int MAX_REQUEST_METHOD_LENGTH = 20;
+    private static final int MAX_IP_ADDRESS_LENGTH = 100;
+    private static final int MAX_USER_AGENT_LENGTH = 500;
+    private static final int MAX_MODULE_LENGTH = 100;
+    private static final int MAX_OPERATION_LENGTH = 100;
+    private static final int MAX_RESULT_LENGTH = 30;
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 2000;
+    private static final long DEFAULT_CURRENT = 1L;
+    private static final long DEFAULT_SIZE = 20L;
+    private static final long MAX_SIZE = 100L;
+    private static final long MAX_CURRENT = 1_000_000L;
 
+    private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void write(AdminOperationLog log) {
         jdbcTemplate.update(
                 """
@@ -32,19 +53,19 @@ public class AuditLogService {
                         ?, ?, ?, ?, ?)
                 """,
                 log.getAdminUserId(),
-                log.getModule(),
-                log.getOperation(),
-                blankToNull(log.getTargetType()),
-                blankToNull(log.getTargetId()),
-                log.getRequestUri(),
-                log.getRequestMethod(),
-                log.getRequestParams(),
-                log.getBeforeSnapshot(),
-                log.getAfterSnapshot(),
-                log.getIpAddress(),
-                log.getUserAgent(),
-                log.getResult(),
-                log.getErrorMessage(),
+                truncate(log.getModule(), MAX_MODULE_LENGTH),
+                truncate(log.getOperation(), MAX_OPERATION_LENGTH),
+                blankToNull(truncate(log.getTargetType(), MAX_TARGET_TYPE_LENGTH)),
+                blankToNull(truncate(log.getTargetId(), MAX_TARGET_ID_LENGTH)),
+                truncate(log.getRequestUri(), MAX_REQUEST_URI_LENGTH),
+                truncate(log.getRequestMethod(), MAX_REQUEST_METHOD_LENGTH),
+                sanitizeJson(log.getRequestParams()),
+                sanitizeJson(log.getBeforeSnapshot()),
+                sanitizeJson(log.getAfterSnapshot()),
+                truncate(log.getIpAddress(), MAX_IP_ADDRESS_LENGTH),
+                truncate(log.getUserAgent(), MAX_USER_AGENT_LENGTH),
+                truncate(log.getResult(), MAX_RESULT_LENGTH),
+                truncate(log.getErrorMessage(), MAX_ERROR_MESSAGE_LENGTH),
                 log.getDurationMs());
     }
 
@@ -59,9 +80,10 @@ public class AuditLogService {
                 "SELECT COUNT(*) FROM t_admin_operation_log" + whereClause,
                 Long.class,
                 args.toArray());
+        long offset = safeOffset(current, size);
         List<Object> listArgs = new ArrayList<>(args);
         listArgs.add(size);
-        listArgs.add((current - 1) * size);
+        listArgs.add(offset);
         List<AdminOperationLog> records = jdbcTemplate.query(
                 """
                 SELECT id, admin_user_id, module, operation, target_type, target_id, request_uri,
@@ -129,6 +151,37 @@ public class AuditLogService {
         return rs.wasNull() ? null : value;
     }
 
+    private String sanitizeJson(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            objectMapper.readTree(value);
+            return value;
+        } catch (JsonProcessingException ex) {
+            try {
+                return objectMapper.writeValueAsString(value);
+            } catch (JsonProcessingException ignored) {
+                return null;
+            }
+        }
+    }
+
+    private long safeOffset(long current, long size) {
+        try {
+            return Math.multiplyExact(current - 1, size);
+        } catch (ArithmeticException ex) {
+            return (MAX_CURRENT - 1) * MAX_SIZE;
+        }
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
+    }
+
     private String blankToNull(String value) {
         return hasText(value) ? value : null;
     }
@@ -149,14 +202,17 @@ public class AuditLogService {
         private Long size = 20L;
 
         long normalizedCurrent() {
-            return current == null || current < 1 ? 1L : current;
+            if (current == null || current < 1) {
+                return DEFAULT_CURRENT;
+            }
+            return Math.min(current, MAX_CURRENT);
         }
 
         long normalizedSize() {
             if (size == null || size < 1) {
-                return 20L;
+                return DEFAULT_SIZE;
             }
-            return Math.min(size, 100L);
+            return Math.min(size, MAX_SIZE);
         }
     }
 }
