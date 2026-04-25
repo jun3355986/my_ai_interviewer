@@ -40,6 +40,7 @@ public abstract class AdminPostgresIntegrationTest {
     void resetDatabase() {
         createBusinessIdentityTables();
         truncateTables(List.of(
+                "t_admin_operation_log",
                 "t_admin_role_permission",
                 "t_admin_permission",
                 "t_admin_menu",
