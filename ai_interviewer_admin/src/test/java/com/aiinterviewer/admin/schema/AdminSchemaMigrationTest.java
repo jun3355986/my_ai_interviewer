@@ -120,6 +120,50 @@ class AdminSchemaMigrationTest {
         }
     }
 
+    @Test
+    void flywayBaselinesExistingBusinessSchemaAndAddsCompatibleColumns() throws SQLException {
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement()) {
+            statement.execute("DROP SCHEMA public CASCADE");
+            statement.execute("CREATE SCHEMA public");
+            statement.execute(
+                    """
+                    CREATE TABLE t_notification (
+                        id BIGSERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        type VARCHAR(50) NOT NULL,
+                        title VARCHAR(200),
+                        content TEXT,
+                        related_type VARCHAR(50),
+                        related_id VARCHAR(100),
+                        status SMALLINT DEFAULT 0,
+                        send_time TIMESTAMP,
+                        read_time TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """);
+        }
+
+        Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .load()
+                .migrate();
+
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())) {
+            assertThat(columnExists(connection, "t_notification", "template_code"))
+                    .as("admin migration should add template_code to existing business notification table")
+                    .isTrue();
+            assertThat(tableExists(connection, "t_admin_menu"))
+                    .as("admin-owned V1 tables should still be created after baseline version 0")
+                    .isTrue();
+        }
+    }
+
     private boolean tableExists(Connection connection, String tableName) throws SQLException {
         DatabaseMetaData metaData = connection.getMetaData();
         try (ResultSet tables = metaData.getTables(null, "public", tableName, new String[] {"TABLE"})) {

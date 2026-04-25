@@ -225,3 +225,6 @@ CREATE INDEX IF NOT EXISTS idx_interview_strategy_enabled ON t_interview_strateg
 CREATE INDEX IF NOT EXISTS idx_admin_operation_log_user_id ON t_admin_operation_log (admin_user_id);
 CREATE INDEX IF NOT EXISTS idx_admin_operation_log_module_operation ON t_admin_operation_log (module, operation);
 CREATE INDEX IF NOT EXISTS idx_admin_operation_log_created_at ON t_admin_operation_log (created_at);
+
+ALTER TABLE IF EXISTS t_notification
+    ADD COLUMN IF NOT EXISTS template_code VARCHAR(100);

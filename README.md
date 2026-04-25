@@ -1,6 +1,6 @@
 # AI Interviewer Monorepo
 
-本仓库包含 3 个独立子项目，通过 Docker Compose 可以在本地一键拉起完整联调环境（前端 + 网关 + Java 微服务 + Python AI + 基础设施）。
+本仓库包含 4 个独立子项目，通过 Docker Compose 可以在本地一键拉起完整联调环境（前端 + 网关 + Java 微服务 + Admin 后台 + Python AI + 基础设施）。
 
 ## 1. 项目结构
 
@@ -21,8 +21,8 @@ Browser (http://localhost:8088)
           -> gateway (http://gateway:9000)
               -> user/resume/interview/job/evaluation services
               -> admin (http://admin:9010, /admin/**)
-                    -> postgres / redis / minio / nacos
-                    -> python-ai (for resume/interview AI calls)
+                    -> postgres / redis / nacos
+                    -> python-ai (for question-bank vector sync)
 ```
 
 当前联调入口已统一为 **gateway**：
