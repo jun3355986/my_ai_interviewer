@@ -58,6 +58,34 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void mapsAdminBusinessExceptionCode403ToForbidden() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        ResponseEntity<Result<Void>> response =
+                handler.handleAdminBusinessException(new AdminBusinessException(403, "权限不足"), request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo(403);
+        assertThat(response.getBody().getMessage()).isEqualTo("权限不足");
+    }
+
+    @Test
+    void mapsAdminBusinessExceptionCode409ToConflict() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        ResponseEntity<Result<Void>> response =
+                handler.handleAdminBusinessException(new AdminBusinessException(409, "数据冲突"), request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo(409);
+        assertThat(response.getBody().getMessage()).isEqualTo("数据冲突");
+    }
+
+    @Test
     void mapsAdminBusinessExceptionCode500ToInternalServerError() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
         MockHttpServletRequest request = new MockHttpServletRequest();

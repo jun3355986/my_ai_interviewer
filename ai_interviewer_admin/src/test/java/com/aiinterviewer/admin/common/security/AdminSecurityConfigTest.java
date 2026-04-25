@@ -68,6 +68,11 @@ class AdminSecurityConfigTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void nonWhitelistedNonAdminEndpointIsDeniedByDefault() throws Exception {
+        mockMvc.perform(get("/internal/accidental")).andExpect(status().isUnauthorized());
+    }
+
     @RestController
     public static class TestAdminController {
 
@@ -79,6 +84,11 @@ class AdminSecurityConfigTest {
         @GetMapping("/admin/protected")
         public Result<String> protectedEndpoint() {
             return Result.success("ok");
+        }
+
+        @GetMapping("/internal/accidental")
+        public Result<String> accidentalEndpoint() {
+            return Result.success("should not be exposed");
         }
     }
 
