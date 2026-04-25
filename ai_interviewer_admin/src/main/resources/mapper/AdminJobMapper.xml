@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiinterviewer.admin.job.mapper.AdminJobMapper">
+
+    <resultMap id="AdminJobListItemMap" type="com.aiinterviewer.admin.job.AdminJobService$AdminJobListItem">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="company" column="company"/>
+        <result property="department" column="department"/>
+        <result property="location" column="location"/>
+        <result property="jobType" column="job_type"/>
+        <result property="skillsJson" column="skills_json"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="AdminJobDetailMap" type="com.aiinterviewer.admin.job.AdminJobService$AdminJobDetail">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="company" column="company"/>
+        <result property="department" column="department"/>
+        <result property="location" column="location"/>
+        <result property="jobType" column="job_type"/>
+        <result property="experienceRequired" column="experience_required"/>
+        <result property="educationRequired" column="education_required"/>
+        <result property="salaryMin" column="salary_min"/>
+        <result property="salaryMax" column="salary_max"/>
+        <result property="description" column="description"/>
+        <result property="requirements" column="requirements"/>
+        <result property="skillsJson" column="skills_json"/>
+        <result property="status" column="status"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="JobQuestionConfigItemMap" type="com.aiinterviewer.admin.job.AdminJobService$JobQuestionConfigItem">
+        <id property="id" column="id"/>
+        <result property="jobId" column="job_id"/>
+        <result property="questionType" column="question_type"/>
+        <result property="questionCount" column="question_count"/>
+        <result property="priority" column="priority"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <sql id="JobFilter">
+        FROM t_job
+        WHERE deleted_at IS NULL
+        <if test="query.title != null and query.title != ''">
+            AND title ILIKE CONCAT('%', #{query.title}, '%')
+        </if>
+        <if test="query.company != null and query.company != ''">
+            AND company ILIKE CONCAT('%', #{query.company}, '%')
+        </if>
+        <if test="query.status != null">
+            AND status = #{query.status}
+        </if>
+        <if test="query.skill != null and query.skill != ''">
+            AND (
+                skills @> jsonb_build_array(#{query.skill})
+                OR skills::text ILIKE CONCAT('%', #{query.skill}, '%')
+            )
+        </if>
+    </sql>
+
+    <select id="countJobs" resultType="long">
+        SELECT COUNT(*)
+        <include refid="JobFilter"/>
+    </select>
+
+    <select id="selectJobs" resultMap="AdminJobListItemMap">
+        SELECT id, title, company, department, location, job_type,
+               COALESCE(skills, '[]'::jsonb)::text AS skills_json,
+               status, created_at, updated_at
+        <include refid="JobFilter"/>
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectJobDetail" resultMap="AdminJobDetailMap">
+        SELECT id, title, company, department, location, job_type, experience_required,
+               education_required, salary_min, salary_max, description, requirements,
+               COALESCE(skills, '[]'::jsonb)::text AS skills_json,
+               status, created_by, created_at, updated_at
+        FROM t_job
+        WHERE id = #{jobId}
+          AND deleted_at IS NULL
+    </select>
+
+    <select id="countExistingJob" resultType="int">
+        SELECT COUNT(*)
+        FROM t_job
+        WHERE id = #{jobId}
+          AND deleted_at IS NULL
+    </select>
+
+    <insert id="insertJob" useGeneratedKeys="true" keyProperty="request.id">
+        INSERT INTO t_job
+            (title, company, department, location, job_type, experience_required,
+             education_required, salary_min, salary_max, description, requirements,
+             skills, status, created_by, created_at, updated_at)
+        VALUES
+            (#{request.title}, #{request.company}, #{request.department}, #{request.location},
+             #{request.jobType}, #{request.experienceRequired}, #{request.educationRequired},
+             #{request.salaryMin}, #{request.salaryMax}, #{request.description}, #{request.requirements},
+             CAST(#{request.skillsJson} AS jsonb), #{request.status}, #{request.createdBy},
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateJob">
+        UPDATE t_job
+        SET title = #{request.title},
+            company = #{request.company},
+            department = #{request.department},
+            location = #{request.location},
+            job_type = #{request.jobType},
+            experience_required = #{request.experienceRequired},
+            education_required = #{request.educationRequired},
+            salary_min = #{request.salaryMin},
+            salary_max = #{request.salaryMax},
+            description = #{request.description},
+            requirements = #{request.requirements},
+            skills = CAST(#{request.skillsJson} AS jsonb),
+            status = #{request.status},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{request.id}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="updateJobStatus">
+        UPDATE t_job
+        SET status = #{status},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{jobId}
+          AND deleted_at IS NULL
+    </update>
+
+    <delete id="deleteJobQuestions">
+        DELETE FROM t_job_question
+        WHERE job_id = #{jobId}
+    </delete>
+
+    <insert id="insertJobQuestions">
+        INSERT INTO t_job_question (job_id, question_type, question_count, priority, created_at)
+        VALUES
+        <foreach collection="questions" item="question" separator=",">
+            (#{jobId}, #{question.questionType}, #{question.questionCount}, #{question.priority}, CURRENT_TIMESTAMP)
+        </foreach>
+    </insert>
+
+    <select id="selectJobQuestions" resultMap="JobQuestionConfigItemMap">
+        SELECT id, job_id, question_type, question_count, priority, created_at
+        FROM t_job_question
+        WHERE job_id = #{jobId}
+        ORDER BY priority ASC, id ASC
+    </select>
+</mapper>

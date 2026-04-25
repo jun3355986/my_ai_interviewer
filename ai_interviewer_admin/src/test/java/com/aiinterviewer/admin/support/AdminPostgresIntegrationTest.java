@@ -44,9 +44,11 @@ public abstract class AdminPostgresIntegrationTest {
                 "t_score_record",
                 "t_evaluation",
                 "t_interview_session",
+                "t_job_question",
                 "t_resume_version",
                 "t_resume",
                 "t_job",
+                "t_interview_strategy_config",
                 "t_admin_operation_log",
                 "t_admin_role_permission",
                 "t_admin_permission",
@@ -119,6 +121,17 @@ public abstract class AdminPostgresIntegrationTest {
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     deleted_at TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute(
+                """
+                CREATE TABLE IF NOT EXISTS t_job_question (
+                    id BIGSERIAL PRIMARY KEY,
+                    job_id BIGINT NOT NULL REFERENCES t_job(id) ON DELETE CASCADE,
+                    question_type VARCHAR(50),
+                    question_count INT DEFAULT 5,
+                    priority INT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
         jdbcTemplate.execute(
