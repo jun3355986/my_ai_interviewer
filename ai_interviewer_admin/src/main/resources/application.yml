@@ -46,6 +46,11 @@ knife4j:
   setting:
     language: zh_cn
 
+admin:
+  jwt:
+    secret: ${ADMIN_JWT_SECRET:ai-interviewer-admin-default-secret-key-change-me-in-production}
+    access-token-expiration: ${ADMIN_JWT_ACCESS_TOKEN_EXPIRATION:7200000}
+
 management:
   endpoints:
     web:
