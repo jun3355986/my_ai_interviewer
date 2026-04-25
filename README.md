@@ -7,6 +7,7 @@
 ```text
 my_ai_interviewer/
 ├── ai_interview_backend/   # Java 21 + Spring Cloud Alibaba 微服务 + docker-compose
+├── ai_interviewer_admin/   # Java 21 + Spring Boot 后台管理服务
 ├── ai_interviewer/         # Python FastAPI AI 服务
 └── ai_interviewer_front/   # Flutter 前端（Web/iOS）
 ```
@@ -19,6 +20,7 @@ Browser (http://localhost:8088)
       -> /api/* reverse proxy
           -> gateway (http://gateway:9000)
               -> user/resume/interview/job/evaluation services
+              -> admin (http://admin:9010, /admin/**)
                     -> postgres / redis / minio / nacos
                     -> python-ai (for resume/interview AI calls)
 ```
@@ -52,6 +54,7 @@ cp .env.example .env
 - `AZURE_OPENAI_BACKUP_CHAT_MODEL`（默认 `gpt-5.4`）
 - `AZURE_OPENAI_EMBEDDING_MODEL`（默认 `embed-v-4-0`）
 - `JWT_SECRET`
+- `ADMIN_JWT_SECRET`
 
 本机模型配置来源文件（不要把真实密钥提交到仓库）：
 - `/Users/junjielong/myai/My_AI_KEY.md`
@@ -77,7 +80,7 @@ docker compose up -d --build python-ai frontend
 启动内容包括：
 - 基础设施：`nacos`、`postgres`、`redis`、`minio`
 - AI 服务：`python-ai`
-- Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`
+- Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`、`admin`
 - 前端：`frontend`
 
 > `notification` 依赖 RocketMQ，默认不启动。如需启用：
@@ -91,6 +94,8 @@ docker compose up -d --build python-ai frontend
 - 前端（统一联调入口）：`http://localhost:8088`
 - Gateway 健康检查：`http://localhost:9000/actuator/health`
 - Gateway 文档页：`http://localhost:9000/doc.html`
+- Admin 服务直连健康检查：`http://localhost:9010/actuator/health`
+- Admin 网关路由前缀：`http://localhost:9000/admin/**`
 - Nacos 控制台：`http://localhost:8848/nacos`
 - MinIO 控制台：`http://localhost:19001`
 
@@ -115,6 +120,7 @@ docker compose up -d --build python-ai frontend
 | job | 9004 | 9004 | 职位服务 |
 | evaluation | 9005 | 9005 | 评估服务 |
 | notification（可选） | 9006 | 9006 | 通知服务（需 RocketMQ） |
+| admin | 9010 | 9010 | 后台管理服务，网关前缀 `/admin/**` |
 | python-ai | 8000 | 8000 | FastAPI AI 服务 |
 | postgres | 5433 | 5432 | PostgreSQL |
 | redis | 6380 | 6379 | Redis |
@@ -161,5 +167,6 @@ docker compose down -v
 ## 10. 补充说明
 
 - 后端与编排详情请查看：`ai_interview_backend/README.md`
+- 后台管理服务说明请查看：`ai_interviewer_admin/README.md`
 - 前端容器化说明请查看：`ai_interviewer_front/README.md`
 - Python AI 服务说明请查看：`ai_interviewer/README.md`

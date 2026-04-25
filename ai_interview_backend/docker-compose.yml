@@ -153,6 +153,8 @@ services:
         condition: service_started
       interview:
         condition: service_started
+      admin:
+        condition: service_healthy
       evaluation:
         condition: service_started
     networks:
@@ -332,6 +334,52 @@ services:
     networks:
       - ai-interviewer-net
     restart: unless-stopped
+
+  # ============================================
+  # Admin 后台服务
+  # 独立 Maven 项目，不属于 ai_interview_backend 多模块
+  # ============================================
+  admin:
+    image: ai-interviewer-admin:local
+    container_name: ai-interviewer-admin
+    build:
+      context: ../ai_interviewer_admin
+      dockerfile: Dockerfile
+    ports:
+      - "9010:9010"
+    environment:
+      SERVER_PORT: 9010
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ai_interviewer
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NACOS_SERVER_ADDR: nacos:8848
+      NACOS_ENABLED: "true"
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-ai-interviewer-admin-local-secret-change-me-please}
+      PYTHON_AI_QUESTION_BANK_SYNC_URL: http://python-ai:8000/admin/question-bank/sync
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
+    depends_on:
+      nacos:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      python-ai:
+        condition: service_healthy
+    networks:
+      - ai-interviewer-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9010/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # Notification 服务依赖 RocketMQ。当前 Compose 未内置 RocketMQ（ARM 机器兼容性问题）。
   # 如需启用，请先提供可用 RocketMQ，再启动 notification profile：
