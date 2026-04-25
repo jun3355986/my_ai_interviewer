@@ -50,7 +50,12 @@ class AdminSchemaMigrationTest {
                     "request_uri",
                     "before_snapshot",
                     "after_snapshot",
-                    "result"));
+                    "result"),
+            "t_question_vector_sync_record",
+            List.of(
+                    "total_count",
+                    "success_count",
+                    "failed_count"));
 
     private static final Map<String, String> SOFT_DELETE_UNIQUE_INDEXES = Map.of(
             "uk_admin_menu_code", "menu_code",

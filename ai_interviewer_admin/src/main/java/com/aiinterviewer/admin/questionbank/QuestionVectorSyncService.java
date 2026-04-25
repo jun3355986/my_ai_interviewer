@@ -39,10 +39,11 @@ public class QuestionVectorSyncService {
             return applyResponse(questions, response);
         } catch (Exception ex) {
             String errorMessage = truncateError(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+            SyncResult result = SyncResult.failed(questions.size(), errorMessage);
             for (QuestionBankItem question : questions) {
-                markFailed(question.getId(), errorMessage);
+                markFailed(question.getId(), errorMessage, result);
             }
-            return SyncResult.failed(questions.size(), errorMessage);
+            return result;
         }
     }
 
@@ -61,14 +62,12 @@ public class QuestionVectorSyncService {
         if (shouldTreatAllAsSuccess(response, successResults, failedResults)) {
             String vectorStoreId = successResults.isEmpty() ? null : successResults.getFirst().vectorStoreId();
             for (QuestionBankItem question : questions) {
-                markSynced(question.getId(), vectorStoreId);
                 handledIds.add(question.getId());
                 successCount++;
             }
         } else {
             for (PythonQuestionBankClient.QuestionSyncResult result : successResults) {
                 if (result.id() != null && questionById.containsKey(result.id())) {
-                    markSynced(result.id(), result.vectorStoreId());
                     handledIds.add(result.id());
                     successCount++;
                 }
@@ -77,7 +76,6 @@ public class QuestionVectorSyncService {
 
         for (PythonQuestionBankClient.QuestionSyncResult result : failedResults) {
             if (result.id() != null && questionById.containsKey(result.id())) {
-                markFailed(result.id(), failureMessage(result, response));
                 handledIds.add(result.id());
                 failedCount++;
             }
@@ -88,15 +86,47 @@ public class QuestionVectorSyncService {
                 continue;
             }
             if ("SUCCESS".equals(response.status())) {
-                markSynced(question.getId(), null);
                 successCount++;
             } else if (shouldTreatRemainingAsFailed(response)) {
-                markFailed(question.getId(), fallbackErrorMessage(response));
                 failedCount++;
             }
         }
 
-        return SyncResult.of(questions.size(), successCount, failedCount, response.errorMessage());
+        SyncResult syncResult = SyncResult.of(questions.size(), successCount, failedCount, response.errorMessage());
+        applyQuestionOutcomes(questions, response, successResults, failedResults, syncResult);
+        return syncResult;
+    }
+
+    private void applyQuestionOutcomes(
+            List<QuestionBankItem> questions,
+            PythonQuestionBankClient.SyncResponse response,
+            List<PythonQuestionBankClient.QuestionSyncResult> successResults,
+            List<PythonQuestionBankClient.QuestionSyncResult> failedResults,
+            SyncResult syncResult) {
+        Map<Long, PythonQuestionBankClient.QuestionSyncResult> successById = new LinkedHashMap<>();
+        successResults.stream()
+                .filter(result -> result.id() != null)
+                .forEach(result -> successById.put(result.id(), result));
+        Map<Long, PythonQuestionBankClient.QuestionSyncResult> failureById = new LinkedHashMap<>();
+        failedResults.stream()
+                .filter(result -> result.id() != null)
+                .forEach(result -> failureById.put(result.id(), result));
+
+        boolean allSuccess = shouldTreatAllAsSuccess(response, successResults, failedResults);
+        String sharedVectorStoreId = successResults.isEmpty() ? null : successResults.getFirst().vectorStoreId();
+        for (QuestionBankItem question : questions) {
+            PythonQuestionBankClient.QuestionSyncResult success = successById.get(question.getId());
+            PythonQuestionBankClient.QuestionSyncResult failure = failureById.get(question.getId());
+            if (success != null) {
+                markSynced(question.getId(), success.vectorStoreId(), syncResult);
+            } else if (failure != null) {
+                markFailed(question.getId(), failureMessage(failure, response), syncResult);
+            } else if (allSuccess || "SUCCESS".equals(response.status())) {
+                markSynced(question.getId(), allSuccess ? sharedVectorStoreId : null, syncResult);
+            } else if (shouldTreatRemainingAsFailed(response)) {
+                markFailed(question.getId(), fallbackErrorMessage(response), syncResult);
+            }
+        }
     }
 
     private boolean shouldTreatAllAsSuccess(
@@ -113,23 +143,31 @@ public class QuestionVectorSyncService {
         return "FAILED".equals(response.status()) || "PARTIAL_FAILED".equals(response.status());
     }
 
-    private void markSynced(Long questionId, String vectorStoreId) {
+    private void markSynced(Long questionId, String vectorStoreId, SyncResult syncResult) {
         questionMapper.updateQuestionVectorSyncStatus(questionId, STATUS_SYNCED, null);
         QuestionVectorSyncRecord record = new QuestionVectorSyncRecord();
         record.setQuestionId(questionId);
         record.setSyncStatus(STATUS_SYNCED);
         record.setVectorStoreId(vectorStoreId);
+        applyCounts(record, syncResult);
         questionMapper.upsertQuestionVectorSyncRecord(record);
     }
 
-    private void markFailed(Long questionId, String errorMessage) {
+    private void markFailed(Long questionId, String errorMessage, SyncResult syncResult) {
         String safeErrorMessage = truncateError(errorMessage);
         questionMapper.updateQuestionVectorSyncStatus(questionId, STATUS_FAILED, safeErrorMessage);
         QuestionVectorSyncRecord record = new QuestionVectorSyncRecord();
         record.setQuestionId(questionId);
         record.setSyncStatus(STATUS_FAILED);
         record.setErrorMessage(safeErrorMessage);
+        applyCounts(record, syncResult);
         questionMapper.upsertQuestionVectorSyncRecord(record);
+    }
+
+    private void applyCounts(QuestionVectorSyncRecord record, SyncResult syncResult) {
+        record.setTotalCount(syncResult.getTotalCount());
+        record.setSuccessCount(syncResult.getSuccessCount());
+        record.setFailedCount(syncResult.getFailedCount());
     }
 
     private String failureMessage(

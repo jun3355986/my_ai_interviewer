@@ -286,10 +286,12 @@
 
     <insert id="upsertQuestionVectorSyncRecord" useGeneratedKeys="true" keyProperty="record.id">
         INSERT INTO t_question_vector_sync_record
-            (question_id, sync_status, vector_store_id, error_message, retry_count,
+            (question_id, sync_status, vector_store_id, error_message,
+             total_count, success_count, failed_count, retry_count,
              last_synced_at, created_at, updated_at)
         VALUES
             (#{record.questionId}, #{record.syncStatus}, #{record.vectorStoreId}, #{record.errorMessage},
+             #{record.totalCount}, #{record.successCount}, #{record.failedCount},
              CASE WHEN #{record.syncStatus} = 'FAILED' THEN 1 ELSE 0 END,
              CASE WHEN #{record.syncStatus} = 'SYNCED' THEN CURRENT_TIMESTAMP ELSE NULL END,
              CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -297,6 +299,9 @@
         SET sync_status = EXCLUDED.sync_status,
             vector_store_id = EXCLUDED.vector_store_id,
             error_message = EXCLUDED.error_message,
+            total_count = EXCLUDED.total_count,
+            success_count = EXCLUDED.success_count,
+            failed_count = EXCLUDED.failed_count,
             retry_count = CASE
                 WHEN EXCLUDED.sync_status = 'FAILED'
                     THEN t_question_vector_sync_record.retry_count + 1

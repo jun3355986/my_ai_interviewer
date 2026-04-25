@@ -11,6 +11,9 @@ public class QuestionVectorSyncRecord {
     private String syncStatus;
     private String vectorStoreId;
     private String errorMessage;
+    private Integer totalCount;
+    private Integer successCount;
+    private Integer failedCount;
     private Integer retryCount;
     private LocalDateTime lastSyncedAt;
     private LocalDateTime createdAt;

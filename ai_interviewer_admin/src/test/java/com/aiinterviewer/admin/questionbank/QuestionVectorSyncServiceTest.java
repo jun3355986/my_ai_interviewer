@@ -83,6 +83,9 @@ class QuestionVectorSyncServiceTest extends AdminPostgresIntegrationTest {
         assertThat(record.getSyncStatus()).isEqualTo("SYNCED");
         assertThat(record.getVectorStoreId()).isEqualTo("vector-store-001");
         assertThat(record.getErrorMessage()).isNull();
+        assertThat(record.getTotalCount()).isOne();
+        assertThat(record.getSuccessCount()).isOne();
+        assertThat(record.getFailedCount()).isZero();
         assertThat(record.getLastSyncedAt()).isNotNull();
     }
 
@@ -105,6 +108,9 @@ class QuestionVectorSyncServiceTest extends AdminPostgresIntegrationTest {
         QuestionVectorSyncRecord record = syncRecord(questionId);
         assertThat(record.getSyncStatus()).isEqualTo("FAILED");
         assertThat(record.getErrorMessage()).contains("python service unavailable");
+        assertThat(record.getTotalCount()).isOne();
+        assertThat(record.getSuccessCount()).isZero();
+        assertThat(record.getFailedCount()).isOne();
         assertThat(record.getRetryCount()).isOne();
     }
 
@@ -130,8 +136,16 @@ class QuestionVectorSyncServiceTest extends AdminPostgresIntegrationTest {
         assertThat(result.getFailedCount()).isOne();
         assertThat(questionVectorStatus(successId)).isEqualTo("SYNCED");
         assertThat(questionVectorStatus(failedId)).isEqualTo("FAILED");
-        assertThat(syncRecord(successId).getSyncStatus()).isEqualTo("SYNCED");
-        assertThat(syncRecord(failedId).getSyncStatus()).isEqualTo("FAILED");
+        QuestionVectorSyncRecord successRecord = syncRecord(successId);
+        QuestionVectorSyncRecord failedRecord = syncRecord(failedId);
+        assertThat(successRecord.getSyncStatus()).isEqualTo("SYNCED");
+        assertThat(failedRecord.getSyncStatus()).isEqualTo("FAILED");
+        assertThat(successRecord.getTotalCount()).isEqualTo(2);
+        assertThat(successRecord.getSuccessCount()).isOne();
+        assertThat(successRecord.getFailedCount()).isOne();
+        assertThat(failedRecord.getTotalCount()).isEqualTo(2);
+        assertThat(failedRecord.getSuccessCount()).isOne();
+        assertThat(failedRecord.getFailedCount()).isOne();
     }
 
     private QuestionCreateRequest createRequest(String questionText, Integer status) {
@@ -165,7 +179,8 @@ class QuestionVectorSyncServiceTest extends AdminPostgresIntegrationTest {
     private QuestionVectorSyncRecord syncRecord(Long questionId) {
         return jdbcTemplate.queryForObject(
                 """
-                SELECT question_id, sync_status, vector_store_id, error_message, retry_count,
+                SELECT question_id, sync_status, vector_store_id, error_message,
+                       total_count, success_count, failed_count, retry_count,
                        last_synced_at::timestamp AS last_synced_at,
                        created_at::timestamp AS created_at,
                        updated_at::timestamp AS updated_at
@@ -178,6 +193,9 @@ class QuestionVectorSyncServiceTest extends AdminPostgresIntegrationTest {
                     record.setSyncStatus(rs.getString("sync_status"));
                     record.setVectorStoreId(rs.getString("vector_store_id"));
                     record.setErrorMessage(rs.getString("error_message"));
+                    record.setTotalCount(rs.getInt("total_count"));
+                    record.setSuccessCount(rs.getInt("success_count"));
+                    record.setFailedCount(rs.getInt("failed_count"));
                     record.setRetryCount(rs.getInt("retry_count"));
                     record.setLastSyncedAt(rs.getTimestamp("last_synced_at") == null
                             ? null
