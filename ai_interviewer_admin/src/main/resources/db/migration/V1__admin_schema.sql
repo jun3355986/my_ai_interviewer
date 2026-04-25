@@ -11,8 +11,7 @@ CREATE TABLE IF NOT EXISTS t_admin_menu (
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ,
-    CONSTRAINT uk_admin_menu_code UNIQUE (menu_code)
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS t_admin_permission (
@@ -28,7 +27,6 @@ CREATE TABLE IF NOT EXISTS t_admin_permission (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMPTZ,
-    CONSTRAINT uk_admin_permission_code UNIQUE (permission_code),
     CONSTRAINT fk_admin_permission_menu FOREIGN KEY (menu_id) REFERENCES t_admin_menu (id)
 );
 
@@ -51,21 +49,23 @@ CREATE TABLE IF NOT EXISTS t_admin_user_role (
 
 CREATE TABLE IF NOT EXISTS t_question_bank (
     id BIGSERIAL PRIMARY KEY,
-    question_code VARCHAR(100) NOT NULL,
-    question_type VARCHAR(50) NOT NULL,
-    difficulty VARCHAR(50),
-    title VARCHAR(500) NOT NULL,
-    content TEXT NOT NULL,
-    reference_answer TEXT,
-    analysis TEXT,
-    source VARCHAR(100),
-    status VARCHAR(50) NOT NULL DEFAULT 'DRAFT',
+    question_code VARCHAR(100),
+    question_text TEXT NOT NULL,
+    answer_reference TEXT,
+    question_type VARCHAR(100) NOT NULL,
+    difficulty VARCHAR(20) NOT NULL,
+    skill_area VARCHAR(100),
+    job_id BIGINT,
+    status SMALLINT NOT NULL DEFAULT 1,
+    vector_sync_status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    vector_sync_error TEXT,
+    source_type VARCHAR(50),
+    source_batch_id BIGINT,
     created_by BIGINT,
     updated_by BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ,
-    CONSTRAINT uk_question_bank_code UNIQUE (question_code)
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS t_question_tag (
@@ -77,8 +77,7 @@ CREATE TABLE IF NOT EXISTS t_question_tag (
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ,
-    CONSTRAINT uk_question_tag_code UNIQUE (tag_code)
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS t_question_tag_relation (
@@ -137,8 +136,7 @@ CREATE TABLE IF NOT EXISTS t_notification_template (
     updated_by BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ,
-    CONSTRAINT uk_notification_template_code UNIQUE (template_code)
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS t_system_config (
@@ -154,8 +152,7 @@ CREATE TABLE IF NOT EXISTS t_system_config (
     updated_by BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ,
-    CONSTRAINT uk_system_config_key UNIQUE (config_key)
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS t_interview_strategy_config (
@@ -173,33 +170,47 @@ CREATE TABLE IF NOT EXISTS t_interview_strategy_config (
     updated_by BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ,
-    CONSTRAINT uk_interview_strategy_config_code UNIQUE (strategy_code)
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS t_admin_operation_log (
     id BIGSERIAL PRIMARY KEY,
     admin_user_id BIGINT,
-    admin_username VARCHAR(100),
-    operation_type VARCHAR(80) NOT NULL,
     module VARCHAR(100) NOT NULL,
+    operation VARCHAR(100) NOT NULL,
+    target_type VARCHAR(100),
+    target_id VARCHAR(100),
+    request_uri VARCHAR(500),
     request_method VARCHAR(20),
-    request_path VARCHAR(255),
     request_params JSONB,
-    response_status INTEGER,
-    success BOOLEAN NOT NULL DEFAULT TRUE,
+    before_snapshot JSONB,
+    after_snapshot JSONB,
+    ip_address VARCHAR(100),
+    user_agent VARCHAR(500),
+    result VARCHAR(30) NOT NULL,
     error_message TEXT,
-    client_ip VARCHAR(64),
-    user_agent TEXT,
     duration_ms BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_admin_menu_code ON t_admin_menu (menu_code) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_admin_permission_code ON t_admin_permission (permission_code) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_question_bank_code ON t_question_bank (question_code) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_question_tag_code ON t_question_tag (tag_code) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_notification_template_code ON t_notification_template (template_code) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_system_config_key ON t_system_config (config_key) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_interview_strategy_config_code ON t_interview_strategy_config (strategy_code) WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_admin_menu_parent_id ON t_admin_menu (parent_id);
 CREATE INDEX IF NOT EXISTS idx_admin_permission_menu_id ON t_admin_permission (menu_id);
 CREATE INDEX IF NOT EXISTS idx_admin_role_permission_role_code ON t_admin_role_permission (role_code);
 CREATE INDEX IF NOT EXISTS idx_admin_user_role_admin_user_id ON t_admin_user_role (admin_user_id);
 CREATE INDEX IF NOT EXISTS idx_question_bank_status ON t_question_bank (status);
+CREATE INDEX IF NOT EXISTS idx_question_bank_type ON t_question_bank (question_type);
+CREATE INDEX IF NOT EXISTS idx_question_bank_difficulty ON t_question_bank (difficulty);
+CREATE INDEX IF NOT EXISTS idx_question_bank_job_id ON t_question_bank (job_id);
+CREATE INDEX IF NOT EXISTS idx_question_bank_vector_sync_status ON t_question_bank (vector_sync_status);
+CREATE INDEX IF NOT EXISTS idx_question_bank_source_batch_id ON t_question_bank (source_batch_id);
 CREATE INDEX IF NOT EXISTS idx_question_tag_type ON t_question_tag (tag_type);
 CREATE INDEX IF NOT EXISTS idx_question_import_batch_status ON t_question_import_batch (status);
 CREATE INDEX IF NOT EXISTS idx_question_vector_sync_status ON t_question_vector_sync_record (sync_status);
@@ -207,4 +218,5 @@ CREATE INDEX IF NOT EXISTS idx_notification_template_channel ON t_notification_t
 CREATE INDEX IF NOT EXISTS idx_system_config_group ON t_system_config (config_group);
 CREATE INDEX IF NOT EXISTS idx_interview_strategy_enabled ON t_interview_strategy_config (enabled);
 CREATE INDEX IF NOT EXISTS idx_admin_operation_log_user_id ON t_admin_operation_log (admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_operation_log_module_operation ON t_admin_operation_log (module, operation);
 CREATE INDEX IF NOT EXISTS idx_admin_operation_log_created_at ON t_admin_operation_log (created_at);
