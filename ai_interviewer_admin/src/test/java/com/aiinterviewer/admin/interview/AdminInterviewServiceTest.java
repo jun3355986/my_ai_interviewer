@@ -158,6 +158,50 @@ class AdminInterviewServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void inProgressTechnicalStageDoesNotReportTechnicalFindings() {
+        seedInterviewFixtures();
+        jdbcTemplate.update(
+                """
+                INSERT INTO t_interview_session
+                    (id, user_id, job_id, candidate_name, stage, status, technical_questions_pool,
+                     started_at, finished_at, created_at, updated_at)
+                VALUES
+                    ('session-005', 1, 1, 'Alice', 'technical', 1, CAST('[]' AS jsonb),
+                     TIMESTAMP '2026-04-25 15:00:00', NULL,
+                     TIMESTAMP '2026-04-25 15:00:00', TIMESTAMP '2026-04-25 15:00:00')
+                """);
+
+        InterviewDiagnosisResponse diagnosis = adminInterviewService.diagnoseInterview("session-005");
+
+        assertThat(diagnosis.isMissingTechnicalQuestions()).isFalse();
+        assertThat(diagnosis.isEmptyTechnicalPool()).isFalse();
+        assertThat(diagnosis.getFindings())
+                .doesNotContain("MISSING_TECHNICAL_QUESTIONS", "EMPTY_TECHNICAL_POOL");
+    }
+
+    @Test
+    void canceledTechnicalStageDoesNotReportTechnicalFindings() {
+        seedInterviewFixtures();
+        jdbcTemplate.update(
+                """
+                INSERT INTO t_interview_session
+                    (id, user_id, job_id, candidate_name, stage, status, technical_questions_pool,
+                     started_at, finished_at, created_at, updated_at)
+                VALUES
+                    ('session-006', 1, 1, 'Alice', 'technical', 3, CAST('[]' AS jsonb),
+                     TIMESTAMP '2026-04-25 16:00:00', TIMESTAMP '2026-04-25 16:01:00',
+                     TIMESTAMP '2026-04-25 16:00:00', TIMESTAMP '2026-04-25 16:01:00')
+                """);
+
+        InterviewDiagnosisResponse diagnosis = adminInterviewService.diagnoseInterview("session-006");
+
+        assertThat(diagnosis.isMissingTechnicalQuestions()).isFalse();
+        assertThat(diagnosis.isEmptyTechnicalPool()).isFalse();
+        assertThat(diagnosis.getFindings())
+                .doesNotContain("MISSING_TECHNICAL_QUESTIONS", "EMPTY_TECHNICAL_POOL");
+    }
+
+    @Test
     void completedSessionCancelRejectedAndStatusRemainsCompleted() {
         seedInterviewFixtures();
 

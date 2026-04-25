@@ -103,15 +103,7 @@ public class AdminInterviewService {
     }
 
     private boolean isTechnicalDiagnosisApplicable(DiagnosisSessionSnapshot snapshot) {
-        if (snapshot.getStatus() != null && snapshot.getStatus() == STATUS_COMPLETED) {
-            return true;
-        }
-        String stage = normalizeText(snapshot.getStage());
-        return stage != null
-                && (stage.contains("technical")
-                        || stage.equals("concluded")
-                        || stage.equals("completed")
-                        || stage.equals("final"));
+        return snapshot.getStatus() != null && snapshot.getStatus() == STATUS_COMPLETED;
     }
 
     private boolean isMissingScores(DiagnosisSessionSnapshot snapshot) {
