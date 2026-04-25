@@ -1,0 +1,42 @@
+# macOS
+.DS_Store
+
+# IDE / editor local state
+.idea/
+.vscode/
+
+# Local agent/tooling state
+.claude/
+.codex/
+.my-dev-setup-backups/
+.sisyphus/
+.tools/
+
+# Runtime and test artifacts
+test-results/
+logs/
+*.log
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Flutter
+.dart_tool/
+
+# Java / Maven
+target/

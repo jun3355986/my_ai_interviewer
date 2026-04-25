@@ -1,0 +1,5 @@
+# OpenSpec Configuration - Root Level (Cross-Project)
+structure: hierarchical
+maxDepth: 4
+allowMixed: true
+validatePaths: true
