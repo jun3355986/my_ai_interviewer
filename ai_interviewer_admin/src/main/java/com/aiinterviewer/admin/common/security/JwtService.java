@@ -39,6 +39,10 @@ public class JwtService {
                 .compact();
     }
 
+    public long getAccessTokenExpiration() {
+        return accessTokenExpiration;
+    }
+
     public boolean validateToken(String token) {
         try {
             parseClaims(token);
