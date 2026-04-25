@@ -44,7 +44,10 @@ public abstract class AdminPostgresIntegrationTest {
                 "t_interview_message",
                 "t_score_record",
                 "t_evaluation",
+                "t_notification",
                 "t_interview_session",
+                "t_notification_template",
+                "t_system_config",
                 "t_question_vector_sync_record",
                 "t_question_tag_relation",
                 "t_question_tag",
@@ -101,6 +104,22 @@ public abstract class AdminPostgresIntegrationTest {
                     role_id BIGINT NOT NULL REFERENCES t_role(id),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(user_id, role_id)
+                )
+                """);
+        jdbcTemplate.execute(
+                """
+                CREATE TABLE IF NOT EXISTS t_notification (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL REFERENCES t_user(id),
+                    type VARCHAR(50) NOT NULL,
+                    title VARCHAR(200),
+                    content TEXT,
+                    related_type VARCHAR(50),
+                    related_id VARCHAR(100),
+                    status SMALLINT DEFAULT 0,
+                    send_time TIMESTAMP,
+                    read_time TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
     }
