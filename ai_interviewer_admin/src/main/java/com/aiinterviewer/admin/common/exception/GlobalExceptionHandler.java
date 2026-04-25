@@ -22,7 +22,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AdminBusinessException.class)
     public ResponseEntity<Result<Void>> handleAdminBusinessException(
             AdminBusinessException exception, HttpServletRequest request) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        return ResponseEntity.status(statusFor(exception.getCode()))
                 .body(Result.<Void>fail(exception.getCode(), exception.getMessage()).traceId(traceId(request)));
     }
 
@@ -70,5 +70,19 @@ public class GlobalExceptionHandler {
             return request.getRequestId();
         }
         return traceId;
+    }
+
+    private HttpStatus statusFor(Integer code) {
+        if (code == null) {
+            return HttpStatus.BAD_REQUEST;
+        }
+        return switch (code) {
+            case 400 -> HttpStatus.BAD_REQUEST;
+            case 401 -> HttpStatus.UNAUTHORIZED;
+            case 403 -> HttpStatus.FORBIDDEN;
+            case 404 -> HttpStatus.NOT_FOUND;
+            case 409 -> HttpStatus.CONFLICT;
+            default -> code >= 500 && code < 600 ? HttpStatus.INTERNAL_SERVER_ERROR : HttpStatus.BAD_REQUEST;
+        };
     }
 }
