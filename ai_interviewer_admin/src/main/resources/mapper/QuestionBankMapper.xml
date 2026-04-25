@@ -42,6 +42,24 @@
         <result property="tagName" column="tag_name"/>
     </resultMap>
 
+    <resultMap id="QuestionImportBatchMap" type="com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch">
+        <id property="id" column="id"/>
+        <result property="batchNo" column="batch_no"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileUrl" column="file_url"/>
+        <result property="status" column="status"/>
+        <result property="totalCount" column="total_count"/>
+        <result property="successCount" column="success_count"/>
+        <result property="failedCount" column="failed_count"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="importedBy" column="imported_by"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="finishedAt" column="finished_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="deletedAt" column="deleted_at"/>
+    </resultMap>
+
     <sql id="QuestionColumns">
         id, question_code, question_text, answer_reference, question_type, difficulty,
         skill_area, job_id, status, vector_sync_status, vector_sync_error, source_type,
@@ -117,12 +135,12 @@
         INSERT INTO t_question_bank
             (question_code, question_text, answer_reference, question_type, difficulty,
              skill_area, job_id, status, vector_sync_status, source_type, created_by,
-             created_at, updated_at)
+             source_batch_id, created_at, updated_at)
         VALUES
             (#{item.questionCode}, #{item.questionText}, #{item.answerReference}, #{item.questionType},
              #{item.difficulty}, #{item.skillArea}, #{item.jobId}, #{item.status},
              #{item.vectorSyncStatus}, #{item.sourceType}, #{item.createdBy},
-             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             #{item.sourceBatchId}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     </insert>
 
     <update id="updateQuestion">
@@ -195,7 +213,43 @@
           AND qtr.question_id IN
           <foreach collection="questionIds" item="questionId" open="(" separator="," close=")">
               #{questionId}
-          </foreach>
+        </foreach>
         ORDER BY qtr.question_id ASC, qtr.id ASC
+    </select>
+
+    <insert id="insertImportBatch" useGeneratedKeys="true" keyProperty="batch.id">
+        INSERT INTO t_question_import_batch
+            (batch_no, file_name, file_url, status, total_count, success_count, failed_count,
+             error_message, imported_by, started_at, created_at, updated_at)
+        VALUES
+            (#{batch.batchNo}, #{batch.fileName}, #{batch.fileUrl}, #{batch.status},
+             #{batch.totalCount}, #{batch.successCount}, #{batch.failedCount}, #{batch.errorMessage},
+             #{batch.importedBy}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="finishImportBatch">
+        UPDATE t_question_import_batch
+        SET status = #{status},
+            total_count = #{totalCount},
+            success_count = #{successCount},
+            failed_count = #{failedCount},
+            error_message = #{errorMessage},
+            finished_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{batchId}
+          AND deleted_at IS NULL
+    </update>
+
+    <select id="selectImportBatchById" resultMap="QuestionImportBatchMap">
+        SELECT id, batch_no, file_name, file_url, status, total_count, success_count,
+               failed_count, error_message, imported_by,
+               started_at::timestamp AS started_at,
+               finished_at::timestamp AS finished_at,
+               created_at::timestamp AS created_at,
+               updated_at::timestamp AS updated_at,
+               deleted_at::timestamp AS deleted_at
+        FROM t_question_import_batch
+        WHERE id = #{batchId}
+          AND deleted_at IS NULL
     </select>
 </mapper>

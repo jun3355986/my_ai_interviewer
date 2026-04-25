@@ -1,0 +1,135 @@
+package com.aiinterviewer.admin.questionbank;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch;
+import com.aiinterviewer.admin.support.AdminPostgresIntegrationTest;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
+
+    @Autowired
+    private QuestionImportService questionImportService;
+
+    @Autowired
+    private QuestionService questionService;
+
+    @Test
+    void validCsvCreatesImportBatchAndQuestionRecords() {
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "sample_questions.csv",
+                getClass().getResourceAsStream("/questionbank/sample_questions.csv"),
+                7L);
+
+        assertThat(batch.getStatus()).isEqualTo("SUCCESS");
+        assertThat(batch.getTotalCount()).isEqualTo(2);
+        assertThat(batch.getSuccessCount()).isEqualTo(2);
+        assertThat(batch.getFailedCount()).isZero();
+        assertThat(batch.getErrorMessage()).isNull();
+
+        List<String> importedQuestions = importedQuestionTexts(batch.getId());
+
+        assertThat(importedQuestions).containsExactlyInAnyOrder(
+                "请解释 Java 线程池的核心参数",
+                "Spring Bean 的生命周期有哪些关键阶段");
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM t_question_import_batch WHERE batch_no = ? AND imported_by = ?",
+                Integer.class,
+                batch.getBatchNo(),
+                7L)).isOne();
+
+        assertThat(questionService.getQuestion(questionIdByText("请解释 Java 线程池的核心参数")).getTags())
+                .containsExactly("Java", "Concurrency");
+    }
+
+    @Test
+    void rowMissingQuestionTextIsRejectedWithRowNumber() {
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "missing-question-text.csv",
+                csv("""
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
+                        ,参考答案,TECHNICAL,MEDIUM,Java;Spring,Java,101,1
+                        """),
+                8L);
+
+        assertThat(batch.getStatus()).isEqualTo("FAILED");
+        assertThat(batch.getTotalCount()).isEqualTo(1);
+        assertThat(batch.getSuccessCount()).isZero();
+        assertThat(batch.getFailedCount()).isOne();
+        assertThat(batch.getErrorMessage()).contains("第2行").contains("题目内容不能为空");
+        assertThat(importedQuestionTexts(batch.getId())).isEmpty();
+    }
+
+    @Test
+    void duplicateQuestionTextInSameBatchIsRejectedAndUniqueRowsAreImported() {
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "duplicate-question.csv",
+                csv("""
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
+                        同批次重复题目,参考答案一,TECHNICAL,MEDIUM,Java;Spring,Java,101,1
+                        同批次重复题目,参考答案二,TECHNICAL,HARD,Java,Java,101,1
+                        唯一题目,参考答案三,BEHAVIORAL,EASY,Communication,Communication,,1
+                        """),
+                9L);
+
+        assertThat(batch.getStatus()).isEqualTo("PARTIAL_FAILED");
+        assertThat(batch.getTotalCount()).isEqualTo(3);
+        assertThat(batch.getSuccessCount()).isEqualTo(2);
+        assertThat(batch.getFailedCount()).isOne();
+        assertThat(batch.getErrorMessage()).contains("第3行").contains("重复题目内容");
+        assertThat(importedQuestionTexts(batch.getId())).containsExactlyInAnyOrder("同批次重复题目", "唯一题目");
+    }
+
+    @Test
+    void partialFailureRecordsFailedRowCountAndDoesNotCreateInvalidRows() {
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "partial-failure.csv",
+                csv("""
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
+                        有效题目一,参考答案一,TECHNICAL,MEDIUM,Java;Spring,Java,101,1
+                        缺少难度题目,参考答案二,TECHNICAL,,Java,Java,101,1
+                        有效题目二,参考答案三,BEHAVIORAL,EASY,Communication,Communication,,1
+                        """),
+                10L);
+
+        assertThat(batch.getStatus()).isEqualTo("PARTIAL_FAILED");
+        assertThat(batch.getTotalCount()).isEqualTo(3);
+        assertThat(batch.getSuccessCount()).isEqualTo(2);
+        assertThat(batch.getFailedCount()).isOne();
+        assertThat(batch.getErrorMessage()).contains("第3行").contains("难度不能为空");
+        assertThat(importedQuestionTexts(batch.getId())).containsExactlyInAnyOrder("有效题目一", "有效题目二");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM t_question_bank WHERE question_text = '缺少难度题目' AND deleted_at IS NULL",
+                Integer.class)).isZero();
+    }
+
+    private ByteArrayInputStream csv(String content) {
+        return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private List<String> importedQuestionTexts(Long batchId) {
+        return jdbcTemplate.queryForList(
+                """
+                SELECT question_text
+                FROM t_question_bank
+                WHERE source_type = 'IMPORT'
+                  AND source_batch_id = ?
+                  AND deleted_at IS NULL
+                ORDER BY id
+                """,
+                String.class,
+                batchId);
+    }
+
+    private Long questionIdByText(String questionText) {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM t_question_bank WHERE question_text = ? AND deleted_at IS NULL",
+                Long.class,
+                questionText);
+    }
+}

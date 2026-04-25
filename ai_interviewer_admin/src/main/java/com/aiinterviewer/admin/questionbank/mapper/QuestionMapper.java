@@ -3,6 +3,7 @@ package com.aiinterviewer.admin.questionbank.mapper;
 import com.aiinterviewer.admin.questionbank.QuestionQuery;
 import com.aiinterviewer.admin.questionbank.QuestionService;
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
+import com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch;
 import com.aiinterviewer.admin.questionbank.entity.QuestionTag;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
@@ -45,4 +46,16 @@ public interface QuestionMapper {
             @Param("tagId") Long tagId);
 
     List<QuestionService.QuestionTagNameRow> selectTagNamesByQuestionIds(@Param("questionIds") List<Long> questionIds);
+
+    int insertImportBatch(@Param("batch") QuestionImportBatch batch);
+
+    int finishImportBatch(
+            @Param("batchId") Long batchId,
+            @Param("status") String status,
+            @Param("totalCount") int totalCount,
+            @Param("successCount") int successCount,
+            @Param("failedCount") int failedCount,
+            @Param("errorMessage") String errorMessage);
+
+    QuestionImportBatch selectImportBatchById(@Param("batchId") Long batchId);
 }

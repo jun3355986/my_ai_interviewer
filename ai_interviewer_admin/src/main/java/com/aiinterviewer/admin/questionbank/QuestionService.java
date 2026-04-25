@@ -26,6 +26,7 @@ public class QuestionService {
 
     private static final String DEFAULT_VECTOR_SYNC_STATUS = "PENDING";
     private static final String DEFAULT_SOURCE_TYPE = "MANUAL";
+    private static final String IMPORT_SOURCE_TYPE = "IMPORT";
     private static final String DEFAULT_TAG_TYPE = "GENERAL";
 
     private final QuestionMapper questionMapper;
@@ -53,6 +54,14 @@ public class QuestionService {
     @Transactional
     @AdminAudit(module = "QUESTION_BANK", operation = "CREATE", targetType = "QUESTION", targetIdFromResult = true)
     public Long createQuestion(QuestionCreateRequest request) {
+        return createQuestion(request, DEFAULT_SOURCE_TYPE, null);
+    }
+
+    Long createImportedQuestion(QuestionCreateRequest request, Long sourceBatchId) {
+        return createQuestion(request, IMPORT_SOURCE_TYPE, sourceBatchId);
+    }
+
+    private Long createQuestion(QuestionCreateRequest request, String sourceType, Long sourceBatchId) {
         validateCreateRequest(request);
         QuestionBankItem item = new QuestionBankItem();
         item.setQuestionCode(generateQuestionCode());
@@ -64,7 +73,8 @@ public class QuestionService {
         item.setJobId(request.getJobId());
         item.setStatus(request.getStatus());
         item.setVectorSyncStatus(DEFAULT_VECTOR_SYNC_STATUS);
-        item.setSourceType(DEFAULT_SOURCE_TYPE);
+        item.setSourceType(sourceType);
+        item.setSourceBatchId(sourceBatchId);
         item.setCreatedBy(request.getCreatedBy());
         int inserted = questionMapper.insertQuestion(item);
         if (inserted == 0 || item.getId() == null) {
