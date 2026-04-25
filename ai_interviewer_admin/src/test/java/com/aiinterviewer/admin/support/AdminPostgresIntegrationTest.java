@@ -41,6 +41,7 @@ public abstract class AdminPostgresIntegrationTest {
         createBusinessIdentityTables();
         createDashboardBusinessTables();
         truncateTables(List.of(
+                "t_interview_message",
                 "t_score_record",
                 "t_evaluation",
                 "t_interview_session",
@@ -193,6 +194,18 @@ public abstract class AdminPostgresIntegrationTest {
                     finished_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute(
+                """
+                CREATE TABLE IF NOT EXISTS t_interview_message (
+                    id BIGSERIAL PRIMARY KEY,
+                    session_id VARCHAR(50) NOT NULL REFERENCES t_interview_session(id),
+                    role VARCHAR(20) NOT NULL,
+                    content TEXT NOT NULL,
+                    stage VARCHAR(50),
+                    sequence INT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
         jdbcTemplate.execute(

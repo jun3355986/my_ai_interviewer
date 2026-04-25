@@ -1,8 +1,10 @@
 package com.aiinterviewer.admin;
 
+import com.aiinterviewer.admin.evaluation.mapper.AdminEvaluationMapper;
+import com.aiinterviewer.admin.interview.mapper.AdminInterviewMapper;
+import com.aiinterviewer.admin.job.mapper.AdminJobMapper;
 import com.aiinterviewer.admin.resume.mapper.AdminResumeMapper;
 import com.aiinterviewer.admin.user.mapper.AdminUserMapper;
-import com.aiinterviewer.admin.job.mapper.AdminJobMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -33,6 +35,12 @@ class AdminApplicationTests {
 
     @MockBean
     private AdminJobMapper adminJobMapper;
+
+    @MockBean
+    private AdminInterviewMapper adminInterviewMapper;
+
+    @MockBean
+    private AdminEvaluationMapper adminEvaluationMapper;
 
     @Test
     void contextLoads() {
