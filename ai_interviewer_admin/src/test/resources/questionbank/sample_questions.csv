@@ -1,0 +1,3 @@
+question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
+请解释 Java 线程池的核心参数,核心线程数、最大线程数、队列、拒绝策略,TECHNICAL,MEDIUM,Java;Concurrency,Java,101,1
+Spring Bean 的生命周期有哪些关键阶段,实例化、属性填充、初始化、销毁,TECHNICAL,HARD,Spring;Java,Spring,102,1

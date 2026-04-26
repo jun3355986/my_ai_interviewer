@@ -80,6 +80,13 @@ spring:
           filters:
             - StripPrefix=2
 
+        # Admin 后台服务路由
+        # Admin 服务自身路径已经是 /admin/**，这里不移除前缀。
+        - id: admin-service
+          uri: lb://ai-interviewer-admin
+          predicates:
+            - Path=/admin/**
+
       # 全局CORS配置
       globalcors:
         cors-configurations:
@@ -147,6 +154,11 @@ knife4j:
         url: /ai-interviewer-notification/v3/api-docs
         context-path: /api/v1
         order: 6
+      - name: Admin 后台服务
+        service-name: ai-interviewer-admin
+        url: /ai-interviewer-admin/v3/api-docs
+        context-path: /admin
+        order: 7
 
 # JWT配置
 jwt:
@@ -160,6 +172,8 @@ gateway:
     - /api/v1/auth/login
     - /api/v1/auth/register
     - /api/v1/auth/refresh
+    # Admin 服务使用独立 JWT，由 admin 服务自身校验 /admin/**。
+    - /admin/**
     - /api/v1/**/v3/api-docs
     - /actuator/**
     # Knife4j 文档相关

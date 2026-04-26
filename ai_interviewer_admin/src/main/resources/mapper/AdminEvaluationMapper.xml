@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiinterviewer.admin.evaluation.mapper.AdminEvaluationMapper">
+
+    <resultMap id="AdminEvaluationListItemMap" type="com.aiinterviewer.admin.evaluation.AdminEvaluationService$AdminEvaluationListItem">
+        <id property="id" column="id"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="username" column="username"/>
+        <result property="jobId" column="job_id"/>
+        <result property="jobTitle" column="job_title"/>
+        <result property="overallScore" column="overall_score"/>
+        <result property="technicalScore" column="technical_score"/>
+        <result property="communicationScore" column="communication_score"/>
+        <result property="logicScore" column="logic_score"/>
+        <result property="experienceScore" column="experience_score"/>
+        <result property="summary" column="summary"/>
+        <result property="strengths" column="strengths"/>
+        <result property="weaknesses" column="weaknesses"/>
+        <result property="recommendation" column="recommendation"/>
+        <result property="detailedFeedback" column="detailed_feedback"/>
+        <result property="totalQuestions" column="total_questions"/>
+        <result property="answeredQuestions" column="answered_questions"/>
+        <result property="averageScore" column="average_score"/>
+        <result property="durationMinutes" column="duration_minutes"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="EvaluationFilter">
+        FROM t_evaluation e
+        LEFT JOIN t_user u ON u.id = e.user_id
+        LEFT JOIN t_job j ON j.id = e.job_id
+        WHERE 1 = 1
+        <if test="query.recommendation != null">
+            AND LOWER(e.recommendation) = #{query.recommendation}
+        </if>
+        <if test="query.minOverallScore != null">
+            AND e.overall_score &gt;= #{query.minOverallScore}
+        </if>
+        <if test="query.maxOverallScore != null">
+            AND e.overall_score &lt;= #{query.maxOverallScore}
+        </if>
+    </sql>
+
+    <select id="countEvaluations" resultType="long">
+        SELECT COUNT(*)
+        <include refid="EvaluationFilter"/>
+    </select>
+
+    <select id="selectEvaluations" resultMap="AdminEvaluationListItemMap">
+        SELECT e.id, e.session_id, e.user_id, u.username, e.job_id, j.title AS job_title,
+               e.overall_score, e.technical_score, e.communication_score, e.logic_score,
+               e.experience_score, e.summary, e.strengths, e.weaknesses, e.recommendation,
+               e.detailed_feedback::text AS detailed_feedback, e.total_questions,
+               e.answered_questions, e.average_score, e.duration_minutes, e.created_at, e.updated_at
+        <include refid="EvaluationFilter"/>
+        ORDER BY e.created_at DESC, e.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+</mapper>

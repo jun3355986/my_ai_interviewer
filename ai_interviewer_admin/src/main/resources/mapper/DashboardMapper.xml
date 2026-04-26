@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiinterviewer.admin.dashboard.mapper.DashboardMapper">
+
+    <resultMap id="ScoreRangeCountMap" type="com.aiinterviewer.admin.dashboard.dto.DashboardOverviewResponse$ScoreRangeCount">
+        <result property="range" column="score_range"/>
+        <result property="count" column="count"/>
+    </resultMap>
+
+    <resultMap id="DailyInterviewCountMap" type="com.aiinterviewer.admin.dashboard.dto.DashboardOverviewResponse$DailyInterviewCount">
+        <result property="date" column="interview_date"/>
+        <result property="count" column="count"/>
+    </resultMap>
+
+    <resultMap id="RecentErrorSessionMap" type="com.aiinterviewer.admin.dashboard.dto.DashboardOverviewResponse$RecentErrorSession">
+        <id property="sessionId" column="session_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="jobId" column="job_id"/>
+        <result property="candidateName" column="candidate_name"/>
+        <result property="status" column="status"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="finishedAt" column="finished_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="reason" column="reason"/>
+    </resultMap>
+
+    <select id="countUsers" resultType="long">
+        SELECT COUNT(*)
+        FROM t_user
+        WHERE deleted_at IS NULL
+    </select>
+
+    <select id="countJobs" resultType="long">
+        SELECT COUNT(*)
+        FROM t_job
+        WHERE deleted_at IS NULL
+    </select>
+
+    <select id="countResumes" resultType="long">
+        SELECT COUNT(*)
+        FROM t_resume
+    </select>
+
+    <select id="countInterviews" resultType="long">
+        SELECT COUNT(*)
+        FROM t_interview_session
+    </select>
+
+    <select id="countEvaluations" resultType="long">
+        SELECT COUNT(*)
+        FROM t_evaluation
+    </select>
+
+    <select id="selectScoreDistribution" resultMap="ScoreRangeCountMap">
+        SELECT
+            CASE
+                WHEN overall_score BETWEEN 0 AND 59 THEN '0-59'
+                WHEN overall_score BETWEEN 60 AND 69 THEN '60-69'
+                WHEN overall_score BETWEEN 70 AND 79 THEN '70-79'
+                WHEN overall_score BETWEEN 80 AND 89 THEN '80-89'
+                WHEN overall_score BETWEEN 90 AND 100 THEN '90-100'
+            END AS score_range,
+            COUNT(*) AS count
+        FROM t_evaluation
+        WHERE overall_score BETWEEN 0 AND 100
+        GROUP BY score_range
+        ORDER BY MIN(overall_score)
+    </select>
+
+    <select id="selectInterviewTrend" resultMap="DailyInterviewCountMap">
+        SELECT
+            CAST(created_at AS DATE) AS interview_date,
+            COUNT(*) AS count
+        FROM t_interview_session
+        WHERE created_at &gt;= #{startTime}
+          AND created_at &lt; #{endTime}
+        GROUP BY CAST(created_at AS DATE)
+        ORDER BY interview_date
+    </select>
+
+    <select id="selectRecentErrors" resultMap="RecentErrorSessionMap">
+        WITH score_counts AS (
+            SELECT session_id, COUNT(*) AS score_count
+            FROM t_score_record
+            GROUP BY session_id
+        )
+        SELECT
+            s.id AS session_id,
+            s.user_id,
+            s.job_id,
+            s.candidate_name,
+            s.status,
+            s.started_at,
+            s.finished_at,
+            s.created_at,
+            CASE
+                WHEN s.status = 2
+                     AND s.started_at IS NOT NULL
+                     AND s.finished_at IS NOT NULL
+                     AND s.finished_at &lt; s.started_at + INTERVAL '2 minutes'
+                    THEN 'TOO_SHORT'
+                ELSE 'MISSING_SCORE_RECORD'
+            END AS reason
+        FROM t_interview_session s
+        LEFT JOIN score_counts sc ON sc.session_id = s.id
+        WHERE (
+                s.status = 2
+                AND s.started_at IS NOT NULL
+                AND s.finished_at IS NOT NULL
+                AND s.finished_at &lt; s.started_at + INTERVAL '2 minutes'
+            )
+           OR (
+                s.status = 2
+                AND COALESCE(sc.score_count, 0) = 0
+            )
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

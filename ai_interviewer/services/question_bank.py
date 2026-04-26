@@ -110,3 +110,56 @@ class QuestionBank:
     def get_question_count(self) -> int:
         """获取问题库中的问题总数"""
         return self.vectorstore._collection.count()
+
+    def sync_structured_questions(self, questions: List[dict]) -> List[dict]:
+        """同步 Admin 后台维护的结构化题目到向量库。"""
+        documents: List[Document] = []
+        ids: List[str] = []
+        for question in questions:
+            question_id = question.get("id")
+            if question_id is None:
+                raise ValueError("question id is required")
+            question_text = (question.get("question_text") or "").strip()
+            if not question_text:
+                raise ValueError(f"question_text is required for id={question_id}")
+
+            answer_reference = (question.get("answer_reference") or "").strip()
+            question_type = (question.get("question_type") or "").strip()
+            difficulty = (question.get("difficulty") or "").strip()
+            skill_area = (question.get("skill_area") or "").strip()
+            tags = question.get("tags") or []
+            if not isinstance(tags, list):
+                tags = []
+
+            content_parts = [question_text]
+            if answer_reference:
+                content_parts.append(f"参考答案：{answer_reference}")
+            if question_type:
+                content_parts.append(f"题型：{question_type}")
+            if difficulty:
+                content_parts.append(f"难度：{difficulty}")
+            if skill_area:
+                content_parts.append(f"技能领域：{skill_area}")
+            if tags:
+                content_parts.append("标签：" + "、".join(str(tag) for tag in tags))
+
+            vector_id = f"admin-question-{question_id}"
+            documents.append(
+                Document(
+                    page_content="\n".join(content_parts),
+                    metadata={
+                        "source": "admin-question-bank",
+                        "question_id": str(question_id),
+                        "question_type": question_type,
+                        "difficulty": difficulty,
+                        "skill_area": skill_area,
+                        "tags": ",".join(str(tag) for tag in tags),
+                    },
+                )
+            )
+            ids.append(vector_id)
+
+        if documents:
+            self.vectorstore.add_documents(documents, ids=ids)
+
+        return [{"id": question.get("id"), "vector_store_id": vector_id} for question, vector_id in zip(questions, ids)]

@@ -1,12 +1,14 @@
 # AI Interviewer Monorepo
 
-本仓库包含 3 个独立子项目，通过 Docker Compose 可以在本地一键拉起完整联调环境（前端 + 网关 + Java 微服务 + Python AI + 基础设施）。
+本仓库包含 5 个独立子项目，通过 Docker Compose 可以在本地一键拉起完整联调环境（用户端前端 + 后台管理前端 + 网关 + Java 微服务 + Admin 后台 + Python AI + 基础设施）。
 
 ## 1. 项目结构
 
 ```text
 my_ai_interviewer/
 ├── ai_interview_backend/   # Java 21 + Spring Cloud Alibaba 微服务 + docker-compose
+├── ai_interviewer_admin/   # Java 21 + Spring Boot 后台管理服务
+├── ai_interviewer_admin_front/ # React + Vite 后台管理页面
 ├── ai_interviewer/         # Python FastAPI AI 服务
 └── ai_interviewer_front/   # Flutter 前端（Web/iOS）
 ```
@@ -14,17 +16,24 @@ my_ai_interviewer/
 ## 2. 部署拓扑
 
 ```text
-Browser (http://localhost:8088)
+User Browser (http://localhost:8088)
   -> frontend (nginx)
       -> /api/* reverse proxy
           -> gateway (http://gateway:9000)
               -> user/resume/interview/job/evaluation services
-                    -> postgres / redis / minio / nacos
-                    -> python-ai (for resume/interview AI calls)
+
+Admin Browser (http://localhost:8090)
+  -> admin-web (nginx)
+      -> /admin/* reverse proxy
+          -> gateway (http://gateway:9000)
+              -> admin (http://admin:9010, /admin/**)
+                 -> postgres / redis / nacos
+                 -> python-ai (for question-bank vector sync)
 ```
 
 当前联调入口已统一为 **gateway**：
 - 浏览器侧走 `frontend -> /api/* -> gateway`
+- 后台浏览器侧走 `admin-web -> /admin/* -> gateway -> admin`
 - 不再推荐前端直接请求 `9001/9004` 等业务服务端口
 
 ## 3. 环境准备
@@ -52,6 +61,7 @@ cp .env.example .env
 - `AZURE_OPENAI_BACKUP_CHAT_MODEL`（默认 `gpt-5.4`）
 - `AZURE_OPENAI_EMBEDDING_MODEL`（默认 `embed-v-4-0`）
 - `JWT_SECRET`
+- `ADMIN_JWT_SECRET`
 
 本机模型配置来源文件（不要把真实密钥提交到仓库）：
 - `/Users/junjielong/myai/My_AI_KEY.md`
@@ -59,6 +69,10 @@ cp .env.example .env
 前端网关地址（Flutter 构建参数）：
 - `FRONTEND_GATEWAY_BASE_URL=/`（默认推荐）
 - 该值会作为 `build-arg` 传入前端镜像构建
+
+后台管理页面 API 地址（React 构建参数）：
+- `ADMIN_WEB_API_BASE=/admin`（默认推荐）
+- Docker 里由 `admin-web` Nginx 反代到 Gateway
 
 ## 5. 一键启动（推荐）
 
@@ -71,14 +85,14 @@ docker compose up -d --build
 当你调整了模型配置或更新了 Python/Flutter 代码，建议强制重建关键服务，避免继续使用旧镜像导致 401：
 
 ```bash
-docker compose up -d --build python-ai frontend
+docker compose up -d --build python-ai frontend admin-web
 ```
 
 启动内容包括：
 - 基础设施：`nacos`、`postgres`、`redis`、`minio`
 - AI 服务：`python-ai`
-- Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`
-- 前端：`frontend`
+- Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`、`admin`
+- 前端：`frontend`、`admin-web`
 
 > `notification` 依赖 RocketMQ，默认不启动。如需启用：
 >
@@ -89,8 +103,11 @@ docker compose up -d --build python-ai frontend
 ## 6. 访问入口
 
 - 前端（统一联调入口）：`http://localhost:8088`
+- 后台管理页面：`http://localhost:8090`
 - Gateway 健康检查：`http://localhost:9000/actuator/health`
 - Gateway 文档页：`http://localhost:9000/doc.html`
+- Admin 服务直连健康检查：`http://localhost:9010/actuator/health`
+- Admin 网关路由前缀：`http://localhost:9000/admin/**`
 - Nacos 控制台：`http://localhost:8848/nacos`
 - MinIO 控制台：`http://localhost:19001`
 
@@ -108,6 +125,7 @@ docker compose up -d --build python-ai frontend
 | 服务 | 本机端口 | 容器端口 | 说明 |
 |------|----------|----------|------|
 | frontend | 8088 | 80 | Flutter Web（Nginx） |
+| admin-web | 8090 | 80 | React 后台管理页面（Nginx） |
 | gateway | 9000 | 9000 | 统一 API 网关 |
 | user | 9001 | 9001 | 用户服务 |
 | resume | 9002 | 9002 | 简历服务（依赖 MinIO、Python AI） |
@@ -115,6 +133,7 @@ docker compose up -d --build python-ai frontend
 | job | 9004 | 9004 | 职位服务 |
 | evaluation | 9005 | 9005 | 评估服务 |
 | notification（可选） | 9006 | 9006 | 通知服务（需 RocketMQ） |
+| admin | 9010 | 9010 | 后台管理服务，网关前缀 `/admin/**` |
 | python-ai | 8000 | 8000 | FastAPI AI 服务 |
 | postgres | 5433 | 5432 | PostgreSQL |
 | redis | 6380 | 6379 | Redis |
@@ -161,5 +180,7 @@ docker compose down -v
 ## 10. 补充说明
 
 - 后端与编排详情请查看：`ai_interview_backend/README.md`
+- 后台管理服务说明请查看：`ai_interviewer_admin/README.md`
+- 后台管理页面说明请查看：`ai_interviewer_admin_front/README.md`
 - 前端容器化说明请查看：`ai_interviewer_front/README.md`
 - Python AI 服务说明请查看：`ai_interviewer/README.md`
