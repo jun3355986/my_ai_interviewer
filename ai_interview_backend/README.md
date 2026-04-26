@@ -49,26 +49,30 @@ cp .env.example .env
 
 本机模型配置来源文件（请勿提交真实密钥到仓库）：`/Users/junjielong/myai/My_AI_KEY.md`。
 
-### 2. 一键启动（基础设施 + Python AI + Java 微服务 + Flutter Web 前端）
+### 2. 一键启动（基础设施 + Python AI + Java 微服务 + Flutter Web 前端 + React Admin Web）
 
 ```bash
 docker compose up -d --build
 
 # Nacos控制台: http://localhost:8848/nacos (nacos/nacos)
 # MinIO控制台: http://localhost:19001 (minioadmin/minioadmin123)
-# 前端访问地址: http://localhost:8088
+# 用户端前端访问地址: http://localhost:8088
+# 后台管理页面访问地址: http://localhost:8090
 ```
 
 默认会启动：
 - 基础设施：`nacos`、`postgres`、`redis`、`minio`
 - AI 服务：`python-ai` (`:8000`)
 - Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`
-- 前端：`frontend` (`:8088`)
+- 前端：`frontend` (`:8088`)、`admin-web` (`:8090`)
 
 `notification` 服务依赖 RocketMQ，默认不启动。
 
 前端容器内置 Nginx 反向代理，`/api/*` 会转发到 `gateway:9000`，三端联调入口统一走 Gateway。
 `FRONTEND_GATEWAY_BASE_URL` 可在 `.env` 中配置，默认 `/`（最适合当前容器联调）。
+
+后台管理页面容器内置 Nginx 反向代理，`/admin/*` 会转发到 `gateway:9000`，再由 Gateway 转发到 `ai-interviewer-admin`。
+`ADMIN_WEB_API_BASE` 可在 `.env` 中配置，默认 `/admin`。
 
 ### 默认管理员账号
 
