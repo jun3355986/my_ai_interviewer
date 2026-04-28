@@ -7,10 +7,14 @@ import lombok.Data;
 @Data
 public class QuestionBankItem {
 
+    public static final int STATUS_DISABLED = 0;
     public static final int STATUS_ENABLED = 1;
+    public static final int STATUS_PENDING_REVIEW = 2;
+    public static final int STATUS_REJECTED = 3;
     public static final String VECTOR_SYNC_PENDING = "PENDING";
     public static final String VECTOR_SYNC_FAILED = "FAILED";
     public static final String VECTOR_SYNC_DELETE_PENDING = "DELETE_PENDING";
+    public static final String VECTOR_SYNC_DELETED = "DELETED";
 
     private Long id;
     private String questionCode;

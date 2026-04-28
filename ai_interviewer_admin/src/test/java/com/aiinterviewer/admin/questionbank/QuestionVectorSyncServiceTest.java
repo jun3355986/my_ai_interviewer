@@ -3,6 +3,7 @@ package com.aiinterviewer.admin.questionbank;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.aiinterviewer.admin.questionbank.client.PythonQuestionBankClient;
@@ -62,6 +63,27 @@ class QuestionVectorSyncServiceTest extends AdminPostgresIntegrationTest {
         ArgumentCaptor<List<QuestionBankItem>> questionsCaptor = ArgumentCaptor.forClass(List.class);
         verify(pythonQuestionBankClient).syncQuestions(questionsCaptor.capture());
         assertThat(questionsCaptor.getValue()).extracting(QuestionBankItem::getId).containsExactly(keptId);
+    }
+
+    @Test
+    void deletePendingQuestionsAreRemovedFromVectorStore() {
+        Long questionId = questionService.createQuestion(createRequest("待删除向量题目", 1));
+        questionService.unpublishQuestion(questionId, 5L);
+        when(pythonQuestionBankClient.deleteQuestions(anyList()))
+                .thenReturn(PythonQuestionBankClient.DeleteResponse.success(1));
+
+        QuestionVectorSyncService.SyncResult result = questionVectorSyncService.syncPendingQuestions();
+
+        assertThat(result.getStatus()).isEqualTo("SUCCESS");
+        assertThat(result.getTotalCount()).isOne();
+        assertThat(result.getSuccessCount()).isOne();
+        assertThat(result.getFailedCount()).isZero();
+        verify(pythonQuestionBankClient, never()).syncQuestions(anyList());
+
+        ArgumentCaptor<List<QuestionBankItem>> questionsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(pythonQuestionBankClient).deleteQuestions(questionsCaptor.capture());
+        assertThat(questionsCaptor.getValue()).extracting(QuestionBankItem::getId).containsExactly(questionId);
+        assertThat(questionVectorStatus(questionId)).isEqualTo("DELETED");
     }
 
     @Test

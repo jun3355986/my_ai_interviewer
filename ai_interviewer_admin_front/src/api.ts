@@ -9,6 +9,7 @@ import type {
   LoginResponse,
   PageResult,
   QuestionCreatePayload,
+  QuestionImportBatch,
   QuestionRow,
   UserRow,
 } from './types';
@@ -73,7 +74,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  if (options.body && !headers.has('Content-Type')) {
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -143,6 +144,32 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+  importQuestions(file: File) {
+    const form = new FormData();
+    form.set('file', file);
+    return request<QuestionImportBatch>('/questions/import', {
+      method: 'POST',
+      body: form,
+    });
+  },
+  questionImports(params: Record<string, unknown>) {
+    return request<PageResult<QuestionImportBatch>>(`/questions/import${queryString(params)}`);
+  },
+  approveQuestion(questionId: number) {
+    return request<void>(`/questions/${questionId}/approve`, { method: 'PATCH' });
+  },
+  rejectQuestion(questionId: number) {
+    return request<void>(`/questions/${questionId}/reject`, { method: 'PATCH' });
+  },
+  publishQuestion(questionId: number) {
+    return request<void>(`/questions/${questionId}/publish`, { method: 'PATCH' });
+  },
+  unpublishQuestion(questionId: number) {
+    return request<void>(`/questions/${questionId}/unpublish`, { method: 'PATCH' });
+  },
+  deleteQuestion(questionId: number) {
+    return request<void>(`/questions/${questionId}`, { method: 'DELETE' });
   },
   syncQuestions() {
     return request<unknown>('/questions/vector-sync', { method: 'POST' });

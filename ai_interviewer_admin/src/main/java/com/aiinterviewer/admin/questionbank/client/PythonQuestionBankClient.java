@@ -12,12 +12,15 @@ public class PythonQuestionBankClient {
 
     private final RestClient restClient;
     private final String syncUrl;
+    private final String deleteUrl;
 
     public PythonQuestionBankClient(
             RestClient.Builder restClientBuilder,
-            @Value("${python-ai.question-bank-sync-url:http://localhost:8000/admin/question-bank/sync}") String syncUrl) {
+            @Value("${python-ai.question-bank-sync-url:http://localhost:8000/admin/question-bank/sync}") String syncUrl,
+            @Value("${python-ai.question-bank-delete-url:http://localhost:8000/admin/question-bank/delete}") String deleteUrl) {
         this.restClient = restClientBuilder.build();
         this.syncUrl = syncUrl;
+        this.deleteUrl = deleteUrl;
     }
 
     public SyncResponse syncQuestions(List<QuestionBankItem> questions) {
@@ -28,6 +31,17 @@ public class PythonQuestionBankClient {
                 .body(SyncResponse.class);
         return response == null
                 ? SyncResponse.failure("Python question bank sync returned empty response", questions.size())
+                : response;
+    }
+
+    public DeleteResponse deleteQuestions(List<QuestionBankItem> questions) {
+        DeleteResponse response = restClient.post()
+                .uri(deleteUrl)
+                .body(new DeleteRequest(toDeletePayload(questions)))
+                .retrieve()
+                .body(DeleteResponse.class);
+        return response == null
+                ? DeleteResponse.failure("Python question bank delete returned empty response", questions.size())
                 : response;
     }
 
@@ -44,6 +58,12 @@ public class PythonQuestionBankClient {
                 .toList();
     }
 
+    private List<DeletePayload> toDeletePayload(List<QuestionBankItem> questions) {
+        return questions.stream()
+                .map(question -> new DeletePayload(question.getId()))
+                .toList();
+    }
+
     public record SyncRequest(List<QuestionPayload> questions) {
     }
 
@@ -55,6 +75,12 @@ public class PythonQuestionBankClient {
             String difficulty,
             List<String> tags,
             @JsonProperty("skill_area") String skillArea) {
+    }
+
+    public record DeleteRequest(List<DeletePayload> questions) {
+    }
+
+    public record DeletePayload(Long id) {
     }
 
     public record QuestionSyncResult(
@@ -88,6 +114,22 @@ public class PythonQuestionBankClient {
 
         public List<QuestionSyncResult> failedQuestions() {
             return failedQuestions == null ? List.of() : failedQuestions;
+        }
+    }
+
+    public record DeleteResponse(
+            String status,
+            @JsonProperty("total_count") int totalCount,
+            @JsonProperty("success_count") int successCount,
+            @JsonProperty("failed_count") int failedCount,
+            @JsonProperty("error_message") String errorMessage) {
+
+        public static DeleteResponse success(int totalCount) {
+            return new DeleteResponse("SUCCESS", totalCount, totalCount, 0, null);
+        }
+
+        public static DeleteResponse failure(String errorMessage, int totalCount) {
+            return new DeleteResponse("FAILED", totalCount, 0, totalCount, errorMessage);
         }
     }
 }
