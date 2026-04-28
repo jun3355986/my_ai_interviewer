@@ -114,6 +114,30 @@ public class QuestionService {
     }
 
     @Transactional
+    @AdminAudit(module = "QUESTION_BANK", operation = "APPROVE", targetType = "QUESTION", targetIdParam = "questionId")
+    public void approveQuestion(Long questionId, Long updatedBy) {
+        updateQuestionStatus(questionId, QuestionBankItem.STATUS_ENABLED, updatedBy);
+    }
+
+    @Transactional
+    @AdminAudit(module = "QUESTION_BANK", operation = "REJECT", targetType = "QUESTION", targetIdParam = "questionId")
+    public void rejectQuestion(Long questionId, Long updatedBy) {
+        updateQuestionStatus(questionId, QuestionBankItem.STATUS_REJECTED, updatedBy);
+    }
+
+    @Transactional
+    @AdminAudit(module = "QUESTION_BANK", operation = "PUBLISH", targetType = "QUESTION", targetIdParam = "questionId")
+    public void publishQuestion(Long questionId, Long updatedBy) {
+        updateQuestionStatus(questionId, QuestionBankItem.STATUS_ENABLED, updatedBy);
+    }
+
+    @Transactional
+    @AdminAudit(module = "QUESTION_BANK", operation = "UNPUBLISH", targetType = "QUESTION", targetIdParam = "questionId")
+    public void unpublishQuestion(Long questionId, Long updatedBy) {
+        updateQuestionStatus(questionId, QuestionBankItem.STATUS_DISABLED, updatedBy);
+    }
+
+    @Transactional
     @AdminAudit(module = "QUESTION_BANK", operation = "DELETE", targetType = "QUESTION", targetIdParam = "questionId")
     public void deleteQuestion(Long questionId) {
         ensureQuestionExists(questionId);
@@ -137,7 +161,7 @@ public class QuestionService {
         if (request.getDifficulty() != null && !StringUtils.hasText(request.getDifficulty())) {
             throw new AdminBusinessException(400, "难度不能为空");
         }
-        if (request.getStatus() != null && request.getStatus() != 0 && request.getStatus() != 1) {
+        if (request.getStatus() != null && !isValidStatus(request.getStatus())) {
             throw new AdminBusinessException(400, "状态不合法");
         }
     }
@@ -155,9 +179,25 @@ public class QuestionService {
         if (status == null) {
             throw new AdminBusinessException(400, "状态不能为空");
         }
-        if (status != 0 && status != 1) {
+        if (!isValidStatus(status)) {
             throw new AdminBusinessException(400, "状态不合法");
         }
+    }
+
+    private boolean isValidStatus(Integer status) {
+        return status != null
+                && (status == QuestionBankItem.STATUS_DISABLED
+                || status == QuestionBankItem.STATUS_ENABLED
+                || status == QuestionBankItem.STATUS_PENDING_REVIEW
+                || status == QuestionBankItem.STATUS_REJECTED);
+    }
+
+    private void updateQuestionStatus(Long questionId, Integer status, Long updatedBy) {
+        ensureQuestionExists(questionId);
+        QuestionUpdateRequest request = new QuestionUpdateRequest();
+        request.setStatus(status);
+        request.setUpdatedBy(updatedBy);
+        updateQuestion(questionId, request);
     }
 
     private void ensureQuestionId(Long questionId) {
@@ -214,9 +254,9 @@ public class QuestionService {
     }
 
     private String vectorStatusForUpdate(Integer status) {
-        return status != null && status == 0
-                ? QuestionBankItem.VECTOR_SYNC_DELETE_PENDING
-                : QuestionBankItem.VECTOR_SYNC_PENDING;
+        return status == null || status == QuestionBankItem.STATUS_ENABLED
+                ? QuestionBankItem.VECTOR_SYNC_PENDING
+                : QuestionBankItem.VECTOR_SYNC_DELETE_PENDING;
     }
 
     private void hydrateTags(List<QuestionBankItem> questions) {

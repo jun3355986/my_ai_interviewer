@@ -265,6 +265,26 @@
           AND deleted_at IS NULL
     </select>
 
+    <select id="countImportBatches" resultType="long">
+        SELECT COUNT(*)
+        FROM t_question_import_batch
+        WHERE deleted_at IS NULL
+    </select>
+
+    <select id="selectImportBatches" resultMap="QuestionImportBatchMap">
+        SELECT id, batch_no, file_name, file_url, status, total_count, success_count,
+               failed_count, error_message, imported_by,
+               started_at::timestamp AS started_at,
+               finished_at::timestamp AS finished_at,
+               created_at::timestamp AS created_at,
+               updated_at::timestamp AS updated_at,
+               deleted_at::timestamp AS deleted_at
+        FROM t_question_import_batch
+        WHERE deleted_at IS NULL
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
     <select id="selectQuestionsEligibleForVectorSync" resultMap="QuestionBankItemMap">
         SELECT
         <include refid="QuestionColumns"/>
@@ -272,6 +292,14 @@
         WHERE deleted_at IS NULL
           AND status = 1
           AND vector_sync_status IN ('PENDING', 'FAILED')
+        ORDER BY id ASC
+    </select>
+
+    <select id="selectQuestionsEligibleForVectorDelete" resultMap="QuestionBankItemMap">
+        SELECT
+        <include refid="QuestionColumns"/>
+        FROM t_question_bank
+        WHERE vector_sync_status = 'DELETE_PENDING'
         ORDER BY id ASC
     </select>
 

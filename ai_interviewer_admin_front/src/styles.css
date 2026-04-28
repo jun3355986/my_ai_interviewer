@@ -329,7 +329,8 @@ code,
 }
 
 .metric-card,
-.panel {
+.panel,
+.sub-panel {
   border: 1px solid rgba(24, 33, 31, 0.08);
   border-radius: 28px;
   background: rgba(255, 253, 246, 0.82);
@@ -356,6 +357,12 @@ code,
 .panel {
   padding: 22px;
   overflow: hidden;
+}
+
+.sub-panel {
+  margin-top: 22px;
+  padding: 18px;
+  background: rgba(247, 244, 234, 0.72);
 }
 
 .chart-panel {
@@ -502,6 +509,11 @@ td small {
   color: #996019;
 }
 
+.status.danger {
+  background: #ffe2dc;
+  color: #aa3d28;
+}
+
 .status.info {
   background: #deedf2;
   color: #23687a;
@@ -545,6 +557,18 @@ td small {
   place-items: center;
   color: #7b867f;
   background: rgba(255, 255, 255, 0.42);
+}
+
+.empty-state.compact {
+  min-height: 96px;
+}
+
+.error-text {
+  max-width: 220px;
+  color: #aa3d28;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dialog-backdrop {

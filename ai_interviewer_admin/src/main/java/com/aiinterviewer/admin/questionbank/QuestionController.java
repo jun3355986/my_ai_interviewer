@@ -8,10 +8,12 @@ import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class QuestionController {
 
     private final QuestionService questionService;
+    private final QuestionVectorSyncService questionVectorSyncService;
 
     @PostMapping
     public Result<Long> createQuestion(@RequestBody QuestionCreateRequest request) {
@@ -66,6 +69,43 @@ public class QuestionController {
     @DeleteMapping("/{questionId}")
     public Result<Void> deleteQuestion(@PathVariable Long questionId) {
         questionService.deleteQuestion(questionId);
+        questionVectorSyncService.syncPendingQuestions();
+        return Result.success();
+    }
+
+    @PatchMapping("/{questionId}/approve")
+    public Result<Void> approveQuestion(
+            @PathVariable Long questionId,
+            @RequestHeader(value = "X-User-Id", required = false) Long updatedBy) {
+        questionService.approveQuestion(questionId, updatedBy);
+        questionVectorSyncService.syncPendingQuestions();
+        return Result.success();
+    }
+
+    @PatchMapping("/{questionId}/reject")
+    public Result<Void> rejectQuestion(
+            @PathVariable Long questionId,
+            @RequestHeader(value = "X-User-Id", required = false) Long updatedBy) {
+        questionService.rejectQuestion(questionId, updatedBy);
+        questionVectorSyncService.syncPendingQuestions();
+        return Result.success();
+    }
+
+    @PatchMapping("/{questionId}/publish")
+    public Result<Void> publishQuestion(
+            @PathVariable Long questionId,
+            @RequestHeader(value = "X-User-Id", required = false) Long updatedBy) {
+        questionService.publishQuestion(questionId, updatedBy);
+        questionVectorSyncService.syncPendingQuestions();
+        return Result.success();
+    }
+
+    @PatchMapping("/{questionId}/unpublish")
+    public Result<Void> unpublishQuestion(
+            @PathVariable Long questionId,
+            @RequestHeader(value = "X-User-Id", required = false) Long updatedBy) {
+        questionService.unpublishQuestion(questionId, updatedBy);
+        questionVectorSyncService.syncPendingQuestions();
         return Result.success();
     }
 }

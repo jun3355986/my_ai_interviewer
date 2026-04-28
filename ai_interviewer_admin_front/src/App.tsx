@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { adminApi, clearSession, getToken, readProfile, saveSession } from './api';
 import type {
   AdminProfile,
@@ -9,6 +9,7 @@ import type {
   JobRow,
   PageResult,
   QuestionCreatePayload,
+  QuestionImportBatch,
   QuestionRow,
   UserRow,
 } from './types';
@@ -42,6 +43,35 @@ function statusText(value?: number | null) {
     return '已完成';
   }
   return value == null ? '-' : String(value);
+}
+
+function questionStatusText(value?: number | null) {
+  if (value === 1) {
+    return '已上架';
+  }
+  if (value === 0) {
+    return '已下架';
+  }
+  if (value === 2) {
+    return '待审核';
+  }
+  if (value === 3) {
+    return '已驳回';
+  }
+  return value == null ? '-' : String(value);
+}
+
+function questionStatusTone(value?: number | null) {
+  if (value === 1) {
+    return 'good';
+  }
+  if (value === 2) {
+    return 'warn';
+  }
+  if (value === 3) {
+    return 'danger';
+  }
+  return 'muted';
 }
 
 function statusTone(value?: number | null) {
@@ -79,6 +109,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<ViewKey>('dashboard');
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [pageData, setPageData] = useState<PageResult<unknown> | null>(null);
+  const [importBatches, setImportBatches] = useState<PageResult<QuestionImportBatch> | null>(null);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -87,6 +118,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [jobDialogOpen, setJobDialogOpen] = useState(false);
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isLoggedIn = Boolean(getToken());
 
@@ -113,8 +145,19 @@ export default function App() {
       if (activeView === 'dashboard') {
         setOverview(await adminApi.dashboard());
         setPageData(null);
+        setImportBatches(null);
       } else {
-        setPageData(await loadPage(activeView));
+        if (activeView === 'questions') {
+          const [questions, imports] = await Promise.all([
+            loadPage(activeView),
+            adminApi.questionImports({ current: 1, size: 5 }),
+          ]);
+          setPageData(questions);
+          setImportBatches(imports);
+        } else {
+          setPageData(await loadPage(activeView));
+          setImportBatches(null);
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '加载失败';
@@ -187,6 +230,43 @@ export default function App() {
     setReloadKey((value) => value + 1);
   }
 
+  async function importQuestions(file: File | null) {
+    if (!file) {
+      return;
+    }
+    await adminApi.importQuestions(file);
+    window.alert('题库文件已导入，默认进入待审核状态');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    setReloadKey((value) => value + 1);
+  }
+
+  async function runQuestionAction(row: QuestionRow, action: 'approve' | 'reject' | 'publish' | 'unpublish' | 'delete') {
+    const labels = {
+      approve: '审核通过',
+      reject: '驳回',
+      publish: '上架',
+      unpublish: '下架',
+      delete: '删除',
+    };
+    if (!window.confirm(`确认${labels[action]}题目 #${row.id}？`)) {
+      return;
+    }
+    if (action === 'approve') {
+      await adminApi.approveQuestion(row.id);
+    } else if (action === 'reject') {
+      await adminApi.rejectQuestion(row.id);
+    } else if (action === 'publish') {
+      await adminApi.publishQuestion(row.id);
+    } else if (action === 'unpublish') {
+      await adminApi.unpublishQuestion(row.id);
+    } else {
+      await adminApi.deleteQuestion(row.id);
+    }
+    setReloadKey((value) => value + 1);
+  }
+
   if (!isLoggedIn) {
     return <LoginScreen onLogin={handleLogin} />;
   }
@@ -251,9 +331,20 @@ export default function App() {
                 {activeView !== 'audit' && (
                   <select value={status} onChange={(event) => setStatus(event.target.value)}>
                     <option value="">全部状态</option>
-                    <option value="1">启用/进行中</option>
-                    <option value="0">停用/关闭</option>
-                    <option value="2">已完成</option>
+                    {activeView === 'questions' ? (
+                      <>
+                        <option value="2">待审核</option>
+                        <option value="1">已上架</option>
+                        <option value="0">已下架</option>
+                        <option value="3">已驳回</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="1">启用/进行中</option>
+                        <option value="0">停用/关闭</option>
+                        <option value="2">已完成</option>
+                      </>
+                    )}
                   </select>
                 )}
                 <button type="submit">查询</button>
@@ -263,6 +354,16 @@ export default function App() {
                 {activeView === 'questions' && (
                   <>
                     <button onClick={() => setQuestionDialogOpen(true)}>新建题目</button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv,.pdf,.md,.docx,.txt"
+                      hidden
+                      onChange={(event) => void importQuestions(event.target.files?.[0] || null)}
+                    />
+                    <button className="secondary" onClick={() => fileInputRef.current?.click()}>
+                      导入题库
+                    </button>
                     <button className="secondary" onClick={syncQuestions}>
                       向量同步
                     </button>
@@ -277,7 +378,9 @@ export default function App() {
               loading={loading}
               onDisableUser={disableUser}
               onResetPassword={resetPassword}
+              onQuestionAction={runQuestionAction}
             />
+            {activeView === 'questions' && <QuestionImportBatchPanel pageData={importBatches} />}
             <Pagination pageData={pageData} onPageChange={setCurrentPage} />
           </section>
         )}
@@ -427,12 +530,14 @@ function DataTable({
   loading,
   onDisableUser,
   onResetPassword,
+  onQuestionAction,
 }: {
   view: Exclude<ViewKey, 'dashboard'>;
   pageData: PageResult<unknown> | null;
   loading: boolean;
   onDisableUser: (user: UserRow) => void;
   onResetPassword: (user: UserRow) => void;
+  onQuestionAction: (question: QuestionRow, action: 'approve' | 'reject' | 'publish' | 'unpublish' | 'delete') => void;
 }) {
   if (loading && !pageData) {
     return <div className="loading-block">正在加载数据...</div>;
@@ -558,8 +663,10 @@ function DataTable({
             <th>类型</th>
             <th>难度</th>
             <th>技能域</th>
+            <th>状态</th>
             <th>向量状态</th>
             <th>更新时间</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -571,9 +678,20 @@ function DataTable({
               <td>{row.difficulty || '-'}</td>
               <td>{row.skillArea || '-'}</td>
               <td>
+                <span className={`status ${questionStatusTone(row.status)}`}>{questionStatusText(row.status)}</span>
+              </td>
+              <td>
                 <span className="status info">{row.vectorSyncStatus || '-'}</span>
+                {row.vectorSyncError && <small className="error-text">{row.vectorSyncError}</small>}
               </td>
               <td>{formatDate(row.updatedAt)}</td>
+              <td className="table-actions">
+                {row.status === 2 && <button onClick={() => onQuestionAction(row, 'approve')}>通过</button>}
+                {row.status === 2 && <button onClick={() => onQuestionAction(row, 'reject')}>驳回</button>}
+                {(row.status === 0 || row.status === 3) && <button onClick={() => onQuestionAction(row, 'publish')}>上架</button>}
+                {row.status === 1 && <button onClick={() => onQuestionAction(row, 'unpublish')}>下架</button>}
+                <button onClick={() => onQuestionAction(row, 'delete')}>删除</button>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -610,6 +728,53 @@ function DataTable({
         ))}
       </tbody>
     </table>
+  );
+}
+
+function QuestionImportBatchPanel({ pageData }: { pageData: PageResult<QuestionImportBatch> | null }) {
+  const records = pageData?.records || [];
+  return (
+    <section className="sub-panel">
+      <div className="panel-title">
+        <p>Imports</p>
+        <h2>最近导入批次</h2>
+      </div>
+      {records.length === 0 ? (
+        <div className="empty-state compact">暂无导入批次。</div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>批次号</th>
+              <th>文件</th>
+              <th>状态</th>
+              <th>成功/失败</th>
+              <th>错误</th>
+              <th>完成时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((row) => (
+              <tr key={row.id}>
+                <td className="mono-cell">{row.batchNo.slice(0, 14)}...</td>
+                <td>{row.fileName}</td>
+                <td>
+                  <span className={`status ${row.status === 'SUCCESS' ? 'good' : row.status === 'PROCESSING' ? 'info' : 'warn'}`}>
+                    {row.status}
+                  </span>
+                </td>
+                <td>
+                  {row.successCount}/{row.failedCount}
+                  <small>共 {row.totalCount} 道</small>
+                </td>
+                <td className="wide-cell">{row.errorMessage || '-'}</td>
+                <td>{formatDate(row.finishedAt || row.updatedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 

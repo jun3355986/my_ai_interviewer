@@ -60,7 +60,15 @@ public interface QuestionMapper {
 
     QuestionImportBatch selectImportBatchById(@Param("batchId") Long batchId);
 
+    Long countImportBatches();
+
+    List<QuestionImportBatch> selectImportBatches(
+            @Param("limit") long limit,
+            @Param("offset") long offset);
+
     List<QuestionBankItem> selectQuestionsEligibleForVectorSync();
+
+    List<QuestionBankItem> selectQuestionsEligibleForVectorDelete();
 
     int updateQuestionVectorSyncStatus(
             @Param("questionId") Long questionId,

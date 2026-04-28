@@ -1,8 +1,10 @@
 package com.aiinterviewer.admin.questionbank;
 
 import com.aiinterviewer.admin.common.exception.AdminBusinessException;
+import com.aiinterviewer.admin.common.model.PageResult;
 import com.aiinterviewer.admin.questionbank.dto.QuestionCreateRequest;
 import com.aiinterviewer.admin.questionbank.dto.QuestionImportRow;
+import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
 import com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch;
 import com.aiinterviewer.admin.questionbank.mapper.QuestionMapper;
 import java.io.ByteArrayInputStream;
@@ -16,10 +18,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.TransactionDefinition;
@@ -44,10 +53,67 @@ public class QuestionImportService {
     private static final int MAX_DATA_ROWS = 5000;
     private static final int MAX_ERROR_MESSAGE_LENGTH = 8000;
     private static final String ERROR_TRUNCATION_MARKER = "...(错误信息已截断)";
+    private static final Pattern FIELD_PATTERN = Pattern.compile("^\\s*([\\p{L}A-Za-z0-9_ ]{1,24})\\s*[:：]\\s*(.*)\\s*$");
+    private static final Pattern QUESTION_BLOCK_SPLITTER = Pattern.compile("\\n\\s*\\n+");
 
     private final QuestionMapper questionMapper;
     private final QuestionService questionService;
     private final ObjectProvider<PlatformTransactionManager> transactionManagerProvider;
+
+    public QuestionImportBatch importQuestionFile(String fileName, InputStream inputStream, Long importedBy) {
+        if (inputStream == null) {
+            throw new AdminBusinessException(400, "导入文件不能为空");
+        }
+        String suffix = fileSuffix(fileName);
+        if ("csv".equals(suffix)) {
+            return importCsv(fileName, inputStream, importedBy);
+        }
+        QuestionImportBatch batch = createBatch(fileName, importedBy);
+        List<String> errors = new ArrayList<>();
+        int totalCount = 0;
+        int successCount = 0;
+        try {
+            byte[] content = readUploadBytes(inputStream, "导入文件");
+            String text = extractText(fileName, suffix, content);
+            TextParseResult parseResult = parseQuestionText(text);
+            totalCount = parseResult.totalCount();
+            errors.addAll(parseResult.errors());
+            Set<String> seenQuestionTexts = new LinkedHashSet<>();
+            for (QuestionImportRow row : parseResult.rows()) {
+                String normalizedQuestionText = normalizeDuplicateKey(row.getQuestionText());
+                if (!StringUtils.hasText(normalizedQuestionText)) {
+                    errors.add(rowError(row.getRowNumber(), "题目内容不能为空"));
+                    continue;
+                }
+                if (!seenQuestionTexts.add(normalizedQuestionText)) {
+                    errors.add(rowError(row.getRowNumber(), "重复题目内容"));
+                    continue;
+                }
+                String rowError = importRow(batch.getId(), row, importedBy);
+                if (rowError == null) {
+                    successCount++;
+                } else {
+                    errors.add(rowError);
+                }
+            }
+        } catch (AdminBusinessException ex) {
+            errors.add(ex.getMessage());
+        }
+
+        int failedCount = totalCount - successCount;
+        String status = resolveStatus(totalCount, successCount, failedCount, errors);
+        String errorMessage = errors.isEmpty() ? null : truncateErrorMessage(String.join("; ", errors));
+        questionMapper.finishImportBatch(batch.getId(), status, totalCount, successCount, failedCount, errorMessage);
+        return questionMapper.selectImportBatchById(batch.getId());
+    }
+
+    public PageResult<QuestionImportBatch> listImportBatches(Long current, Long size) {
+        long safeCurrent = current == null || current < 1 ? 1L : Math.min(current, 1_000_000L);
+        long safeSize = size == null || size < 1 ? 20L : Math.min(size, 100L);
+        Long total = questionMapper.countImportBatches();
+        List<QuestionImportBatch> records = questionMapper.selectImportBatches(safeSize, (safeCurrent - 1) * safeSize);
+        return PageResult.of(safeCurrent, safeSize, total == null ? 0L : total, records);
+    }
 
     public QuestionImportBatch importCsv(String fileName, InputStream inputStream, Long importedBy) {
         if (inputStream == null) {
@@ -60,7 +126,7 @@ public class QuestionImportService {
         int successCount = 0;
 
         try {
-            CsvParseResult parseResult = parseCsv(readCsvBytes(inputStream));
+            CsvParseResult parseResult = parseCsv(readUploadBytes(inputStream, "CSV 文件"));
             rows = parseResult.rows();
             errors.addAll(parseResult.errors());
             totalCount = parseResult.totalCount();
@@ -109,16 +175,138 @@ public class QuestionImportService {
         return batch;
     }
 
-    private byte[] readCsvBytes(InputStream inputStream) {
+    private byte[] readUploadBytes(InputStream inputStream, String label) {
         try {
             byte[] content = inputStream.readNBytes(MAX_UPLOAD_BYTES + 1);
             if (content.length > MAX_UPLOAD_BYTES) {
-                throw new AdminBusinessException(400, "CSV 文件不能超过 " + (MAX_UPLOAD_BYTES / 1024 / 1024) + "MB");
+                throw new AdminBusinessException(400, label + "不能超过 " + (MAX_UPLOAD_BYTES / 1024 / 1024) + "MB");
             }
             return content;
         } catch (IOException ex) {
-            throw new AdminBusinessException(400, "CSV 文件读取失败");
+            throw new AdminBusinessException(400, label + "读取失败");
         }
+    }
+
+    private String extractText(String fileName, String suffix, byte[] content) {
+        try {
+            return switch (suffix) {
+                case "md", "txt" -> stripUtf8Bom(new String(content, StandardCharsets.UTF_8));
+                case "pdf" -> extractPdfText(content);
+                case "docx" -> extractDocxText(content);
+                default -> throw new AdminBusinessException(400, "不支持的题库文件格式: " + fileSuffixForMessage(fileName));
+            };
+        } catch (IOException ex) {
+            throw new AdminBusinessException(400, "题库文件解析失败");
+        }
+    }
+
+    private String extractPdfText(byte[] content) throws IOException {
+        try (PDDocument document = Loader.loadPDF(content)) {
+            return new PDFTextStripper().getText(document);
+        }
+    }
+
+    private String extractDocxText(byte[] content) throws IOException {
+        try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(content))) {
+            List<String> paragraphs = new ArrayList<>();
+            for (XWPFParagraph paragraph : document.getParagraphs()) {
+                if (StringUtils.hasText(paragraph.getText())) {
+                    paragraphs.add(paragraph.getText());
+                }
+            }
+            return String.join("\n", paragraphs);
+        }
+    }
+
+    private TextParseResult parseQuestionText(String rawText) {
+        if (!StringUtils.hasText(rawText)) {
+            return new TextParseResult(0, List.of(), List.of("题库文件没有可解析文本"));
+        }
+        List<QuestionImportRow> rows = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        int totalCount = 0;
+        String[] blocks = QUESTION_BLOCK_SPLITTER.split(rawText.trim());
+        for (String block : blocks) {
+            if (!StringUtils.hasText(block) || !looksLikeQuestionBlock(block)) {
+                continue;
+            }
+            totalCount++;
+            if (totalCount > MAX_DATA_ROWS) {
+                throw new AdminBusinessException(400, "题库文件题目不能超过 " + MAX_DATA_ROWS + " 道");
+            }
+            QuestionImportRow row = parseQuestionBlock(totalCount, block, errors);
+            if (row != null) {
+                rows.add(row);
+            }
+        }
+        if (totalCount == 0) {
+            errors.add("题库文件没有识别到题目块，请使用“题目：/问题：/问：”标记题目");
+        }
+        return new TextParseResult(totalCount, rows, errors);
+    }
+
+    private boolean looksLikeQuestionBlock(String block) {
+        return block.lines().anyMatch(line -> {
+            String normalized = normalizeFieldName(line.split("[:：]", 2)[0]);
+            return isQuestionField(normalized);
+        });
+    }
+
+    private QuestionImportRow parseQuestionBlock(int rowNumber, String block, List<String> errors) {
+        QuestionImportRow row = new QuestionImportRow();
+        row.setRowNumber(rowNumber);
+        row.setQuestionType("TECHNICAL");
+        row.setDifficulty("MEDIUM");
+        row.setStatus(QuestionBankItem.STATUS_PENDING_REVIEW);
+        List<String> answerLines = new ArrayList<>();
+        for (String rawLine : block.split("\\R")) {
+            String line = rawLine == null ? "" : rawLine.trim();
+            if (!StringUtils.hasText(line)) {
+                continue;
+            }
+            Matcher matcher = FIELD_PATTERN.matcher(line.replaceFirst("^[-*#>\\s]+", ""));
+            if (!matcher.matches()) {
+                if (!answerLines.isEmpty()) {
+                    answerLines.add(line);
+                }
+                continue;
+            }
+            String key = normalizeFieldName(matcher.group(1));
+            String value = trimToNull(matcher.group(2));
+            if (isQuestionField(key)) {
+                row.setQuestionText(value);
+            } else if (isAnswerField(key)) {
+                if (StringUtils.hasText(value)) {
+                    answerLines.add(value);
+                }
+            } else if (isTypeField(key)) {
+                row.setQuestionType(value);
+            } else if (isDifficultyField(key)) {
+                row.setDifficulty(value);
+            } else if (isSkillAreaField(key)) {
+                row.setSkillArea(value);
+            } else if (isTagField(key)) {
+                row.setTags(parseTags(value));
+            }
+        }
+        if (!answerLines.isEmpty()) {
+            row.setAnswerReference(String.join("\n", answerLines));
+        }
+        List<String> rowErrors = new ArrayList<>();
+        if (!StringUtils.hasText(row.getQuestionText())) {
+            rowErrors.add(rowError(rowNumber, "题目内容不能为空"));
+        }
+        if (!StringUtils.hasText(row.getQuestionType())) {
+            rowErrors.add(rowError(rowNumber, "题目类型不能为空"));
+        }
+        if (!StringUtils.hasText(row.getDifficulty())) {
+            rowErrors.add(rowError(rowNumber, "难度不能为空"));
+        }
+        if (!rowErrors.isEmpty()) {
+            errors.addAll(rowErrors);
+            return null;
+        }
+        return row;
     }
 
     private CsvParseResult parseCsv(byte[] content) {
@@ -242,7 +430,7 @@ public class QuestionImportService {
             return List.of();
         }
         Set<String> tags = new LinkedHashSet<>();
-        for (String tag : rawTags.split("[;|]")) {
+        for (String tag : rawTags.split("[;|,，、]")) {
             if (StringUtils.hasText(tag)) {
                 tags.add(tag.trim());
             }
@@ -299,6 +487,46 @@ public class QuestionImportService {
         return value;
     }
 
+    private String fileSuffix(String fileName) {
+        if (!StringUtils.hasText(fileName) || !fileName.contains(".")) {
+            return "";
+        }
+        return fileName.substring(fileName.lastIndexOf('.') + 1).trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String fileSuffixForMessage(String fileName) {
+        String suffix = fileSuffix(fileName);
+        return StringUtils.hasText(suffix) ? "." + suffix : "空扩展名";
+    }
+
+    private String normalizeFieldName(String fieldName) {
+        return fieldName == null ? "" : fieldName.trim().replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isQuestionField(String key) {
+        return Set.of("题目", "问题", "问", "q", "question", "questiontext").contains(key);
+    }
+
+    private boolean isAnswerField(String key) {
+        return Set.of("答案", "答", "参考答案", "answer", "answerreference").contains(key);
+    }
+
+    private boolean isTypeField(String key) {
+        return Set.of("题型", "类型", "questiontype", "type").contains(key);
+    }
+
+    private boolean isDifficultyField(String key) {
+        return Set.of("难度", "difficulty").contains(key);
+    }
+
+    private boolean isSkillAreaField(String key) {
+        return Set.of("技能领域", "技能域", "知识点", "skillarea").contains(key);
+    }
+
+    private boolean isTagField(String key) {
+        return Set.of("标签", "tags", "tag").contains(key);
+    }
+
     private String truncateErrorMessage(String errorMessage) {
         if (errorMessage.length() <= MAX_ERROR_MESSAGE_LENGTH) {
             return errorMessage;
@@ -312,5 +540,8 @@ public class QuestionImportService {
     }
 
     private record CsvParseResult(int totalCount, List<QuestionImportRow> rows, List<String> errors) {
+    }
+
+    private record TextParseResult(int totalCount, List<QuestionImportRow> rows, List<String> errors) {
     }
 }

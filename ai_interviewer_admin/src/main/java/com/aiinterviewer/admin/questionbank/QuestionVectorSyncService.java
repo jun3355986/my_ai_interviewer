@@ -21,6 +21,7 @@ public class QuestionVectorSyncService {
 
     private static final String STATUS_SYNCED = "SYNCED";
     private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_DELETED = "DELETED";
     private static final int MAX_ERROR_LENGTH = 4000;
 
     private final QuestionMapper questionMapper;
@@ -30,10 +31,21 @@ public class QuestionVectorSyncService {
     public SyncResult syncPendingQuestions() {
         List<QuestionBankItem> questions = questionMapper.selectQuestionsEligibleForVectorSync();
         hydrateTags(questions);
-        if (questions.isEmpty()) {
+        List<QuestionBankItem> deleteQuestions = questionMapper.selectQuestionsEligibleForVectorDelete();
+        if (questions.isEmpty() && deleteQuestions.isEmpty()) {
             return SyncResult.success(0, 0);
         }
 
+        SyncResult upsertResult = questions.isEmpty()
+                ? SyncResult.success(0, 0)
+                : syncUpsertQuestions(questions);
+        SyncResult deleteResult = deleteQuestions.isEmpty()
+                ? SyncResult.success(0, 0)
+                : syncDeleteQuestions(deleteQuestions);
+        return mergeResults(upsertResult, deleteResult);
+    }
+
+    private SyncResult syncUpsertQuestions(List<QuestionBankItem> questions) {
         try {
             PythonQuestionBankClient.SyncResponse response = pythonQuestionBankClient.syncQuestions(questions);
             return applyResponse(questions, response);
@@ -45,6 +57,43 @@ public class QuestionVectorSyncService {
             }
             return result;
         }
+    }
+
+    private SyncResult syncDeleteQuestions(List<QuestionBankItem> questions) {
+        try {
+            PythonQuestionBankClient.DeleteResponse response = pythonQuestionBankClient.deleteQuestions(questions);
+            SyncResult result = SyncResult.of(
+                    questions.size(),
+                    response.successCount(),
+                    response.failedCount(),
+                    response.errorMessage());
+            if ("SUCCESS".equals(response.status())) {
+                for (QuestionBankItem question : questions) {
+                    markDeleted(question.getId(), result);
+                }
+            } else {
+                String errorMessage = fallbackDeleteErrorMessage(response);
+                for (QuestionBankItem question : questions) {
+                    markDeleteFailed(question.getId(), errorMessage, result);
+                }
+            }
+            return result;
+        } catch (Exception ex) {
+            String errorMessage = truncateError(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+            SyncResult result = SyncResult.failed(questions.size(), errorMessage);
+            for (QuestionBankItem question : questions) {
+                markDeleteFailed(question.getId(), errorMessage, result);
+            }
+            return result;
+        }
+    }
+
+    private SyncResult mergeResults(SyncResult first, SyncResult second) {
+        int totalCount = first.getTotalCount() + second.getTotalCount();
+        int successCount = first.getSuccessCount() + second.getSuccessCount();
+        int failedCount = first.getFailedCount() + second.getFailedCount();
+        String errorMessage = first.getErrorMessage() != null ? first.getErrorMessage() : second.getErrorMessage();
+        return SyncResult.of(totalCount, successCount, failedCount, errorMessage);
     }
 
     private SyncResult applyResponse(
@@ -164,6 +213,26 @@ public class QuestionVectorSyncService {
         questionMapper.upsertQuestionVectorSyncRecord(record);
     }
 
+    private void markDeleted(Long questionId, SyncResult syncResult) {
+        questionMapper.updateQuestionVectorSyncStatus(questionId, STATUS_DELETED, null);
+        QuestionVectorSyncRecord record = new QuestionVectorSyncRecord();
+        record.setQuestionId(questionId);
+        record.setSyncStatus(STATUS_DELETED);
+        applyCounts(record, syncResult);
+        questionMapper.upsertQuestionVectorSyncRecord(record);
+    }
+
+    private void markDeleteFailed(Long questionId, String errorMessage, SyncResult syncResult) {
+        String safeErrorMessage = truncateError(errorMessage);
+        questionMapper.updateQuestionVectorSyncStatus(questionId, QuestionBankItem.VECTOR_SYNC_DELETE_PENDING, safeErrorMessage);
+        QuestionVectorSyncRecord record = new QuestionVectorSyncRecord();
+        record.setQuestionId(questionId);
+        record.setSyncStatus(QuestionBankItem.VECTOR_SYNC_DELETE_PENDING);
+        record.setErrorMessage(safeErrorMessage);
+        applyCounts(record, syncResult);
+        questionMapper.upsertQuestionVectorSyncRecord(record);
+    }
+
     private void applyCounts(QuestionVectorSyncRecord record, SyncResult syncResult) {
         record.setTotalCount(syncResult.getTotalCount());
         record.setSuccessCount(syncResult.getSuccessCount());
@@ -182,6 +251,12 @@ public class QuestionVectorSyncService {
     private String fallbackErrorMessage(PythonQuestionBankClient.SyncResponse response) {
         return truncateError(response.errorMessage() == null || response.errorMessage().isBlank()
                 ? "Python question bank sync failed"
+                : response.errorMessage());
+    }
+
+    private String fallbackDeleteErrorMessage(PythonQuestionBankClient.DeleteResponse response) {
+        return truncateError(response.errorMessage() == null || response.errorMessage().isBlank()
+                ? "Python question bank delete failed"
                 : response.errorMessage());
     }
 

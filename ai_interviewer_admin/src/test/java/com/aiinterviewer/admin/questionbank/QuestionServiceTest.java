@@ -146,6 +146,44 @@ class QuestionServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void importedPendingQuestionCanBeApprovedRejectedPublishedAndUnpublished() {
+        QuestionCreateRequest request = createRequest();
+        request.setStatus(QuestionBankItem.STATUS_PENDING_REVIEW);
+        Long questionId = questionService.createQuestion(request);
+
+        QuestionBankItem pending = questionService.getQuestion(questionId);
+        assertThat(pending.getStatus()).isEqualTo(QuestionBankItem.STATUS_PENDING_REVIEW);
+        assertThat(pending.isEligibleForVectorSync()).isFalse();
+
+        questionService.approveQuestion(questionId, 31L);
+        QuestionBankItem approved = questionService.getQuestion(questionId);
+        assertThat(approved.getStatus()).isEqualTo(QuestionBankItem.STATUS_ENABLED);
+        assertThat(approved.getUpdatedBy()).isEqualTo(31L);
+        assertThat(approved.getVectorSyncStatus()).isEqualTo("PENDING");
+        assertThat(approved.isEligibleForVectorSync()).isTrue();
+
+        questionService.unpublishQuestion(questionId, 32L);
+        QuestionBankItem unpublished = questionService.getQuestion(questionId);
+        assertThat(unpublished.getStatus()).isEqualTo(QuestionBankItem.STATUS_DISABLED);
+        assertThat(unpublished.getUpdatedBy()).isEqualTo(32L);
+        assertThat(unpublished.getVectorSyncStatus()).isEqualTo("DELETE_PENDING");
+        assertThat(unpublished.isEligibleForVectorSync()).isFalse();
+
+        questionService.publishQuestion(questionId, 33L);
+        QuestionBankItem republished = questionService.getQuestion(questionId);
+        assertThat(republished.getStatus()).isEqualTo(QuestionBankItem.STATUS_ENABLED);
+        assertThat(republished.getUpdatedBy()).isEqualTo(33L);
+        assertThat(republished.getVectorSyncStatus()).isEqualTo("PENDING");
+
+        questionService.rejectQuestion(questionId, 34L);
+        QuestionBankItem rejected = questionService.getQuestion(questionId);
+        assertThat(rejected.getStatus()).isEqualTo(QuestionBankItem.STATUS_REJECTED);
+        assertThat(rejected.getUpdatedBy()).isEqualTo(34L);
+        assertThat(rejected.getVectorSyncStatus()).isEqualTo("DELETE_PENDING");
+        assertThat(rejected.isEligibleForVectorSync()).isFalse();
+    }
+
+    @Test
     void syncedQuestionUpdateInvalidatesVectorSyncAsPendingWhenEnabled() {
         Long questionId = questionService.createQuestion(createRequest());
         jdbcTemplate.update(

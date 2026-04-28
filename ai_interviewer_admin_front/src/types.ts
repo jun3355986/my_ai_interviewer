@@ -93,7 +93,26 @@ export interface QuestionRow {
   status?: number | null;
   vectorSyncStatus?: string | null;
   vectorSyncError?: string | null;
+  sourceType?: string | null;
+  sourceBatchId?: number | null;
   tags?: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface QuestionImportBatch {
+  id: number;
+  batchNo: string;
+  fileName: string;
+  fileUrl?: string | null;
+  status: string;
+  totalCount: number;
+  successCount: number;
+  failedCount: number;
+  errorMessage?: string | null;
+  importedBy?: number | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
