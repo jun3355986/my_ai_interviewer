@@ -360,6 +360,7 @@ services:
       NACOS_ENABLED: "true"
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-ai-interviewer-admin-local-secret-change-me-please}
       PYTHON_AI_QUESTION_BANK_SYNC_URL: http://python-ai:8000/admin/question-bank/sync
+      PYTHON_AI_QUESTION_BANK_DELETE_URL: http://python-ai:8000/admin/question-bank/delete
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
     depends_on:
