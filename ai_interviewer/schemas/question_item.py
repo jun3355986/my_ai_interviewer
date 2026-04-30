@@ -54,14 +54,15 @@ class QuestionItem(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_legacy_text_keys(cls, data: Any) -> Any:
-        if not isinstance(data, dict) or data.get("text"):
+        if not isinstance(data, dict):
             return data
 
         normalized = dict(data)
-        for key in ("question_text", "content"):
-            if normalized.get(key):
-                normalized["text"] = normalized[key]
-                break
+        for key in ("text", "question_text", "content"):
+            value = normalized.get(key)
+            if cls._empty_to_none(value):
+                normalized["text"] = value
+                return normalized
         return normalized
 
     @classmethod
@@ -82,7 +83,7 @@ class QuestionItem(BaseModel):
         metadata = document.metadata or {}
         return cls(
             id=cls._optional_str(metadata.get("question_id")),
-            text=cls._optional_str(metadata.get("question_text")) or cls._first_non_empty_line(document.page_content),
+            text=cls._empty_to_none(metadata.get("question_text")) or cls._first_non_empty_line(document.page_content),
             question_type=cls._optional_str(metadata.get("question_type")),
             difficulty=cls._optional_str(metadata.get("difficulty")),
             skill_area=cls._optional_str(metadata.get("skill_area")),
@@ -98,7 +99,7 @@ class QuestionItem(BaseModel):
             "question_type": self.question_type,
             "difficulty": self.difficulty,
             "skill_area": self.skill_area,
-            "tags": self.tags,
+            "tags": list(self.tags),
             "media": [media.model_dump() for media in self.media],
             "answer_reference": self.answer_reference,
         }
@@ -115,6 +116,13 @@ class QuestionItem(BaseModel):
         if value is None:
             return None
         return str(value)
+
+    @staticmethod
+    def _empty_to_none(value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
     @staticmethod
     def _parse_tags(value: Any) -> list[str]:

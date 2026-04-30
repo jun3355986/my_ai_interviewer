@@ -100,6 +100,17 @@ def test_question_item_from_legacy_dict_accepts_content_keys_and_structured_fiel
     assert item.media[0].url == "https://example.com/figure.png"
 
 
+def test_question_item_from_legacy_dict_uses_content_when_text_is_blank():
+    item = QuestionItem.from_legacy(
+        {
+            "text": "   ",
+            "content": "fallback question",
+        }
+    )
+
+    assert item.text == "fallback question"
+
+
 def test_question_item_from_document_uses_first_non_empty_line_and_ignores_invalid_media_json_shape():
     document = Document(
         page_content="\n\n  第一行题目  \n第二行补充",
@@ -110,3 +121,24 @@ def test_question_item_from_document_uses_first_non_empty_line_and_ignores_inval
 
     assert item.text == "第一行题目"
     assert item.media == []
+
+
+def test_question_item_from_document_uses_page_content_when_question_text_is_blank():
+    document = Document(
+        page_content="\n\n  fallback question  \n第二行补充",
+        metadata={"question_text": "   "},
+    )
+
+    item = QuestionItem.from_document(document)
+
+    assert item.text == "fallback question"
+
+
+def test_to_public_dict_does_not_expose_internal_tags_list():
+    item = QuestionItem(text="请解释 Redis Lua 限流脚本关系。", tags=["Redis"])
+
+    payload = item.to_public_dict()
+    payload["tags"].append("Lua")
+
+    assert item.tags == ["Redis"]
+    assert payload["tags"] == ["Redis", "Lua"]
