@@ -1,0 +1,107 @@
+
+# BEGIN setting_my_dev skills
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/brainstorming/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/dispatching-parallel-agents/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/executing-plans/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/finishing-a-development-branch/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/receiving-code-review/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/requesting-code-review/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/subagent-driven-development/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/systematic-debugging/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/test-driven-development/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/using-git-worktrees/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/using-superpowers/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/verification-before-completion/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/writing-plans/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/writing-skills/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/office-hours/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/plan-ceo-review/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/review/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/cso/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/document-release/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/learn/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/qa/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/qa-only/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/browse/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/open-gstack-browser/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/setup-browser-cookies/SKILL.md"
+enabled = true
+
+# END setting_my_dev skills
+
+[mcp_servers.chrome-devtools]
+command = "npx"
+args = ["-y", "chrome-devtools-mcp@latest"]

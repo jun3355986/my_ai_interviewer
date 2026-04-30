@@ -6,8 +6,6 @@
 .vscode/
 
 # Local agent/tooling state
-.claude/
-.codex/
 .my-dev-setup-backups/
 .sisyphus/
 .tools/
