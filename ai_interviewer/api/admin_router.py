@@ -3,6 +3,7 @@ from typing import Any, List, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from schemas.question_item import QuestionMedia
 from services.question_bank import QuestionBank
 
 
@@ -18,6 +19,7 @@ class AdminQuestionSyncItem(BaseModel):
     difficulty: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     skill_area: Optional[str] = Field(default=None, alias="skill_area")
+    media: List[QuestionMedia] = Field(default_factory=list)
 
 
 class AdminQuestionSyncRequest(BaseModel):

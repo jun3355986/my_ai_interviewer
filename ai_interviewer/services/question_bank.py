@@ -1,6 +1,7 @@
 """
 问题库管理服务：导入、拆分、embedding、存储到向量数据库
 """
+import json
 import os
 import re
 from collections import defaultdict
@@ -13,6 +14,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 from core.embeddings import get_embeddings
+from schemas.question_item import QuestionItem, QuestionMedia
 
 
 class QuestionBank:
@@ -121,6 +123,22 @@ class QuestionBank:
             question_types=question_types or [],
             k=k,
         )
+
+    def search_question_items(
+        self,
+        query: str,
+        job_requirements: Optional[str] = None,
+        question_types: Optional[List[str]] = None,
+        k: int = 10,
+    ) -> List[QuestionItem]:
+        """检索结构化题目，兼容保留 search_questions 的 Document 返回。"""
+        documents = self.search_questions(
+            query=query,
+            job_requirements=job_requirements,
+            question_types=question_types,
+            k=k,
+        )
+        return [QuestionItem.from_document(document) for document in documents]
     
     def get_question_count(self) -> int:
         """获取问题库中的问题总数"""
@@ -145,8 +163,17 @@ class QuestionBank:
             tags = question.get("tags") or []
             if not isinstance(tags, list):
                 tags = []
+            media_items = [
+                item if isinstance(item, QuestionMedia) else QuestionMedia.model_validate(item)
+                for item in question.get("media") or []
+            ]
 
             content_parts = [question_text]
+            for media in media_items:
+                if media.caption:
+                    content_parts.append(f"图注：{media.caption}")
+                if media.alt:
+                    content_parts.append(f"图片说明：{media.alt}")
             if answer_reference:
                 content_parts.append(f"参考答案：{answer_reference}")
             if question_type:
@@ -165,10 +192,16 @@ class QuestionBank:
                     metadata={
                         "source": "admin-question-bank",
                         "question_id": str(question_id),
+                        "question_text": question_text,
                         "question_type": question_type,
                         "difficulty": difficulty,
                         "skill_area": skill_area,
                         "tags": ",".join(str(tag) for tag in tags),
+                        "answer_reference": answer_reference,
+                        "media_json": json.dumps(
+                            [media.model_dump() for media in media_items],
+                            ensure_ascii=False,
+                        ),
                     },
                 )
             )
