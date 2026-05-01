@@ -63,6 +63,25 @@ def test_question_item_from_document_parses_media_json_metadata():
     assert item.media[0].url == "https://example.com/figure.png"
 
 
+def test_question_item_from_document_skips_invalid_media_items():
+    document = Document(
+        page_content="请结合下图说明脚本关系。",
+        metadata={
+            "media_json": (
+                "["
+                '{"type":"image","url":"ftp://example.com/bad.png","caption":"坏图"},'
+                '{"type":"image","url":"https://example.com/good.png","caption":"好图"}'
+                "]"
+            )
+        },
+    )
+
+    item = QuestionItem.from_document(document)
+
+    assert len(item.media) == 1
+    assert item.media[0].url == "https://example.com/good.png"
+
+
 def test_question_media_rejects_non_http_url():
     with pytest.raises(ValueError):
         QuestionMedia(url="ftp://example.com/figure.png")

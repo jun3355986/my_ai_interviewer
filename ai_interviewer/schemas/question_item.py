@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from langchain_core.documents import Document
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 
 class QuestionMedia(BaseModel):
@@ -144,7 +144,15 @@ class QuestionItem(BaseModel):
             return []
         if not isinstance(media_items, list):
             return []
-        return [QuestionMedia.model_validate(item) for item in media_items if isinstance(item, dict)]
+        media: list[QuestionMedia] = []
+        for item in media_items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                media.append(QuestionMedia.model_validate(item))
+            except ValidationError:
+                continue
+        return media
 
     @staticmethod
     def _first_non_empty_line(value: str) -> str:

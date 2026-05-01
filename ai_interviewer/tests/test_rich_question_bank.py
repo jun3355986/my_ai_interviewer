@@ -90,3 +90,34 @@ def test_search_question_items_returns_structured_media(monkeypatch):
     assert items[0].id == "123"
     assert items[0].text == "请结合下图说明两个 Lua 脚本关系。"
     assert items[0].media[0].caption == "图 10-17"
+
+
+def test_search_question_items_skips_invalid_media_json_items(monkeypatch):
+    bank = make_bank()
+    monkeypatch.setattr(
+        bank.vectorstore,
+        "similarity_search",
+        lambda query, k: [
+            Document(
+                page_content="请结合下图说明两个 Lua 脚本关系。",
+                metadata={
+                    "question_id": "124",
+                    "question_text": "请结合下图说明两个 Lua 脚本关系。",
+                    "media_json": (
+                        "["
+                        '{"type":"image","url":"ftp://example.com/bad.png","caption":"坏图"},'
+                        '{"type":"image","url":"https://example.com/good.png","caption":"好图"}'
+                        "]"
+                    ),
+                },
+            )
+        ],
+    )
+    monkeypatch.setattr(bank, "_keyword_search", lambda query, k: [])
+
+    items = bank.search_question_items("Redis Lua 限流", question_types=["TECHNICAL"], k=1)
+
+    assert len(items) == 1
+    assert len(items[0].media) == 1
+    assert items[0].media[0].url == "https://example.com/good.png"
+
