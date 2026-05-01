@@ -2,8 +2,10 @@
 面试流程服务：管理完整的面试流程
 """
 import uuid
+from datetime import datetime
 from typing import Optional, List, Dict
 
+from schemas.question_item import QuestionItem
 from services.interview_session import (
     InterviewSession,
     InterviewStage,
@@ -23,6 +25,42 @@ class InterviewService:
         self.resume_parser = ResumeParser()
         # 初始化数据库
         init_db()
+
+    def _coerce_question_item(self, value) -> QuestionItem:
+        return QuestionItem.from_legacy(value)
+
+    def _question_text(self, value) -> str:
+        return self._coerce_question_item(value).text
+
+    def _question_payload(self, value) -> dict:
+        return self._coerce_question_item(value).to_public_dict()
+
+    def _add_ai_question(self, session: InterviewSession, question) -> QuestionItem:
+        item = self._coerce_question_item(question)
+        session.history.append(item.to_history_message())
+        session.updated_at = datetime.now()
+        return item
+
+    def _start_technical_questions_for_session(self, session: InterviewSession) -> Dict:
+        questions = self.interviewer.select_technical_question_items(
+            session,
+            ["TECHNICAL"],
+            {"TECHNICAL": 5},
+        )
+        if not questions:
+            questions = [
+                QuestionItem(
+                    text="请介绍一下 Java 中 HashMap 的实现原理？",
+                    question_type="TECHNICAL",
+                )
+            ]
+
+        first_question = self._add_ai_question(session, questions[0])
+        session.technical_questions_pool = [self._coerce_question_item(item).to_pool_dict() for item in questions[1:]]
+        return {
+            "question": first_question.to_public_dict(),
+            "remaining_questions": len(session.technical_questions_pool),
+        }
     
     def start_interview(
         self,
@@ -230,8 +268,12 @@ class InterviewService:
             # 进入技术面试环节
             session.stage = InterviewStage.TECHNICAL_QNA
             session.current_question_followup_count = 0
+            technical_result = self._start_technical_questions_for_session(session)
             result["stage"] = session.stage.value
             result["message"] = "项目提问环节结束，进入技术面试环节"
+            result["question"] = technical_result["question"]
+            result["next_question"] = technical_result["question"]["text"]
+            result["remaining_questions"] = technical_result["remaining_questions"]
             self._save_session(session)
             return result
         
@@ -244,8 +286,12 @@ class InterviewService:
         else:
             # 问题池已空，进入技术面试
             session.stage = InterviewStage.TECHNICAL_QNA
+            technical_result = self._start_technical_questions_for_session(session)
             result["stage"] = session.stage.value
             result["message"] = "项目提问环节结束，进入技术面试环节"
+            result["question"] = technical_result["question"]
+            result["next_question"] = technical_result["question"]["text"]
+            result["remaining_questions"] = technical_result["remaining_questions"]
         
         session.current_question_followup_count = 0
         self._save_session(session)
@@ -276,7 +322,7 @@ class InterviewService:
             raise ValueError(f"当前阶段不是技术面试阶段: {session.stage}")
         
         # 选择技术问题
-        questions = self.interviewer.select_technical_questions(
+        questions = self.interviewer.select_technical_question_items(
             session,
             question_types,
             counts,
@@ -284,18 +330,22 @@ class InterviewService:
         
         if not questions:
             # 如果没有问题，使用默认提示
-            question = "请介绍一下Java中HashMap的实现原理？"
-        else:
-            question = questions[0]
+            questions = [
+                QuestionItem(
+                    text="请介绍一下 Java 中 HashMap 的实现原理？",
+                    question_type="TECHNICAL",
+                )
+            ]
         
-        session.add_message("ai", question)
-        session.technical_questions_pool = questions[1:]  # 保存剩余问题
+        first_question = self._add_ai_question(session, questions[0])
+        session.technical_questions_pool = [self._coerce_question_item(item).to_pool_dict() for item in questions[1:]]
         
         self._save_session(session)
         
         return {
-            "question": question,
-            "remaining_questions": len(questions) - 1,
+            "question": first_question.to_public_dict(),
+            "next_question": first_question.text,
+            "remaining_questions": len(session.technical_questions_pool),
             "stage": session.stage.value,
         }
     
@@ -318,25 +368,26 @@ class InterviewService:
         current_question = None
         for msg in reversed(session.history):
             if msg.get("role") == "ai":
-                current_question = msg.get("content")
+                current_question = msg.get("question") or msg.get("content")
                 break
         
         if not current_question:
             current_question = "技术问题"
+        current_question_item = self._coerce_question_item(current_question)
         
         # 记录回答
         session.add_message("human", answer)
         
         # 评估回答
         score, feedback, _ = self.interviewer.evaluate_answer(
-            current_question,
+            current_question_item.text,
             answer,
             session.resume_content,
         )
         
         # 保存问答记录
         qa = QuestionAnswer(
-            question=current_question,
+            question=current_question_item.text,
             answer=answer,
             score=score,
             feedback=feedback,
@@ -347,7 +398,7 @@ class InterviewService:
             "score": score,
             "feedback": feedback,
             "qa_record": {
-                "question": current_question,
+                "question": current_question_item.text,
                 "answer": answer,
                 "score": score,
                 "feedback": feedback,
@@ -360,9 +411,10 @@ class InterviewService:
         
         if questions_pool:
             next_question = questions_pool.pop(0)
-            session.add_message("ai", next_question)
+            next_question_item = self._add_ai_question(session, next_question)
             session.technical_questions_pool = questions_pool
-            result["next_question"] = next_question
+            result["question"] = next_question_item.to_public_dict()
+            result["next_question"] = next_question_item.text
             result["remaining_questions"] = len(questions_pool)
             result["stage"] = session.stage.value  # 更新 stage
         else:
@@ -500,4 +552,3 @@ class InterviewService:
 
 # 全局服务实例
 interview_service = InterviewService()
-

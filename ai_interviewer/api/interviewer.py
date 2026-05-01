@@ -9,6 +9,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from core.config import get_llm
+from schemas.question_item import QuestionItem
 from services.interview_session import InterviewSession, InterviewStage
 from services.question_bank import QuestionBank
 
@@ -248,6 +249,35 @@ class Interviewer:
                 questions.append(q)
         
         return questions[:total_count]
+
+    def select_technical_question_items(
+        self,
+        session: InterviewSession,
+        question_types: List[str],
+        counts: Dict[str, int],
+    ) -> List[QuestionItem]:
+        """选择结构化技术面试题，供图文题链路使用。"""
+        query_parts = []
+        if session.job_requirements:
+            query_parts.append(session.job_requirements)
+
+        type_str = " ".join(question_types)
+        query_parts.append(type_str)
+
+        if session.project_qa_list:
+            avg_score = session.get_average_score()
+            if avg_score:
+                query_parts.append(f"候选人平均分: {avg_score:.1f}")
+
+        query = "\n".join(query_parts)
+        print(f"检索查询内容: {query}")
+
+        total_count = sum(counts.values())
+        return self.question_bank.search_question_items(
+            query,
+            question_types=question_types,
+            k=total_count * 2,
+        )[:total_count]
     
     def conclude_interview(self, session: InterviewSession) -> Tuple[int, str]:
         """
@@ -327,4 +357,3 @@ class Interviewer:
             "question": question,
             "history": safe_history,
         })
-
