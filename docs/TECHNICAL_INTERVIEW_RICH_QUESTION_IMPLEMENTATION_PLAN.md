@@ -815,3 +815,23 @@ Python mock QuestionItem
 - [AI Interviewer 架构设计文档](./ARCHITECTURE.md)
 - [AI Interviewer 后台管理服务设计文档](./ADMIN_BACKEND_DESIGN.md)
 
+## 18. 第一阶段落地状态
+
+第一阶段已实现结构化图文题主链路：
+
+1. 后台题库支持 `t_question_media` 保存图片 URL、图注和说明。
+2. CSV 与 Markdown 导入支持图片 URL。
+3. Admin 向 Python 同步题目时携带 `media`。
+4. Python Chroma metadata 保存 `media_json`，检索返回 `QuestionItem`。
+5. 技术题池从旧字符串兼容升级为结构化题目对象。
+6. 技术面试 SSE 新增 `question` 事件，同时保留 `chunk` 和 `result` 兼容旧前端。
+7. Java Interview SSE 代理识别 `question` 事件，并用题干文本维护 `lastQuestion` 与消息持久化。
+8. Flutter 技术面试页展示题干、图片、图注和图片加载失败兜底。
+9. Admin Web 新建题目支持填写图片 URL 和图注，题目列表展示图片数量。
+
+未实现内容仍按第二期处理：
+
+1. PDF/DOCX 内嵌图片抽取。
+2. OCR 和图片向量化。
+3. 本地图片上传到 MinIO。
+4. 面试历史中的图片快照归档。
