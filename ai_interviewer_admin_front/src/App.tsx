@@ -663,6 +663,7 @@ function DataTable({
             <th>类型</th>
             <th>难度</th>
             <th>技能域</th>
+            <th>图片</th>
             <th>状态</th>
             <th>向量状态</th>
             <th>更新时间</th>
@@ -677,6 +678,7 @@ function DataTable({
               <td>{row.questionType || '-'}</td>
               <td>{row.difficulty || '-'}</td>
               <td>{row.skillArea || '-'}</td>
+              <td>{row.media?.length ? `${row.media.length} 张` : '-'}</td>
               <td>
                 <span className={`status ${questionStatusTone(row.status)}`}>{questionStatusText(row.status)}</span>
               </td>
@@ -879,6 +881,8 @@ function QuestionDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     difficulty: 'MEDIUM',
     skillArea: '',
     tags: '',
+    mediaUrls: '',
+    mediaCaptions: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -888,6 +892,17 @@ function QuestionDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     setSaving(true);
     setError('');
     try {
+      const mediaUrls = form.mediaUrls
+        .split(';')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const mediaCaptions = form.mediaCaptions.split(';').map((item) => item.trim());
+      const media = mediaUrls.map((url, index) => ({
+        type: 'image',
+        url,
+        caption: mediaCaptions[index] || '',
+        alt: mediaCaptions[index] || '',
+      }));
       const payload = compactPayload<QuestionCreatePayload>({
         questionText: form.questionText,
         answerReference: form.answerReference,
@@ -896,6 +911,7 @@ function QuestionDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         skillArea: form.skillArea,
         status: 1,
         tags: splitList(form.tags),
+        media,
       });
       await adminApi.createQuestion(payload);
       onSaved();
@@ -936,6 +952,16 @@ function QuestionDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         </div>
         <input placeholder="技能域" value={form.skillArea} onChange={(event) => setForm({ ...form, skillArea: event.target.value })} />
         <input placeholder="标签，逗号分隔" value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} />
+        <input
+          placeholder="图片 URL，多个用英文分号分隔"
+          value={form.mediaUrls}
+          onChange={(event) => setForm({ ...form, mediaUrls: event.target.value })}
+        />
+        <input
+          placeholder="图片图注，多个用英文分号分隔"
+          value={form.mediaCaptions}
+          onChange={(event) => setForm({ ...form, mediaCaptions: event.target.value })}
+        />
         {error && <div className="form-error">{error}</div>}
         <div className="dialog-actions">
           <button type="button" className="secondary" onClick={onClose}>

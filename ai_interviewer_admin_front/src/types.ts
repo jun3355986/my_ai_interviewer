@@ -82,6 +82,16 @@ export interface InterviewRow {
   updatedAt?: string | null;
 }
 
+export interface QuestionMedia {
+  id?: number;
+  questionId?: number;
+  mediaType?: string;
+  mediaUrl: string;
+  caption?: string | null;
+  altText?: string | null;
+  sortOrder?: number | null;
+}
+
 export interface QuestionRow {
   id: number;
   questionCode?: string | null;
@@ -96,6 +106,7 @@ export interface QuestionRow {
   sourceType?: string | null;
   sourceBatchId?: number | null;
   tags?: string[];
+  media?: QuestionMedia[];
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -152,4 +163,5 @@ export interface QuestionCreatePayload {
   skillArea?: string;
   status: number;
   tags: string[];
+  media?: Array<{ type: string; url: string; caption?: string; alt?: string }>;
 }
