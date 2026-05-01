@@ -22,6 +22,11 @@ public enum SSEEventType {
     CHUNK("chunk"),
 
     /**
+     * 结构化题目事件
+     */
+    QUESTION("question"),
+
+    /**
      * 评分结果
      */
     SCORE("score"),
