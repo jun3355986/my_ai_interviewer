@@ -1,6 +1,7 @@
 package com.aiinterviewer.admin.questionbank.client;
 
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
+import com.aiinterviewer.admin.questionbank.entity.QuestionMedia;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -54,7 +55,21 @@ public class PythonQuestionBankClient {
                         question.getQuestionType(),
                         question.getDifficulty(),
                         question.getTags() == null ? List.of() : question.getTags(),
-                        question.getSkillArea()))
+                        question.getSkillArea(),
+                        toMediaPayload(question.getMedia())))
+                .toList();
+    }
+
+    private List<MediaPayload> toMediaPayload(List<QuestionMedia> media) {
+        if (media == null || media.isEmpty()) {
+            return List.of();
+        }
+        return media.stream()
+                .map(item -> new MediaPayload(
+                        item.getMediaType(),
+                        item.getMediaUrl(),
+                        item.getCaption(),
+                        item.getAltText()))
                 .toList();
     }
 
@@ -74,7 +89,15 @@ public class PythonQuestionBankClient {
             @JsonProperty("question_type") String questionType,
             String difficulty,
             List<String> tags,
-            @JsonProperty("skill_area") String skillArea) {
+            @JsonProperty("skill_area") String skillArea,
+            List<MediaPayload> media) {
+    }
+
+    public record MediaPayload(
+            String type,
+            String url,
+            String caption,
+            String alt) {
     }
 
     public record DeleteRequest(List<DeletePayload> questions) {

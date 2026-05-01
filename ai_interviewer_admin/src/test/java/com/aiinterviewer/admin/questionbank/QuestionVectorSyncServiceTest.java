@@ -8,7 +8,10 @@ import static org.mockito.Mockito.when;
 
 import com.aiinterviewer.admin.questionbank.client.PythonQuestionBankClient;
 import com.aiinterviewer.admin.questionbank.dto.QuestionCreateRequest;
+import com.aiinterviewer.admin.questionbank.dto.QuestionMediaRequest;
+import com.aiinterviewer.admin.questionbank.dto.QuestionUpdateRequest;
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
+import com.aiinterviewer.admin.questionbank.entity.QuestionMedia;
 import com.aiinterviewer.admin.questionbank.entity.QuestionVectorSyncRecord;
 import com.aiinterviewer.admin.support.AdminPostgresIntegrationTest;
 import java.util.List;
@@ -48,6 +51,28 @@ class QuestionVectorSyncServiceTest extends AdminPostgresIntegrationTest {
         verify(pythonQuestionBankClient).syncQuestions(questionsCaptor.capture());
         assertThat(questionsCaptor.getValue()).extracting(QuestionBankItem::getId).containsExactly(enabledId);
         assertThat(questionVectorStatus(disabledId)).isEqualTo("PENDING");
+    }
+
+    @Test
+    void syncPayloadIncludesQuestionMedia() {
+        Long questionId = questionService.createQuestion(createRequest("图文同步题目", 1));
+        QuestionUpdateRequest update = new QuestionUpdateRequest();
+        update.setMedia(List.of(new QuestionMediaRequest(
+                "image",
+                "https://example.com/figure.png",
+                "图 10-17",
+                "Redis 限流图")));
+        questionService.updateQuestion(questionId, update);
+        when(pythonQuestionBankClient.syncQuestions(anyList()))
+                .thenReturn(PythonQuestionBankClient.SyncResponse.success("vector-store-test"));
+
+        questionVectorSyncService.syncPendingQuestions();
+
+        ArgumentCaptor<List<QuestionBankItem>> questionsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(pythonQuestionBankClient).syncQuestions(questionsCaptor.capture());
+        assertThat(questionsCaptor.getValue().getFirst().getMedia())
+                .extracting(QuestionMedia::getMediaUrl)
+                .containsExactly("https://example.com/figure.png");
     }
 
     @Test
