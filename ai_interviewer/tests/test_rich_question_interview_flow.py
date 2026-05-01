@@ -20,6 +20,14 @@ class FakeInterviewer:
         return list(self.question_items)
 
 
+class LegacyFakeInterviewer(FakeInterviewer):
+    def select_technical_questions(self, session, question_types, counts):
+        return ["请解释 synchronized 和 Lock 的区别。"]
+
+    def select_technical_question_items(self, session, question_types, counts):
+        raise AttributeError("legacy interviewer does not support structured selector")
+
+
 def make_service(fake_interviewer):
     service = InterviewService.__new__(InterviewService)
     service.interviewer = fake_interviewer
@@ -138,3 +146,53 @@ def test_technical_answer_scores_current_structured_text_and_returns_structured_
     assert result["next_question"] == next_item.text
     assert result["remaining_questions"] == 0
     assert session.history[-1] == next_item.to_history_message()
+
+
+def test_start_technical_interview_is_idempotent_after_auto_initialization():
+    current = QuestionItem(
+        id="q-1",
+        text="请结合图说明 Redis Lua 限流脚本关系。",
+        question_type="TECHNICAL",
+    )
+    remaining = QuestionItem(
+        id="q-2",
+        text="请说明 JVM G1 回收器的 remembered set 作用。",
+        question_type="TECHNICAL",
+    )
+    fake = FakeInterviewer([QuestionItem(text="不应重新选择的问题。")])
+    service = make_service(fake)
+    session = put_session(
+        InterviewSession(
+            session_id="idempotent-tech",
+            resume_content="负责 Redis 限流和 JVM 调优",
+            stage=InterviewStage.TECHNICAL_QNA,
+            history=[current.to_history_message()],
+            technical_questions_pool=[remaining.to_pool_dict()],
+        )
+    )
+
+    result = service.start_technical_interview(session.session_id, ["TECHNICAL"], {"TECHNICAL": 5})
+
+    assert result["question"] == current.to_public_dict()
+    assert result["next_question"] == current.text
+    assert result["remaining_questions"] == 1
+    assert session.history == [current.to_history_message()]
+    assert session.technical_questions_pool == [remaining.to_pool_dict()]
+
+
+def test_start_technical_interview_falls_back_to_legacy_selector():
+    fake = LegacyFakeInterviewer()
+    service = make_service(fake)
+    session = put_session(
+        InterviewSession(
+            session_id="legacy-selector",
+            resume_content="Java 后端候选人",
+            stage=InterviewStage.TECHNICAL_QNA,
+        )
+    )
+
+    result = service.start_technical_interview(session.session_id, ["TECHNICAL"], {"TECHNICAL": 1})
+
+    assert result["question"]["text"] == "请解释 synchronized 和 Lock 的区别。"
+    assert result["next_question"] == "请解释 synchronized 和 Lock 的区别。"
+    assert session.history[-1]["question"]["text"] == "请解释 synchronized 和 Lock 的区别。"

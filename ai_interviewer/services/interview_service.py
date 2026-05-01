@@ -29,20 +29,42 @@ class InterviewService:
     def _coerce_question_item(self, value) -> QuestionItem:
         return QuestionItem.from_legacy(value)
 
-    def _question_text(self, value) -> str:
-        return self._coerce_question_item(value).text
-
-    def _question_payload(self, value) -> dict:
-        return self._coerce_question_item(value).to_public_dict()
-
     def _add_ai_question(self, session: InterviewSession, question) -> QuestionItem:
         item = self._coerce_question_item(question)
         session.history.append(item.to_history_message())
         session.updated_at = datetime.now()
         return item
 
+    def _get_current_ai_question(self, session: InterviewSession) -> QuestionItem | None:
+        for msg in reversed(session.history):
+            if msg.get("role") == "ai":
+                raw_question = msg.get("question") or msg.get("content")
+                if raw_question:
+                    return self._coerce_question_item(raw_question)
+        return None
+
+    def _select_technical_question_items(
+        self,
+        session: InterviewSession,
+        question_types: List[str],
+        counts: Dict[str, int],
+    ) -> List[QuestionItem]:
+        try:
+            raw_questions = self.interviewer.select_technical_question_items(
+                session,
+                question_types,
+                counts,
+            )
+        except AttributeError:
+            raw_questions = self.interviewer.select_technical_questions(
+                session,
+                question_types,
+                counts,
+            )
+        return [self._coerce_question_item(item) for item in raw_questions]
+
     def _start_technical_questions_for_session(self, session: InterviewSession) -> Dict:
-        questions = self.interviewer.select_technical_question_items(
+        questions = self._select_technical_question_items(
             session,
             ["TECHNICAL"],
             {"TECHNICAL": 5},
@@ -320,9 +342,21 @@ class InterviewService:
         
         if session.stage != InterviewStage.TECHNICAL_QNA:
             raise ValueError(f"当前阶段不是技术面试阶段: {session.stage}")
+
+        current_question = self._get_current_ai_question(session)
+        if current_question or session.technical_questions_pool:
+            if not current_question:
+                current_question = self._add_ai_question(session, session.technical_questions_pool.pop(0))
+            self._save_session(session)
+            return {
+                "question": current_question.to_public_dict(),
+                "next_question": current_question.text,
+                "remaining_questions": len(session.technical_questions_pool),
+                "stage": session.stage.value,
+            }
         
         # 选择技术问题
-        questions = self.interviewer.select_technical_question_items(
+        questions = self._select_technical_question_items(
             session,
             question_types,
             counts,
