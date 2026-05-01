@@ -4,8 +4,10 @@ import com.aiinterviewer.admin.audit.annotation.AdminAudit;
 import com.aiinterviewer.admin.common.exception.AdminBusinessException;
 import com.aiinterviewer.admin.common.model.PageResult;
 import com.aiinterviewer.admin.questionbank.dto.QuestionCreateRequest;
+import com.aiinterviewer.admin.questionbank.dto.QuestionMediaRequest;
 import com.aiinterviewer.admin.questionbank.dto.QuestionUpdateRequest;
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
+import com.aiinterviewer.admin.questionbank.entity.QuestionMedia;
 import com.aiinterviewer.admin.questionbank.entity.QuestionTag;
 import com.aiinterviewer.admin.questionbank.mapper.QuestionMapper;
 import java.util.ArrayList;
@@ -38,6 +40,7 @@ public class QuestionService {
         Long total = questionMapper.countQuestions(safeQuery);
         List<QuestionBankItem> records = questionMapper.selectQuestions(safeQuery, size, safeOffset(current, size));
         hydrateTags(records);
+        hydrateMedia(records);
         return PageResult.of(current, size, total == null ? 0L : total, records);
     }
 
@@ -48,6 +51,7 @@ public class QuestionService {
             throw new AdminBusinessException(404, "题目不存在");
         }
         hydrateTags(List.of(question));
+        hydrateMedia(List.of(question));
         return question;
     }
 
@@ -81,6 +85,7 @@ public class QuestionService {
             throw new AdminBusinessException(500, "题目创建失败");
         }
         replaceTags(item.getId(), request.getTags());
+        replaceMedia(item.getId(), request.getMedia(), request.getCreatedBy());
         return item.getId();
     }
 
@@ -110,6 +115,9 @@ public class QuestionService {
         }
         if (request.isTagsSet() && request.getTags() != null) {
             replaceTags(questionId, request.getTags());
+        }
+        if (request.isMediaSet()) {
+            replaceMedia(questionId, request.getMedia(), request.getUpdatedBy());
         }
     }
 
@@ -222,6 +230,23 @@ public class QuestionService {
         }
     }
 
+    private void replaceMedia(Long questionId, List<QuestionMediaRequest> rawMedia, Long createdBy) {
+        questionMapper.deleteQuestionMedia(questionId);
+        List<QuestionMediaRequest> normalized = normalizeMedia(rawMedia);
+        for (int index = 0; index < normalized.size(); index++) {
+            QuestionMediaRequest request = normalized.get(index);
+            QuestionMedia media = new QuestionMedia();
+            media.setQuestionId(questionId);
+            media.setMediaType(normalizeMediaType(request.type()));
+            media.setMediaUrl(request.url().trim());
+            media.setCaption(trimToNull(request.caption()));
+            media.setAltText(trimToNull(request.alt()));
+            media.setSortOrder(index);
+            media.setCreatedBy(createdBy);
+            questionMapper.insertQuestionMedia(media);
+        }
+    }
+
     private QuestionTag findOrCreateTag(String tagName) {
         QuestionTag existing = questionMapper.selectTagByName(tagName);
         if (existing != null) {
@@ -253,6 +278,28 @@ public class QuestionService {
         return new ArrayList<>(normalized.values());
     }
 
+    private List<QuestionMediaRequest> normalizeMedia(List<QuestionMediaRequest> rawMedia) {
+        if (rawMedia == null || rawMedia.isEmpty()) {
+            return List.of();
+        }
+        List<QuestionMediaRequest> normalized = new ArrayList<>();
+        for (QuestionMediaRequest media : rawMedia) {
+            if (media == null || !StringUtils.hasText(media.url())) {
+                continue;
+            }
+            String url = media.url().trim();
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                throw new AdminBusinessException(400, "图片 URL 只支持 http:// 或 https://");
+            }
+            normalized.add(media);
+        }
+        return normalized;
+    }
+
+    private String normalizeMediaType(String mediaType) {
+        return StringUtils.hasText(mediaType) ? mediaType.trim().toLowerCase(Locale.ROOT) : "image";
+    }
+
     private String vectorStatusForUpdate(Integer status) {
         return status == null || status == QuestionBankItem.STATUS_ENABLED
                 ? QuestionBankItem.VECTOR_SYNC_PENDING
@@ -271,6 +318,20 @@ public class QuestionService {
             tagsByQuestionId.computeIfAbsent(row.getQuestionId(), ignored -> new ArrayList<>()).add(row.getTagName());
         }
         questions.forEach(question -> question.setTags(tagsByQuestionId.getOrDefault(question.getId(), List.of())));
+    }
+
+    private void hydrateMedia(List<QuestionBankItem> questions) {
+        if (questions == null || questions.isEmpty()) {
+            return;
+        }
+        List<Long> questionIds = questions.stream()
+                .map(QuestionBankItem::getId)
+                .toList();
+        Map<Long, List<QuestionMedia>> mediaByQuestionId = new LinkedHashMap<>();
+        for (QuestionMedia media : questionMapper.selectMediaByQuestionIds(questionIds)) {
+            mediaByQuestionId.computeIfAbsent(media.getQuestionId(), ignored -> new ArrayList<>()).add(media);
+        }
+        questions.forEach(question -> question.setMedia(mediaByQuestionId.getOrDefault(question.getId(), List.of())));
     }
 
     private String trimToNull(String value) {

@@ -15,4 +15,5 @@ public class QuestionCreateRequest {
     private Integer status;
     private Long createdBy;
     private List<String> tags = List.of();
+    private List<QuestionMediaRequest> media = List.of();
 }
