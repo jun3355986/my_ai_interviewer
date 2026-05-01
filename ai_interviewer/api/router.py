@@ -78,6 +78,13 @@ def _structured_question_payload(value) -> dict | None:
     return value if isinstance(value, dict) else None
 
 
+def _question_text_from_payload(value: dict | None) -> str | None:
+    if not value:
+        return None
+    text = value.get("text")
+    return text if isinstance(text, str) and text else None
+
+
 @router.post("/chat")
 def chat_stream(req: UnifiedChatRequest):
     """统一流式对话接口（SSE）"""
@@ -134,14 +141,14 @@ def chat_stream(req: UnifiedChatRequest):
                 next_question = result.get("question")
                 question_payload = _structured_question_payload(result.get("question"))
                 next_stage = result.get("stage", current_stage.value)
-                final_message = next_question
+                final_message = _question_text_from_payload(question_payload) or next_question
 
             elif current_stage == InterviewStage.SELF_INTRO:
                 result = interview_service.handle_self_introduction(session.session_id, req.message)
                 next_question = result.get("question")
                 question_payload = _structured_question_payload(result.get("question"))
                 next_stage = result.get("stage", current_stage.value)
-                final_message = next_question
+                final_message = _question_text_from_payload(question_payload) or next_question
 
             elif current_stage == InterviewStage.PROJECT_QNA:
                 result = interview_service.handle_project_answer(session.session_id, req.message)
@@ -150,7 +157,7 @@ def chat_stream(req: UnifiedChatRequest):
                 next_question = result.get("next_question")
                 question_payload = _structured_question_payload(result.get("question"))
                 next_stage = result.get("stage", current_stage.value)
-                final_message = next_question or result.get("message", "")
+                final_message = _question_text_from_payload(question_payload) or next_question or result.get("message", "")
 
             elif current_stage == InterviewStage.TECHNICAL_QNA:
                 result = interview_service.handle_technical_answer(session.session_id, req.message)
@@ -159,7 +166,7 @@ def chat_stream(req: UnifiedChatRequest):
                 next_question = result.get("next_question")
                 question_payload = _structured_question_payload(result.get("question"))
                 next_stage = result.get("stage", current_stage.value)
-                final_message = next_question or result.get("message", "")
+                final_message = _question_text_from_payload(question_payload) or next_question or result.get("message", "")
 
             else:
                 next_stage = InterviewStage.CONCLUDED.value
@@ -182,10 +189,10 @@ def chat_stream(req: UnifiedChatRequest):
                     yield format_sse(EVENT_CHUNK, {"content": piece})
 
             result_payload: dict[str, object] = {"next_stage": str(next_stage)}
-            if next_question:
-                result_payload["next_question"] = str(next_question)
             if question_payload:
                 result_payload["question"] = question_payload
+            if final_message:
+                result_payload["next_question"] = str(final_message)
             yield format_sse(EVENT_RESULT, result_payload)
 
             yield format_sse(
