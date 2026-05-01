@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 EVENT_STATUS = "status"
 EVENT_CHUNK = "chunk"
+EVENT_QUESTION = "question"
 EVENT_SCORE = "score"
 EVENT_RESULT = "result"
 EVENT_DONE = "done"
