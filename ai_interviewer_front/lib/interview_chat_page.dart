@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/interview_service.dart';
 import 'models/chat_message.dart';
+import 'models/question_media.dart';
 
 /// AI 面试官助手 - 面试对话页面
 /// 基于 Figma 设计实现
@@ -318,13 +319,22 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
                       ),
                     ],
                   ),
-                  child: Text(
-                    message.content,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: message.isAI ? const Color(0xFF1E2939) : Colors.white,
-                      height: 1.5,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.content,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: message.isAI ? const Color(0xFF1E2939) : Colors.white,
+                          height: 1.5,
+                        ),
+                      ),
+                      if (message.media.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        ...message.media.map((media) => _buildMediaCard(context, media)),
+                      ],
+                    ],
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -357,6 +367,70 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildMediaCard(BuildContext context, QuestionMedia media) {
+    if (media.type != 'image') {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: GestureDetector(
+        onTap: () => _showImagePreview(context, media),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                media.url,
+                fit: BoxFit.cover,
+                height: 180,
+                width: double.infinity,
+                errorBuilder: (_, __, ___) => Container(
+                  height: 120,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    '图片加载失败，请稍后重试',
+                    style: TextStyle(color: Color(0xFF6A7282)),
+                  ),
+                ),
+              ),
+            ),
+            if (media.caption != null && media.caption!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                media.caption!,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF6A7282)),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showImagePreview(BuildContext context, QuestionMedia media) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: InteractiveViewer(
+          child: Image.network(
+            media.url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Padding(
+              padding: EdgeInsets.all(32),
+              child: Text('图片加载失败，请稍后重试'),
+            ),
+          ),
+        ),
       ),
     );
   }
