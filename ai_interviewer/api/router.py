@@ -141,7 +141,12 @@ def chat_stream(req: UnifiedChatRequest):
                 feedback = result.get("feedback")
                 next_question = result.get("next_question")
                 next_stage = result.get("stage", current_stage.value)
-                final_message = next_question or result.get("message", "")
+                message = result.get("message", "")
+                final_message = (
+                    f"{message}\n\n{next_question}"
+                    if message and next_question
+                    else next_question or message
+                )
 
             elif current_stage == InterviewStage.TECHNICAL_QNA:
                 result = interview_service.handle_technical_answer(session.session_id, req.message)

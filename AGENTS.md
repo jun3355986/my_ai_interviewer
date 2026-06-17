@@ -80,6 +80,24 @@ Minimal test coverage across all projects:
 - Flutter: only scaffold `widget_test.dart`
 - Java: only `PasswordGenerator.java` in test dirs — not actual tests
 
+## Test Asset Management
+
+The root `tests/` directory is the unified test asset center for this project.
+
+- Put cross-project, cross-service, smoke, API, E2E, performance, security, and AI safety tests under `tests/`.
+- Keep project-native unit tests in each technology's default location:
+  - Python: `ai_interviewer/tests/`
+  - Flutter: `ai_interviewer_front/test/`
+  - Java: `*/src/test/java/`
+- Register every new or changed test case in `tests/docs/test-cases.md`.
+- Update `tests/docs/tooling-guide.md` whenever adding or changing a test command, framework, or required environment variable.
+- Store shared test data in `tests/fixtures/`.
+- Store committed config templates in `tests/config/`; never commit secrets.
+- Store generated test output in `tests/reports/` or a clearly documented evidence directory.
+- Do not scatter test scripts, payloads, or reports into business source directories.
+- When fixing a bug with a required regression test, document the regression scenario and its automation location in `tests/docs/test-cases.md`.
+- Prefer root wrapper commands in `tests/scripts/` for repeatable local and CI execution.
+
 <!-- setting_my_dev:start -->
 禁止使用openspec/opsx 相关skills
 

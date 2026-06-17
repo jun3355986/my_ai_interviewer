@@ -17,6 +17,18 @@ from services.resume_parser import ResumeParser
 
 class InterviewService:
     """面试流程服务"""
+
+    DEFAULT_TECHNICAL_QUESTION_TYPES = ["Java基础", "多线程", "Spring", "Redis"]
+    DEFAULT_TECHNICAL_QUESTION_COUNTS = {
+        "Java基础": 1,
+        "多线程": 1,
+        "Spring": 1,
+    }
+    FALLBACK_TECHNICAL_QUESTIONS = [
+        "请介绍一下Java中HashMap的实现原理？",
+        "请说明Java线程池的核心参数及其作用？",
+        "请说明Redis缓存穿透的常见解决方案？",
+    ]
     
     def __init__(self):
         self.interviewer = Interviewer()
@@ -230,7 +242,7 @@ class InterviewService:
             # 进入技术面试环节
             session.stage = InterviewStage.TECHNICAL_QNA
             session.current_question_followup_count = 0
-            result["stage"] = session.stage.value
+            result.update(self._initialize_technical_questions(session))
             result["message"] = "项目提问环节结束，进入技术面试环节"
             self._save_session(session)
             return result
@@ -244,7 +256,7 @@ class InterviewService:
         else:
             # 问题池已空，进入技术面试
             session.stage = InterviewStage.TECHNICAL_QNA
-            result["stage"] = session.stage.value
+            result.update(self._initialize_technical_questions(session))
             result["message"] = "项目提问环节结束，进入技术面试环节"
         
         session.current_question_followup_count = 0
@@ -274,30 +286,63 @@ class InterviewService:
         
         if session.stage != InterviewStage.TECHNICAL_QNA:
             raise ValueError(f"当前阶段不是技术面试阶段: {session.stage}")
+
+        if session.technical_questions_pool and not session.technical_qa_list:
+            current_question = self._last_ai_message(session)
+            if current_question:
+                return {
+                    "question": current_question,
+                    "remaining_questions": len(session.technical_questions_pool),
+                    "stage": session.stage.value,
+                }
         
-        # 选择技术问题
-        questions = self.interviewer.select_technical_questions(
-            session,
-            question_types,
-            counts,
-        )
-        
-        if not questions:
-            # 如果没有问题，使用默认提示
-            question = "请介绍一下Java中HashMap的实现原理？"
-        else:
-            question = questions[0]
-        
-        session.add_message("ai", question)
-        session.technical_questions_pool = questions[1:]  # 保存剩余问题
+        result = self._initialize_technical_questions(session, question_types, counts)
         
         self._save_session(session)
         
         return {
+            "question": result["question"],
+            "remaining_questions": result["remaining_questions"],
+            "stage": result["stage"],
+        }
+
+    def _initialize_technical_questions(
+        self,
+        session: InterviewSession,
+        question_types: Optional[List[str]] = None,
+        counts: Optional[Dict[str, int]] = None,
+    ) -> Dict:
+        """初始化技术题池，并返回第一道技术题。"""
+        resolved_question_types = question_types or self.DEFAULT_TECHNICAL_QUESTION_TYPES
+        resolved_counts = counts or self.DEFAULT_TECHNICAL_QUESTION_COUNTS
+        if sum(resolved_counts.values()) <= 0:
+            resolved_counts = self.DEFAULT_TECHNICAL_QUESTION_COUNTS
+
+        questions = self.interviewer.select_technical_questions(
+            session,
+            resolved_question_types,
+            resolved_counts,
+        )
+
+        if not questions:
+            questions = list(self.FALLBACK_TECHNICAL_QUESTIONS)
+
+        question = questions[0]
+        session.add_message("ai", question)
+        session.technical_questions_pool = questions[1:]
+
+        return {
             "question": question,
-            "remaining_questions": len(questions) - 1,
+            "next_question": question,
+            "remaining_questions": len(session.technical_questions_pool),
             "stage": session.stage.value,
         }
+
+    def _last_ai_message(self, session: InterviewSession) -> Optional[str]:
+        for msg in reversed(session.history):
+            if msg.get("role") == "ai":
+                return msg.get("content")
+        return None
     
     def handle_technical_answer(
         self,
@@ -500,4 +545,3 @@ class InterviewService:
 
 # 全局服务实例
 interview_service = InterviewService()
-

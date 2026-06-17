@@ -74,7 +74,7 @@ public class InterviewService {
      * 获取会话详情
      */
     public SessionDTO getSession(String sessionId, Long userId) {
-        InterviewSession session = sessionMapper.selectById(sessionId);
+        InterviewSession session = findSessionByAnyId(sessionId);
         if (session == null) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
@@ -89,7 +89,7 @@ public class InterviewService {
      */
     @Transactional
     public void cancelSession(String sessionId, Long userId) {
-        InterviewSession session = sessionMapper.selectById(sessionId);
+        InterviewSession session = findSessionByAnyId(sessionId);
         if (session == null) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
@@ -112,14 +112,22 @@ public class InterviewService {
      * 获取会话历史消息
      */
     public List<InterviewMessage> getSessionHistory(String sessionId, Long userId) {
-        InterviewSession session = sessionMapper.selectById(sessionId);
+        InterviewSession session = findSessionByAnyId(sessionId);
         if (session == null) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
         if (!session.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED, "无权访问该会话");
         }
-        return messageMapper.selectBySessionId(sessionId);
+        return messageMapper.selectBySessionId(session.getId());
+    }
+
+    private InterviewSession findSessionByAnyId(String sessionId) {
+        InterviewSession session = sessionMapper.selectById(sessionId);
+        if (session == null) {
+            session = sessionMapper.selectByPythonSessionId(sessionId);
+        }
+        return session;
     }
 
     /**

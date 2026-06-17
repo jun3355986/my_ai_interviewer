@@ -1,0 +1,12 @@
+[
+  {
+    "role": "local-admin",
+    "username": "admin",
+    "password": "admin123"
+  },
+  {
+    "role": "smoke-user",
+    "username": "test_user",
+    "password": "Pass123!"
+  }
+]

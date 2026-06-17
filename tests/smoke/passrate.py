@@ -2,7 +2,7 @@
 
 import argparse
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import cast
 
 JsonValue = str | int | float | bool | None | dict[str, "JsonValue"] | list["JsonValue"]
@@ -90,7 +90,7 @@ def build_report(data: JsonDict) -> str:
     lines: list[str] = []
     lines.append("# Task 8 P0 Smoke Report")
     lines.append("")
-    lines.append(f"- Generated At: {datetime.now(UTC).isoformat()}")
+    lines.append(f"- Generated At: {datetime.now(timezone.utc).isoformat()}")
     lines.append(f"- Source Result: `{as_str(data.get('gatewayBaseUrl', 'unknown'), 'unknown')}`")
     lines.append(f"- P0 Check: **{passed}/{total}**")
     lines.append(f"- P0 Gate (must be 10/10): **{'PASS' if all_passed and total == 10 else 'FAIL'}**")

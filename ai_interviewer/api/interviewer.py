@@ -40,11 +40,11 @@ class Interviewer:
                         "根据职位要求和当前岗位竞争者水平，评价面试者的简历。"
                         "要做到真实、客观，以高要求、严格的方式对待面试者，不应该太客气。"
                         "现在需要你做一个简洁的面试开场白（2-3句话），欢迎面试者并说明面试流程。"),
-            ("human", context + "\n\n请生成面试开场白："),
+            ("human", "{context}\n\n请生成面试开场白："),
         ])
         
         chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({})
+        return chain.invoke({"context": context})
     
     def ask_self_introduction(self) -> str:
         """请面试者自我介绍"""
@@ -98,11 +98,11 @@ class Interviewer:
                         "2. 重点关注项目中的技术难点、架构设计、问题解决等；\n"
                         "3. 根据简历内容的丰富度，提出合适深度的问题。\n\n"
                         "请生成{count}个项目相关的问题，只输出问题，不要输出任何其他内容，每个问题一行，用序号标记。"),
-            ("human", context + "\n\n请生成项目问题："),
+            ("human", "{context}\n\n请生成项目问题："),
         ])
         
         chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"count": target_count})
+        response = chain.invoke({"count": target_count, "context": context})
         
         # 解析问题列表
         questions = []
@@ -146,11 +146,11 @@ class Interviewer:
                         "3. 判断是否需要追问（如果回答有明显漏洞、逻辑不清，或需要深入时追问）；\n"
                         "4. 如果明显缺乏实际经验、只是背诵或随意回答，给低分并说明理由。\n\n"
                         "请以JSON格式返回：{{\"score\": 分数, \"feedback\": \"反馈内容\", \"need_followup\": true/false, \"followup_reason\": \"追问原因（如果需要追问）\"}}"),
-            ("human", context + "\n\n请评估这个回答："),
+            ("human", "{context}\n\n请评估这个回答："),
         ])
         
         chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({})
+        response = chain.invoke({"context": context})
         
         # 解析JSON响应
         try:
@@ -187,11 +187,11 @@ class Interviewer:
             ("system", "你是一位专业的高级JAVA开发工程师面试官。"
                         "根据面试者的回答和追问原因，生成一个简洁明确的追问问题。"
                         "追问问题要有面试价值，不要问无意义的问题。"),
-            ("human", context + "\n\n请生成追问问题："),
+            ("human", "{context}\n\n请生成追问问题："),
         ])
         
         chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({})
+        return chain.invoke({"context": context})
     
     def select_technical_questions(
         self,
@@ -281,11 +281,11 @@ class Interviewer:
                         "3. 给出客观的总体评分（0-100分），必须客观，不要虚高；\n"
                         "4. 提供具体的改进建议。\n\n"
                         "请以JSON格式返回：{{\"final_score\": 分数, \"feedback\": \"详细反馈内容\"}}"),
-            ("human", context + "\n\n请总结面试并给出最终评分："),
+            ("human", "{context}\n\n请总结面试并给出最终评分："),
         ])
         
         chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({})
+        response = chain.invoke({"context": context})
         
         # 解析JSON
         try:
@@ -327,4 +327,3 @@ class Interviewer:
             "question": question,
             "history": safe_history,
         })
-

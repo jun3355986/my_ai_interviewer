@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api/interview_api.dart';
 import '../models/chat_message.dart';
+import '../models/job.dart';
 
 class InterviewService extends ChangeNotifier {
   final InterviewApi _interviewApi;
@@ -10,6 +11,8 @@ class InterviewService extends ChangeNotifier {
   final List<ChatMessage> _messages = [];
   List<ChatMessage> get messages => List.unmodifiable(_messages);
 
+  final List<_InterviewScoreRecord> _scoreRecords = [];
+
   String? _currentSessionId;
   String? get currentSessionId => _currentSessionId;
 
@@ -18,32 +21,41 @@ class InterviewService extends ChangeNotifier {
 
   bool _isStreaming = false;
   bool get isStreaming => _isStreaming;
-  
+
   String _currentStreamContent = '';
 
   /// Start a new interview
   Future<void> startNewInterview(String resumeId, String? jobId) async {
     _messages.clear();
+    _scoreRecords.clear();
     _currentSessionId = null;
     _currentStage = 1;
     _currentStreamContent = '';
-    
+
     // Send initial "I'm ready" message to trigger AI opening
     // Backend doc says: "首次对话传 null (sessionId), message: '我准备好了'"
-    await sendMessage('我准备好了', resumeId: resumeId, jobId: jobId, isSystemTrigger: true);
+    await sendMessage(
+      '我准备好了',
+      resumeId: resumeId,
+      jobId: jobId,
+      isSystemTrigger: true,
+    );
   }
 
   /// Resume an existing interview
   Future<void> resumeInterview(String sessionId) async {
-     _messages.clear();
-     _currentSessionId = sessionId;
-     // For now, just trigger a continuation
-     // Or we could fetch history if the API supported it
-     // Let's try sending an empty message or "continue"
-     await sendMessage('继续', isSystemTrigger: true);
+    _messages.clear();
+    _currentSessionId = sessionId;
+    // For now, just trigger a continuation.
+    await sendMessage('继续', isSystemTrigger: true);
   }
 
-  Future<void> sendMessage(String message, {String? resumeId, String? jobId, bool isSystemTrigger = false}) async {
+  Future<void> sendMessage(
+    String message, {
+    String? resumeId,
+    String? jobId,
+    bool isSystemTrigger = false,
+  }) async {
     if (_isStreaming) return;
 
     if (!isSystemTrigger) {
@@ -90,13 +102,13 @@ class InterviewService extends ChangeNotifier {
           _currentSessionId = data['session_id'] ?? data['sessionId'];
         }
         if (data.containsKey('stage')) {
-           _mapStage(data['stage']);
+          _mapStage(data['stage']);
         }
         break;
       case 'chunk':
         final content = data['content'] as String? ?? '';
         _currentStreamContent += content;
-        
+
         if (_messages.isEmpty || !_messages.last.isAI) {
           _messages.add(ChatMessage(
             isAI: true,
@@ -104,18 +116,30 @@ class InterviewService extends ChangeNotifier {
             time: _getCurrentTime(),
           ));
         } else {
-           _messages.removeLast();
-           _messages.add(ChatMessage(
-             isAI: true,
-             content: _currentStreamContent,
-             time: _getCurrentTime(),
-           ));
+          _messages.removeLast();
+          _messages.add(ChatMessage(
+            isAI: true,
+            content: _currentStreamContent,
+            time: _getCurrentTime(),
+          ));
         }
         notifyListeners();
         break;
       case 'done':
+        if (data.containsKey('stage')) {
+          _mapStage(data['stage']);
+        }
         _isStreaming = false;
         notifyListeners();
+        break;
+      case 'score':
+        _recordScore(data);
+        notifyListeners();
+        break;
+      case 'result':
+        if (data.containsKey('next_stage')) {
+          _mapStage(data['next_stage']);
+        }
         break;
       case 'error':
         _addSystemMessage(_normalizeSystemError(data['message'] ?? 'Unknown error'));
@@ -152,23 +176,126 @@ class InterviewService extends ChangeNotifier {
         _currentStage = 3;
       } else if (s.contains('tech')) {
         _currentStage = 4;
-      } else if (s.contains('summary') || s.contains('eval') || s.contains('conclude')) {
+      } else if (s.contains('summary') ||
+          s.contains('eval') ||
+          s.contains('conclude')) {
         _currentStage = 5;
       }
     }
     notifyListeners();
   }
-  
+
+  MatchResult buildResult() {
+    if (_scoreRecords.isEmpty) {
+      return MatchResult(
+        matchScore: 0,
+        matchLevel: '暂无评分',
+        matchDetails: const <MatchDetail>[],
+        suggestions: const ['建议：本次面试暂无评分记录，请返回查看详细对话确认是否已完成答题。'],
+      );
+    }
+
+    final averageScore = _scoreRecords
+            .map((record) => record.score)
+            .reduce((left, right) => left + right) /
+        _scoreRecords.length;
+    final groupedScores = <String, List<_InterviewScoreRecord>>{};
+    for (final record in _scoreRecords) {
+      groupedScores.putIfAbsent(record.stageLabel, () => []).add(record);
+    }
+
+    final details = groupedScores.entries.map((entry) {
+      final stageAverage = entry.value
+              .map((record) => record.score)
+              .reduce((left, right) => left + right) /
+          entry.value.length;
+      return MatchDetail(
+        category: entry.key,
+        score: stageAverage / 10,
+        feedback: entry.value.map((record) => record.feedback).join('\n'),
+      );
+    }).toList();
+
+    final strongest = _scoreRecords.reduce(
+      (best, current) => current.score > best.score ? current : best,
+    );
+    final weakest = _scoreRecords.reduce(
+      (weakest, current) => current.score < weakest.score ? current : weakest,
+    );
+
+    return MatchResult(
+      matchScore: averageScore,
+      matchLevel: _matchLevel(averageScore),
+      matchDetails: details,
+      suggestions: [
+        '优点：${strongest.stageLabel}表现相对较好，最高得分为${strongest.score}分。${strongest.feedback}',
+        '建议：${weakest.stageLabel}仍有提升空间，最低得分为${weakest.score}分。${weakest.feedback}',
+      ],
+    );
+  }
+
+  void _recordScore(Map<String, dynamic> data) {
+    final rawScore = data['score'];
+    if (rawScore is! num) {
+      return;
+    }
+    final feedback = data['feedback']?.toString().trim();
+    _scoreRecords.add(
+      _InterviewScoreRecord(
+        score: rawScore.toInt().clamp(0, 100).toInt(),
+        feedback:
+            feedback == null || feedback.isEmpty ? '暂无详细反馈。' : feedback,
+        stageLabel: _stageLabel(_currentStage),
+      ),
+    );
+  }
+
+  String _stageLabel(int stage) {
+    switch (stage) {
+      case 3:
+        return '项目经验';
+      case 4:
+        return '技术问答';
+      default:
+        return '面试表现';
+    }
+  }
+
+  String _matchLevel(double score) {
+    if (score >= 85) {
+      return '优秀';
+    }
+    if (score >= 70) {
+      return '良好';
+    }
+    if (score >= 60) {
+      return '合格';
+    }
+    return '待提升';
+  }
+
   void _addSystemMessage(String content) {
-      _messages.add(ChatMessage(
-          isAI: true, 
-          content: '[System] $content',
-          time: _getCurrentTime()
-      ));
+    _messages.add(ChatMessage(
+      isAI: true,
+      content: '[System] $content',
+      time: _getCurrentTime(),
+    ));
   }
 
   String _getCurrentTime() {
     final now = DateTime.now();
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
+}
+
+class _InterviewScoreRecord {
+  final int score;
+  final String feedback;
+  final String stageLabel;
+
+  const _InterviewScoreRecord({
+    required this.score,
+    required this.feedback,
+    required this.stageLabel,
+  });
 }

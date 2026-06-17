@@ -509,17 +509,22 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
         title: const Text('结束面试'),
         content: const Text('确定要结束本次面试吗？结束后将生成面试报告。'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('继续面试'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushReplacementNamed(context, '/result');
-            },
-            child: const Text('结束面试'),
-          ),
+	          TextButton(
+	            onPressed: () => Navigator.pop(context),
+	            child: const Text('继续面试'),
+	          ),
+	          TextButton(
+	            onPressed: () {
+	              Navigator.pop(context);
+	              final service = context.read<InterviewService>();
+	              Navigator.pushReplacementNamed(
+	                context,
+	                '/result',
+	                arguments: service.buildResult(),
+	              );
+	            },
+	            child: const Text('结束面试'),
+	          ),
         ],
       ),
     );

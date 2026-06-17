@@ -130,6 +130,9 @@ public class SSEProxyService {
         // 1. 验证会话存在且属于该用户
         InterviewSession session = sessionMapper.selectById(sessionId);
         if (session == null) {
+            session = sessionMapper.selectByPythonSessionId(sessionId);
+        }
+        if (session == null) {
             return Flux.error(new BusinessException(ErrorCode.SESSION_NOT_FOUND));
         }
         if (!session.getUserId().equals(userId)) {
@@ -139,13 +142,14 @@ public class SSEProxyService {
             return Flux.error(new BusinessException(ErrorCode.SESSION_COMPLETED));
         }
 
-        AtomicReference<String> currentStageRef = new AtomicReference<>(session.getStage());
+        final InterviewSession activeSession = session;
+        AtomicReference<String> currentStageRef = new AtomicReference<>(activeSession.getStage());
 
         // 2. 转发恢复请求到Python后端
         return webClient.post()
                 .uri(pythonBaseUrl + "/interview/resume")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue("{\"session_id\":\"" + session.getPythonSessionId() + "\"}")
+                .bodyValue("{\"session_id\":\"" + activeSession.getPythonSessionId() + "\"}")
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
                 .timeout(Duration.ofMinutes(5))
@@ -163,9 +167,9 @@ public class SSEProxyService {
                     }
                 })
                 .doOnComplete(() -> {
-                    session.setStage(currentStageRef.get());
-                    session.setUpdatedAt(LocalDateTime.now());
-                    sessionMapper.updateById(session);
+                    activeSession.setStage(currentStageRef.get());
+                    activeSession.setUpdatedAt(LocalDateTime.now());
+                    sessionMapper.updateById(activeSession);
                 })
                 .onErrorResume(e -> {
                     log.error("Resume proxy error", e);

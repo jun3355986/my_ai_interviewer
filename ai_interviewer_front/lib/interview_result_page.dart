@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:provider/provider.dart';
 import 'models/job.dart';
+import 'services/interview_service.dart';
 
 /// AI 面试官助手 - 面试结果页面
 /// 基于 Figma 设计实现
@@ -33,6 +35,11 @@ class _InterviewResultPageState extends State<InterviewResultPage>
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args is MatchResult) {
         _matchResult = args;
+      } else {
+        _matchResult = context.read<InterviewService>().buildResult();
+      }
+
+      if (_matchResult != null) {
         _totalScore = _matchResult!.matchScore.toInt();
         _stageScores =
             _matchResult!.matchDetails

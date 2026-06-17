@@ -1,0 +1,5 @@
+姓名：测试候选人
+目标岗位：Java 后端工程师
+技能：Java、Spring Boot、Spring Cloud、PostgreSQL、Redis、Docker
+项目：负责面试系统后端服务，包含用户、岗位、简历、面试和评价模块。
+亮点：熟悉微服务链路、SSE 流式响应、接口鉴权和服务可观测性。

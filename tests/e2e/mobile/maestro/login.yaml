@@ -1,0 +1,7 @@
+appId: com.example.ai_interviewer_front
+---
+- launchApp
+- assertVisible:
+    text: "AI 面试官助手"
+- tapOn:
+    text: "登录"

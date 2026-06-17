@@ -6,6 +6,10 @@
 .vscode/
 
 # Local agent/tooling state
+.claude/
+.codegraph/
+.codex/
+.comet/
 .my-dev-setup-backups/
 .sisyphus/
 .tools/
@@ -14,11 +18,24 @@
 test-results/
 logs/
 *.log
+tests/reports/allure-results/*
+tests/reports/allure-report/*
+tests/reports/playwright/*
+tests/reports/k6/*
+tests/reports/smoke/*
+tests/performance/results/*
+!tests/reports/allure-results/.gitkeep
+!tests/reports/allure-report/.gitkeep
+!tests/reports/playwright/.gitkeep
+!tests/reports/k6/.gitkeep
+!tests/reports/smoke/.gitkeep
+!tests/performance/results/.gitkeep
 
 # Environment and secrets
 .env
 .env.*
 !.env.example
+tests/config/local.env
 
 # Python
 __pycache__/

@@ -129,7 +129,7 @@ public class InterviewController {
     @GetMapping("/{sessionId}")
     @Operation(summary = "获取面试详情", description = "获取面试会话的详细信息")
     public Result<SessionDTO> getSession(
-            @Parameter(description = "会话ID") @PathVariable String sessionId,
+            @Parameter(description = "会话ID") @PathVariable("sessionId") String sessionId,
             @RequestHeader(value = "X-User-Id", required = false) Long userId) {
 
         if (userId == null) {
@@ -145,7 +145,7 @@ public class InterviewController {
     @DeleteMapping("/{sessionId}")
     @Operation(summary = "取消面试", description = "取消进行中的面试会话")
     public Result<Void> cancelInterview(
-            @Parameter(description = "会话ID") @PathVariable String sessionId,
+            @Parameter(description = "会话ID") @PathVariable("sessionId") String sessionId,
             @RequestHeader(value = "X-User-Id", required = false) Long userId) {
 
         if (userId == null) {

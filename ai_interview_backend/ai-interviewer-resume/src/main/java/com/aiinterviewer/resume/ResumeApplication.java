@@ -7,7 +7,7 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 /**
  * 简历服务启动类
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.aiinterviewer")
 @EnableDiscoveryClient
 public class ResumeApplication {
 

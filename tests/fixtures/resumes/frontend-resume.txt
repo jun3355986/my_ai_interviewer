@@ -1,0 +1,4 @@
+姓名：前端测试候选人
+目标岗位：Flutter / Web 前端工程师
+技能：Flutter、Dart、React、TypeScript、Playwright
+项目：负责跨端用户界面、状态管理、接口联调和端到端测试。

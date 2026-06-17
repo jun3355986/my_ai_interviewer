@@ -1,0 +1,27 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start stack
+        working-directory: ai_interview_backend
+        run: docker compose up -d --build
+      - name: Run smoke
+        run: bash tests/scripts/run-smoke.sh
+      - name: Collect reports
+        if: always()
+        run: bash tests/scripts/collect-report.sh
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: tests/reports
