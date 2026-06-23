@@ -1,4 +1,5 @@
 import json
+import inspect
 import os
 import shutil
 import subprocess
@@ -137,6 +138,9 @@ def test_ai_observability_fixture_and_docs_contract():
     assert "PostgreSQL" in payload["jobRequirements"]
     assert payload["candidateName"]
 
+    smoke_parameters = inspect.signature(test_ai_observability_cross_service_admin_smoke).parameters
+    assert "auth_headers" not in smoke_parameters
+
     test_cases = TEST_CASES_PATH.read_text(encoding="utf-8")
     tooling_guide = TOOLING_GUIDE_PATH.read_text(encoding="utf-8")
 
@@ -154,17 +158,24 @@ def test_ai_observability_fixture_and_docs_contract():
         assert env_var in tooling_guide
 
 
-@pytest.mark.live_api
-@pytest.mark.sse
-def test_ai_observability_cross_service_admin_smoke(gateway_base_url, auth_headers):
+@pytest.fixture
+def ai_observability_auth_headers(request):
     if not _truthy_env("RUN_AI_OBSERVABILITY_API_TESTS"):
         pytest.skip("set RUN_AI_OBSERVABILITY_API_TESTS=1 to run AI observability live smoke")
+    return request.getfixturevalue("auth_headers")
 
+
+@pytest.mark.live_api
+@pytest.mark.sse
+def test_ai_observability_cross_service_admin_smoke(
+    gateway_base_url,
+    ai_observability_auth_headers,
+):
     admin_base_url = _admin_base_url(gateway_base_url)
     admin_headers = _admin_headers(admin_base_url)
     known_ids = {record.get("id") for record in _trace_records(admin_base_url, admin_headers)}
 
-    _read_sse_prefix(gateway_base_url, auth_headers, _load_fixture())
+    _read_sse_prefix(gateway_base_url, ai_observability_auth_headers, _load_fixture())
 
     trace = _wait_for_new_trace(
         admin_base_url,
