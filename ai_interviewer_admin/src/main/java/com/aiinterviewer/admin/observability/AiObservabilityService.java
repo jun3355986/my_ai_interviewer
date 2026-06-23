@@ -32,6 +32,7 @@ public class AiObservabilityService {
     private static final long MAX_SIZE = 100L;
     private static final long MAX_CURRENT = 1_000_000L;
     private static final int RATE_SCALE = 6;
+    private static final String RAW_READ_PERMISSION = "AI_OBSERVABILITY_RAW_READ";
 
     private final AiObservabilityMapper mapper;
 
@@ -68,6 +69,7 @@ public class AiObservabilityService {
     public LlmCallRawPayload getLlmCallRawPayload(UUID callId, Long adminUserId, String type) {
         ensureUuid(callId, "callId");
         String accessType = normalizeAccessType(type);
+        ensureRawReadPermission(adminUserId);
         LlmCallRawPayload payload = mapper.selectLlmCallRawPayload(callId);
         if (payload == null) {
             throw new AdminBusinessException(404, "LLM 调用记录不存在");
@@ -117,6 +119,12 @@ public class AiObservabilityService {
         log.setIpAddress(resolveIpAddress(request));
         log.setUserAgent(request == null ? null : request.getHeader("User-Agent"));
         return log;
+    }
+
+    private void ensureRawReadPermission(Long adminUserId) {
+        if (adminUserId == null || !mapper.adminHasPermission(adminUserId, RAW_READ_PERMISSION)) {
+            throw new AdminBusinessException(403, "缺少 " + RAW_READ_PERMISSION + " 权限");
+        }
     }
 
     private HttpServletRequest currentRequest() {

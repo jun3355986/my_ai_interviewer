@@ -142,12 +142,14 @@
         <if test="query.status != null">
             AND t.status = #{query.status}
         </if>
-        <if test="query.callType != null">
+        <if test="query.callType != null or query.provider != null or query.model != null">
             AND EXISTS (
                 SELECT 1
-                FROM t_ai_llm_call cc
-                WHERE cc.trace_id = t.id
-                  AND cc.call_type = #{query.callType}
+                FROM t_ai_llm_call fc
+                WHERE fc.trace_id = t.id
+                <include refid="LlmCallFilterPredicates">
+                    <property name="alias" value="fc"/>
+                </include>
             )
         </if>
         <if test="query.startedFrom != null">
@@ -156,21 +158,17 @@
         <if test="query.startedTo != null">
             AND t.started_at &lt;= #{query.startedTo}
         </if>
+    </sql>
+
+    <sql id="LlmCallFilterPredicates">
         <if test="query.provider != null">
-            AND EXISTS (
-                SELECT 1
-                FROM t_ai_llm_call pc
-                WHERE pc.trace_id = t.id
-                  AND pc.provider = #{query.provider}
-            )
+            AND ${alias}.provider = #{query.provider}
+        </if>
+        <if test="query.callType != null">
+            AND ${alias}.call_type = #{query.callType}
         </if>
         <if test="query.model != null">
-            AND EXISTS (
-                SELECT 1
-                FROM t_ai_llm_call mc
-                WHERE mc.trace_id = t.id
-                  AND mc.model = #{query.model}
-            )
+            AND ${alias}.model = #{query.model}
         </if>
     </sql>
 
@@ -205,7 +203,11 @@
                    COALESCE(SUM(total_tokens), 0) AS total_tokens,
                    COUNT(*) FILTER (WHERE status &lt;&gt; 'SUCCESS') AS failed_llm_calls,
                    BOOL_OR(fallback_used) AS fallback_used
-            FROM t_ai_llm_call
+            FROM t_ai_llm_call lc
+            WHERE 1 = 1
+            <include refid="LlmCallFilterPredicates">
+                <property name="alias" value="lc"/>
+            </include>
             GROUP BY trace_id
         ) llm_counts ON llm_counts.trace_id = t.id
         <include refid="TraceWhere"/>
@@ -252,6 +254,27 @@
         WHERE id = #{callId}
     </select>
 
+    <select id="adminHasPermission" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM (
+                SELECT r.role_code
+                FROM t_user_role ur
+                INNER JOIN t_role r ON r.id = ur.role_id
+                WHERE ur.user_id = #{adminUserId}
+                UNION
+                SELECT aur.role_code
+                FROM t_admin_user_role aur
+                WHERE aur.admin_user_id = #{adminUserId}
+            ) admin_roles
+            INNER JOIN t_admin_role_permission rp ON rp.role_code = admin_roles.role_code
+            INNER JOIN t_admin_permission p ON p.id = rp.permission_id
+            WHERE p.permission_code = #{permissionCode}
+              AND p.enabled = TRUE
+              AND p.deleted_at IS NULL
+        )
+    </select>
+
     <select id="selectLlmCallRawPayload" resultMap="LlmCallRawPayloadMap">
         SELECT id AS call_id, trace_id, prompt_text, response_text
         FROM t_ai_llm_call
@@ -279,15 +302,9 @@
                     AS provider_cache_unreported_calls
         FROM t_ai_trace t
         LEFT JOIN t_ai_llm_call c ON c.trace_id = t.id
-        <if test="query.callType != null">
-            AND c.call_type = #{query.callType}
-        </if>
-        <if test="query.provider != null">
-            AND c.provider = #{query.provider}
-        </if>
-        <if test="query.model != null">
-            AND c.model = #{query.model}
-        </if>
+        <include refid="LlmCallFilterPredicates">
+            <property name="alias" value="c"/>
+        </include>
         <include refid="TraceWhere"/>
     </select>
 
@@ -297,16 +314,10 @@
                COUNT(c.id) AS call_count
         FROM t_ai_trace t
         JOIN t_ai_llm_call c ON c.trace_id = t.id
+        <include refid="LlmCallFilterPredicates">
+            <property name="alias" value="c"/>
+        </include>
         <include refid="TraceWhere"/>
-        <if test="query.callType != null">
-            AND c.call_type = #{query.callType}
-        </if>
-        <if test="query.provider != null">
-            AND c.provider = #{query.provider}
-        </if>
-        <if test="query.model != null">
-            AND c.model = #{query.model}
-        </if>
         GROUP BY c.call_type
         ORDER BY total_tokens DESC, call_count DESC, c.call_type ASC
         LIMIT 10

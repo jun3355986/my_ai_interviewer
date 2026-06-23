@@ -34,6 +34,10 @@ public interface AiObservabilityMapper {
 
     AiLlmCallDetailItem selectLlmCallById(@Param("callId") UUID callId);
 
+    boolean adminHasPermission(
+            @Param("adminUserId") Long adminUserId,
+            @Param("permissionCode") String permissionCode);
+
     LlmCallRawPayload selectLlmCallRawPayload(@Param("callId") UUID callId);
 
     AiObservabilityStatsResponse selectStats(@Param("query") AiTraceQuery query);
