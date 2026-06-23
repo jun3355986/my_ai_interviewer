@@ -13,10 +13,10 @@
 
 ## 3. Java Backend And Admin APIs
 
-- [ ] 3.1 Propagate request, user, session, and business correlation identifiers from Java interview flows to Python AI calls.
-- [ ] 3.2 Add Java admin read models and query APIs for observability trace list, trace detail, LLM call detail, and statistics.
-- [ ] 3.3 Add admin access logging for full prompt and full response reads.
-- [ ] 3.4 Ensure admin APIs enforce existing backend-admin authentication and authorization boundaries.
+- [x] 3.1 Propagate request, user, session, and business correlation identifiers from Java interview flows to Python AI calls.
+- [x] 3.2 Add Java admin read models and query APIs for observability trace list, trace detail, LLM call detail, and statistics.
+- [x] 3.3 Add admin access logging for full prompt and full response reads.
+- [x] 3.4 Ensure admin APIs enforce existing backend-admin authentication and authorization boundaries.
 
 ## 4. Admin Frontend
 

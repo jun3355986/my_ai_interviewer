@@ -460,7 +460,7 @@ git commit -m "feat: capture ai llm observability"
 - Create: `ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/dto/AiObservabilityStatsResponse.java`
 - Test: `ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/observability/AiObservabilityServiceTest.java`
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Seed in-memory mapper responses and verify:
 
@@ -486,7 +486,7 @@ Run: `cd ai_interviewer_admin && ./mvnw -Dtest=AiObservabilityServiceTest test`
 
 Expected before implementation: FAIL because classes do not exist.
 
-- [ ] **Step 2: Propagate Java correlation fields**
+- [x] **Step 2: Propagate Java correlation fields**
 
 Add fields to `PythonChatRequest`:
 
@@ -505,7 +505,7 @@ private String entrypoint;
 
 Set them in `SSEProxyService.buildPythonRequest(...)` using local session id, user id, and entrypoint `interview_chat`.
 
-- [ ] **Step 3: Add admin read APIs**
+- [x] **Step 3: Add admin read APIs**
 
 Expose:
 
@@ -518,7 +518,7 @@ GET /admin/ai-observability/stats
 
 Use existing `Result<T>` and `PageResult<T>` response wrappers.
 
-- [ ] **Step 4: Implement MyBatis SQL**
+- [x] **Step 4: Implement MyBatis SQL**
 
 Add mapper methods for:
 
@@ -535,7 +535,7 @@ insertAccessLog
 
 Cache metrics SQL must use only rows where `cache_reported_by_provider = true` for denominators and expose unreported call count separately.
 
-- [ ] **Step 5: Run Java tests**
+- [x] **Step 5: Run Java tests**
 
 Run:
 
@@ -548,7 +548,7 @@ cd ../ai_interview_backend
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Java observability APIs**
+- [x] **Step 6: Commit Java observability APIs**
 
 ```bash
 git add ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/dto/PythonChatRequest.java ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/service/SSEProxyService.java ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability ai_interviewer_admin/src/main/resources/mapper/AiObservabilityMapper.xml ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/observability/AiObservabilityServiceTest.java
