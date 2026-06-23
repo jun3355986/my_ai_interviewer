@@ -88,9 +88,27 @@ class AiObservabilitySchemaMigrationTest {
                     .as("AI observability admin menu should be seeded")
                     .isNotNull();
 
-            assertPermissionExists(connection, menuId, "AI_OBSERVABILITY_VIEW");
-            assertPermissionExists(connection, menuId, "AI_OBSERVABILITY_RAW_READ");
-            assertPermissionExists(connection, menuId, "AI_OBSERVABILITY_STATS");
+            assertPermissionContract(
+                    connection,
+                    menuId,
+                    "AI_OBSERVABILITY_VIEW",
+                    "/admin/ai-observability/traces/**",
+                    "GET",
+                    true);
+            assertPermissionContract(
+                    connection,
+                    menuId,
+                    "AI_OBSERVABILITY_RAW_READ",
+                    "/admin/ai-observability/**/raw",
+                    "GET",
+                    true);
+            assertPermissionContract(
+                    connection,
+                    menuId,
+                    "AI_OBSERVABILITY_STATS",
+                    "/admin/ai-observability/stats",
+                    "GET",
+                    true);
         }
     }
 
@@ -134,10 +152,16 @@ class AiObservabilitySchemaMigrationTest {
         }
     }
 
-    private void assertPermissionExists(Connection connection, Long menuId, String permissionCode) throws SQLException {
+    private void assertPermissionContract(
+            Connection connection,
+            Long menuId,
+            String permissionCode,
+            String resourcePath,
+            String httpMethod,
+            boolean enabled) throws SQLException {
         try (var statement = connection.prepareStatement(
                 """
-                SELECT 1
+                SELECT resource_path, http_method, enabled
                 FROM t_admin_permission
                 WHERE menu_id = ?
                   AND permission_code = ?
@@ -149,6 +173,15 @@ class AiObservabilitySchemaMigrationTest {
                 assertThat(permissions.next())
                         .as("permission %s should be seeded for AI observability menu", permissionCode)
                         .isTrue();
+                assertThat(permissions.getString("resource_path"))
+                        .as("permission %s should use the expected resource boundary", permissionCode)
+                        .isEqualTo(resourcePath);
+                assertThat(permissions.getString("http_method"))
+                        .as("permission %s should use the expected HTTP method", permissionCode)
+                        .isEqualTo(httpMethod);
+                assertThat(permissions.getBoolean("enabled"))
+                        .as("permission %s should use the expected enabled state", permissionCode)
+                        .isEqualTo(enabled);
             }
         }
     }

@@ -113,7 +113,7 @@ DO UPDATE SET
 
 INSERT INTO t_admin_permission
     (menu_id, permission_code, permission_name, resource_type, resource_path, http_method, enabled, description)
-SELECT id, 'AI_OBSERVABILITY_VIEW', 'AI 观测查看', 'API', '/admin/ai-observability/**', 'GET', TRUE,
+SELECT id, 'AI_OBSERVABILITY_VIEW', 'AI 观测查看', 'API', '/admin/ai-observability/traces/**', 'GET', TRUE,
        '查看 AI 调用观测列表和详情'
 FROM t_admin_menu
 WHERE menu_code = 'ai_observability' AND deleted_at IS NULL
