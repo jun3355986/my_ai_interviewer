@@ -1,15 +1,15 @@
 ## 1. Data Model And Configuration
 
 - [x] 1.1 Add PostgreSQL schema for `t_ai_trace`, `t_ai_trace_step`, `t_ai_llm_call`, and `t_ai_observability_access_log`.
-- [ ] 1.2 Add Python AI observability configuration for enablement, PostgreSQL DSN, write timeout, raw payload retention, and raw payload maximum length.
+- [x] 1.2 Add Python AI observability configuration for enablement, PostgreSQL DSN, write timeout, raw payload retention, and raw payload maximum length.
 - [ ] 1.3 Add documentation and test registry entries for observability test assets under the root `tests/` directory.
 
 ## 2. Python AI Service Instrumentation
 
 - [x] 2.1 Implement provider usage normalization for DeepSeek, OpenAI-compatible cached tokens, unreported cache fields, and estimated-token fallback.
-- [ ] 2.2 Implement trace, step, and LLM call writers using best-effort PostgreSQL persistence.
-- [ ] 2.3 Instrument core interview and answer-generation LLM calls before `StrOutputParser` can discard `AIMessage` metadata.
-- [ ] 2.4 Record fallback model usage, retrieval/tool-like activity, errors, durations, raw prompt text, and raw response text.
+- [x] 2.2 Implement trace, step, and LLM call writers using best-effort PostgreSQL persistence.
+- [x] 2.3 Instrument core interview and answer-generation LLM calls before `StrOutputParser` can discard `AIMessage` metadata.
+- [x] 2.4 Record fallback model usage, retrieval/tool-like activity, errors, durations, raw prompt text, and raw response text.
 
 ## 3. Java Backend And Admin APIs
 

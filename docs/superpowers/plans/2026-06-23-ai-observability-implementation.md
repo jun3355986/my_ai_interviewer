@@ -331,7 +331,7 @@ git commit -m "feat: normalize ai provider usage"
 - Modify: `ai_interviewer/schemas/chat.py`
 - Test: `ai_interviewer/tests/test_observable_langchain.py`
 
-- [ ] **Step 1: Write failing metadata preservation test**
+- [x] **Step 1: Write failing metadata preservation test**
 
 Create a fake LLM response object with `content`, `usage_metadata`, and `response_metadata`, then assert the observable helper captures usage before returning text:
 
@@ -353,7 +353,7 @@ Run: `cd ai_interviewer && uv run pytest tests/test_observable_langchain.py -q`
 
 Expected before implementation: FAIL because the helper does not exist.
 
-- [ ] **Step 2: Add observability configuration**
+- [x] **Step 2: Add observability configuration**
 
 Implement these environment variables in `config.py`:
 
@@ -367,7 +367,7 @@ AI_OBSERVABILITY_MAX_RAW_CHARS=200000
 
 If `AI_OBSERVABILITY_DB_URL` is empty, the writer returns a no-op repository and logs one startup warning.
 
-- [ ] **Step 3: Add best-effort repository**
+- [x] **Step 3: Add best-effort repository**
 
 Implement repository methods:
 
@@ -381,7 +381,7 @@ record_llm_call(...)
 
 Each method catches exceptions, logs `observability write failed`, and never raises into business code.
 
-- [ ] **Step 4: Add observable LangChain helper**
+- [x] **Step 4: Add observable LangChain helper**
 
 Implement helper behavior:
 
@@ -396,7 +396,7 @@ return text
 
 Do not pipe through `StrOutputParser` before usage extraction.
 
-- [ ] **Step 5: Replace direct LLM calls in `Interviewer`**
+- [x] **Step 5: Replace direct LLM calls in `Interviewer`**
 
 For each method currently using `prompt | self.llm | StrOutputParser()`:
 
@@ -412,7 +412,7 @@ ask
 
 Call the observable helper with a stable `call_type`, such as `generate_opening`, `ask_self_introduction`, `generate_project_questions`, `evaluate_answer`, `generate_followup_question`, `conclude_interview`, and `ask`.
 
-- [ ] **Step 6: Add trace context to routers**
+- [x] **Step 6: Add trace context to routers**
 
 Extend `UnifiedChatRequest` and `PythonChatRequest`-compatible schema with:
 
@@ -427,7 +427,7 @@ entrypoint
 
 Create a trace around `/interview/chat` and record status/error/duration around the generator lifecycle.
 
-- [ ] **Step 7: Run Python tests**
+- [x] **Step 7: Run Python tests**
 
 Run:
 
@@ -438,7 +438,7 @@ uv run pytest tests/test_observability_provider_usage.py tests/test_observable_l
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit Python observability capture**
+- [x] **Step 8: Commit Python observability capture**
 
 ```bash
 git add ai_interviewer/services/observability ai_interviewer/api/interviewer.py ai_interviewer/api/router.py ai_interviewer/schemas/chat.py ai_interviewer/tests/test_observable_langchain.py
