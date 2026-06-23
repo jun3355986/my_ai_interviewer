@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 from time import perf_counter
 from typing import Any
 
@@ -11,6 +12,9 @@ from services.observability.config import load_observability_config
 from services.observability.context import current_trace_context
 from services.observability.provider_usage import normalize_provider_usage
 from services.observability.repository import get_observability_repository
+
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -213,10 +217,7 @@ def invoke_observable(
             )
         raise
 
-    ended_at = _utcnow()
-    latency_ms = _duration_ms(start_time)
     raw_usage = _extract_usage(ai_message)
-    text = _message_text(ai_message)
     normalized_usage = normalize_provider_usage(provider, raw_usage)
     response_metadata = _as_dict(getattr(ai_message, "response_metadata", None))
     usage_metadata = _as_dict(getattr(ai_message, "usage_metadata", None))
@@ -235,6 +236,66 @@ def invoke_observable(
         fallback_used = True
         fallback_from_model = expected_primary_model
 
+    try:
+        text = _message_text(ai_message)
+    except Exception as exc:
+        ended_at = _utcnow()
+        latency_ms = _duration_ms(start_time)
+        error_metadata = dict(metadata)
+        error_metadata["error_type"] = type(exc).__name__
+        try:
+            resolved_repository.record_llm_call(
+                trace_id=trace_id,
+                step_id=step_id,
+                call_type=call_type,
+                provider=provider,
+                model=resolved_model,
+                fallback_used=fallback_used,
+                fallback_from_model=fallback_from_model,
+                status="ERROR",
+                prompt_tokens=normalized_usage.prompt_tokens,
+                completion_tokens=normalized_usage.completion_tokens,
+                total_tokens=normalized_usage.total_tokens,
+                token_source=normalized_usage.token_source,
+                prompt_cache_hit_tokens=normalized_usage.prompt_cache_hit_tokens,
+                prompt_cache_miss_tokens=normalized_usage.prompt_cache_miss_tokens,
+                prompt_cache_hit_rate=normalized_usage.prompt_cache_hit_rate,
+                cache_reported_by_provider=normalized_usage.cache_reported_by_provider,
+                latency_ms=latency_ms,
+                prompt_text=_truncate_payload(
+                    prompt_text,
+                    metadata=error_metadata,
+                    field_name="prompt_text",
+                ),
+                response_text=None,
+                raw_usage_json=normalized_usage.raw_usage,
+                metadata=error_metadata,
+                error_message=str(exc),
+                started_at=started_at,
+                ended_at=ended_at,
+            )
+            if step_id:
+                resolved_repository.finish_step(
+                    step_id=step_id,
+                    status="ERROR",
+                    error_message=str(exc),
+                    ended_at=ended_at,
+                    duration_ms=latency_ms,
+                )
+            if owns_trace and trace_id:
+                resolved_repository.finish_trace(
+                    trace_id=trace_id,
+                    status="ERROR",
+                    error_code="LLM_ERROR",
+                    error_message=str(exc),
+                    ended_at=ended_at,
+                )
+        except Exception:
+            logger.exception("observability write failed")
+        raise
+
+    ended_at = _utcnow()
+    latency_ms = _duration_ms(start_time)
     call_id = resolved_repository.record_llm_call(
         trace_id=trace_id,
         step_id=step_id,

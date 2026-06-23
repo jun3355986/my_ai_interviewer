@@ -39,6 +39,29 @@ class FakeTraceWriter:
         self.calls.append(kwargs)
 
 
+class FakeTraceLifecycleWriter(FakeTraceWriter):
+    def __init__(self):
+        super().__init__()
+        self.created_traces = []
+        self.created_steps = []
+        self.finished_steps = []
+        self.finished_traces = []
+
+    def create_trace(self, **kwargs):
+        self.created_traces.append(kwargs)
+        return "trace-1"
+
+    def create_step(self, **kwargs):
+        self.created_steps.append(kwargs)
+        return "step-1"
+
+    def finish_step(self, **kwargs):
+        self.finished_steps.append(kwargs)
+
+    def finish_trace(self, **kwargs):
+        self.finished_traces.append(kwargs)
+
+
 def test_observable_invoke_captures_usage_before_text_parser():
     observability_langchain = importlib.import_module("services.observability.langchain")
     writer = FakeTraceWriter()
@@ -175,6 +198,93 @@ def test_usage_is_extracted_before_message_text_conversion():
     assert writer.calls[0]["prompt_tokens"] == 7
     assert writer.calls[0]["completion_tokens"] == 4
     assert writer.calls[0]["total_tokens"] == 11
+
+
+class RaisingContent:
+    def __str__(self):
+        raise RuntimeError("unit test response text failure")
+
+
+def test_text_conversion_failure_records_error_with_extracted_provider_usage(monkeypatch):
+    observability_langchain = importlib.import_module("services.observability.langchain")
+    writer = FakeTraceLifecycleWriter()
+    message = FakeAiMessage(
+        content=RaisingContent(),
+        usage_metadata={
+            "input_tokens": 9,
+            "output_tokens": 5,
+            "total_tokens": 14,
+        },
+        response_metadata={
+            "token_usage": {
+                "prompt_tokens": 9,
+                "completion_tokens": 5,
+                "total_tokens": 14,
+                "prompt_tokens_details": {"cached_tokens": 4},
+            },
+            "model_name": "fallback-model",
+        },
+    )
+    monkeypatch.setattr(
+        observability_langchain,
+        "get_observability_repository",
+        lambda: writer,
+    )
+    monkeypatch.setattr(
+        observability_langchain,
+        "current_trace_context",
+        lambda: None,
+    )
+
+    try:
+        observability_langchain.invoke_observable(
+            prompt=FakePrompt(),
+            llm=FakeLlm(message),
+            input_values={},
+            call_type="text_conversion_error_test",
+            provider="openai",
+            model="primary-model",
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "unit test response text failure"
+    else:
+        raise AssertionError("expected original text conversion exception to propagate")
+
+    assert writer.calls
+    call = writer.calls[0]
+    assert call["status"] == "ERROR"
+    assert call["provider"] == "openai"
+    assert call["model"] == "fallback-model"
+    assert call["fallback_used"] is True
+    assert call["fallback_from_model"] == "primary-model"
+    assert call["prompt_tokens"] == 9
+    assert call["completion_tokens"] == 5
+    assert call["total_tokens"] == 14
+    assert call["token_source"] == "provider"
+    assert call["prompt_cache_hit_tokens"] == 4
+    assert call["prompt_cache_miss_tokens"] == 5
+    assert call["cache_reported_by_provider"] is True
+    assert call["latency_ms"] >= 0
+    assert call["prompt_text"] == "unit test prompt"
+    assert call["response_text"] is None
+    assert call["raw_usage_json"] == {
+        "prompt_tokens": 9,
+        "completion_tokens": 5,
+        "total_tokens": 14,
+        "prompt_tokens_details": {"cached_tokens": 4},
+    }
+    assert call["metadata"]["response_metadata"] == message.response_metadata
+    assert call["metadata"]["usage_metadata"] == message.usage_metadata
+    assert call["metadata"]["error_type"] == "RuntimeError"
+    assert call["error_message"] == "unit test response text failure"
+    assert call["started_at"] is not None
+    assert call["ended_at"] is not None
+    assert writer.finished_steps[0]["step_id"] == "step-1"
+    assert writer.finished_steps[0]["status"] == "ERROR"
+    assert writer.finished_steps[0]["error_message"] == "unit test response text failure"
+    assert writer.finished_traces[0]["trace_id"] == "trace-1"
+    assert writer.finished_traces[0]["status"] == "ERROR"
+    assert writer.finished_traces[0]["error_code"] == "LLM_ERROR"
 
 
 class FakePrimaryRunnable:
