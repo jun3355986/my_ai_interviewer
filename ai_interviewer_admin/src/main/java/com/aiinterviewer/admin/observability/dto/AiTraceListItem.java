@@ -1,5 +1,6 @@
 package com.aiinterviewer.admin.observability.dto;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import lombok.Data;
@@ -27,4 +28,8 @@ public class AiTraceListItem {
     private Long totalTokens;
     private Long failedLlmCalls;
     private Boolean fallbackUsed;
+    private String provider;
+    private String model;
+    private BigDecimal providerPromptCacheTokenHitRate;
+    private BigDecimal providerPromptCacheCallHitRate;
 }

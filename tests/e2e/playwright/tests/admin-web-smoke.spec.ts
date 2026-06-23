@@ -88,6 +88,10 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
               status: 'SUCCESS',
               totalTokens: 2048,
               llmCallCount: 1,
+              provider: 'list-provider',
+              model: 'list-model',
+              providerPromptCacheTokenHitRate: 0.4567,
+              providerPromptCacheCallHitRate: 0.3333,
               durationMs: 678,
               startedAt: '2026-06-23T10:00:00+08:00',
               fallbackUsed: true,
@@ -173,10 +177,15 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
   await expect(page.getByText('Provider Cache Token Hit Rate')).toBeVisible();
   await expect(page.getByText('Provider Cache Call Hit Ratio')).toBeVisible();
   await expect(page.getByText('Provider Cache Unreported Calls')).toBeVisible();
-  await expect(page.getByText('session-smoke').first()).toBeVisible();
-  await expect(page.getByText('deepseek / deepseek-chat').first()).toBeVisible();
-  await expect(page.getByText('2,048').first()).toBeVisible();
-  await expect(page.getByText('678ms').first()).toBeVisible();
+  const traceRow = page.getByRole('row').filter({ hasText: 'session-smoke' });
+  await expect(traceRow).toBeVisible();
+  await expect(traceRow.getByText('list-provider / list-model')).toBeVisible();
+  await expect(traceRow.getByText('45.67%')).toBeVisible();
+  await expect(traceRow.getByText('33.33% calls')).toBeVisible();
+  await expect(traceRow.getByText('2,048')).toBeVisible();
+  await expect(traceRow.getByText('678ms')).toBeVisible();
+
+  await traceRow.getByRole('button', { name: '查看' }).click();
 
   await expect(page.getByText('构造提示词')).toBeVisible();
   await expect(page.getByText('deepseek-reasoner')).toBeVisible();

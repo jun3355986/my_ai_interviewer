@@ -263,6 +263,35 @@ class AiObservabilityServiceTest {
     }
 
     @Test
+    void traceListIncludesProviderModelAndCacheRatesFromFilteredLlmRows() throws Exception {
+        SqlSessionFactory sessionFactory = mapperSessionFactory();
+        seedTraceListContractRows();
+
+        AiTraceQuery query = new AiTraceQuery();
+        query.setProvider("deepseek");
+        query.setModel("deepseek-chat");
+        query.normalizeFilters();
+
+        try (SqlSession session = sessionFactory.openSession()) {
+            AiObservabilityMapper realMapper = session.getMapper(AiObservabilityMapper.class);
+
+            List<AiTraceListItem> traces = realMapper.selectTraces(query, 20, 0);
+
+            assertThat(traces).singleElement().satisfies(trace -> {
+                assertThat(trace.getId()).isEqualTo(UUID.fromString("00000000-0000-0000-0000-000000000701"));
+                assertThat(trace.getLlmCallCount()).isEqualTo(3L);
+                assertThat(trace.getTotalTokens()).isEqualTo(175L);
+                assertThat(invoke(trace, "getProvider")).isEqualTo("deepseek");
+                assertThat(invoke(trace, "getModel")).isEqualTo("deepseek-chat");
+                assertThat((BigDecimal) invoke(trace, "getProviderPromptCacheTokenHitRate"))
+                        .isEqualByComparingTo("0.666667");
+                assertThat((BigDecimal) invoke(trace, "getProviderPromptCacheCallHitRate"))
+                        .isEqualByComparingTo("0.500000");
+            });
+        }
+    }
+
+    @Test
     void statsIncludeHighConsumptionCallTypesForTheSameQuery() throws Exception {
         AiTraceQuery query = queryForToday();
         when(mapper.selectStats(query)).thenReturn(statsRow(
@@ -374,6 +403,74 @@ class AiObservabilityServiceTest {
         }
     }
 
+    private void seedTraceListContractRows() throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())) {
+            try (PreparedStatement truncate = connection.prepareStatement(
+                    "TRUNCATE TABLE t_ai_observability_access_log, t_ai_llm_call, "
+                            + "t_ai_trace_step, t_ai_trace RESTART IDENTITY CASCADE")) {
+                truncate.executeUpdate();
+            }
+            insertTrace(connection, "00000000-0000-0000-0000-000000000701", "request-701");
+            insertTrace(connection, "00000000-0000-0000-0000-000000000702", "request-702");
+            insertLlmCall(
+                    connection,
+                    "00000000-0000-0000-0000-000000000801",
+                    "00000000-0000-0000-0000-000000000701",
+                    "CHAT",
+                    "deepseek",
+                    "deepseek-chat",
+                    100L,
+                    true,
+                    40L,
+                    10L);
+            insertLlmCall(
+                    connection,
+                    "00000000-0000-0000-0000-000000000802",
+                    "00000000-0000-0000-0000-000000000701",
+                    "CHAT",
+                    "deepseek",
+                    "deepseek-chat",
+                    50L,
+                    true,
+                    0L,
+                    10L);
+            insertLlmCall(
+                    connection,
+                    "00000000-0000-0000-0000-000000000803",
+                    "00000000-0000-0000-0000-000000000701",
+                    "CHAT",
+                    "deepseek",
+                    "deepseek-chat",
+                    25L,
+                    false,
+                    null,
+                    null);
+            insertLlmCall(
+                    connection,
+                    "00000000-0000-0000-0000-000000000804",
+                    "00000000-0000-0000-0000-000000000701",
+                    "CHAT",
+                    "openai",
+                    "gpt-4o-mini",
+                    1_000L,
+                    true,
+                    900L,
+                    100L);
+            insertLlmCall(
+                    connection,
+                    "00000000-0000-0000-0000-000000000805",
+                    "00000000-0000-0000-0000-000000000702",
+                    "CHAT",
+                    "deepseek",
+                    "deepseek-reasoner",
+                    200L,
+                    true,
+                    100L,
+                    100L);
+        }
+    }
+
     private void insertTrace(Connection connection, String traceId, String requestId) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement(
                 """
@@ -384,6 +481,49 @@ class AiObservabilityServiceTest {
             statement.setObject(1, UUID.fromString(traceId));
             statement.setString(2, requestId);
             statement.setTimestamp(3, Timestamp.from(Instant.parse("2026-06-23T01:00:00Z")));
+            statement.executeUpdate();
+        }
+    }
+
+    private void insertLlmCall(
+            Connection connection,
+            String callId,
+            String traceId,
+            String callType,
+            String provider,
+            String model,
+            Long totalTokens,
+            boolean cacheReportedByProvider,
+            Long promptCacheHitTokens,
+            Long promptCacheMissTokens) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+                """
+                INSERT INTO t_ai_llm_call
+                    (id, trace_id, call_type, provider, model, status, prompt_tokens,
+                     completion_tokens, total_tokens, token_source, latency_ms, started_at,
+                     cache_reported_by_provider, prompt_cache_hit_tokens, prompt_cache_miss_tokens)
+                VALUES (?, ?, ?, ?, ?, 'SUCCESS', ?, ?, ?, 'PROVIDER', 100, ?, ?, ?, ?)
+                """)) {
+            statement.setObject(1, UUID.fromString(callId));
+            statement.setObject(2, UUID.fromString(traceId));
+            statement.setString(3, callType);
+            statement.setString(4, provider);
+            statement.setString(5, model);
+            statement.setLong(6, totalTokens / 3);
+            statement.setLong(7, totalTokens - (totalTokens / 3));
+            statement.setLong(8, totalTokens);
+            statement.setTimestamp(9, Timestamp.from(Instant.parse("2026-06-23T01:01:00Z")));
+            statement.setBoolean(10, cacheReportedByProvider);
+            if (promptCacheHitTokens == null) {
+                statement.setObject(11, null);
+            } else {
+                statement.setLong(11, promptCacheHitTokens);
+            }
+            if (promptCacheMissTokens == null) {
+                statement.setObject(12, null);
+            } else {
+                statement.setLong(12, promptCacheMissTokens);
+            }
             statement.executeUpdate();
         }
     }

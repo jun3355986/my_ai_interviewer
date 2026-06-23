@@ -25,6 +25,10 @@
         <result property="totalTokens" column="total_tokens"/>
         <result property="failedLlmCalls" column="failed_llm_calls"/>
         <result property="fallbackUsed" column="fallback_used"/>
+        <result property="provider" column="provider"/>
+        <result property="model" column="model"/>
+        <result property="providerPromptCacheTokenHitRate" column="provider_prompt_cache_token_hit_rate"/>
+        <result property="providerPromptCacheCallHitRate" column="provider_prompt_cache_call_hit_rate"/>
     </resultMap>
 
     <resultMap id="AiTraceDetailMap" type="com.aiinterviewer.admin.observability.dto.AiTraceDetailResponse">
@@ -190,7 +194,11 @@
                COALESCE(llm_counts.llm_call_count, 0) AS llm_call_count,
                COALESCE(llm_counts.total_tokens, 0) AS total_tokens,
                COALESCE(llm_counts.failed_llm_calls, 0) AS failed_llm_calls,
-               COALESCE(llm_counts.fallback_used, FALSE) AS fallback_used
+               COALESCE(llm_counts.fallback_used, FALSE) AS fallback_used,
+               llm_counts.provider,
+               llm_counts.model,
+               llm_counts.provider_prompt_cache_token_hit_rate,
+               llm_counts.provider_prompt_cache_call_hit_rate
         FROM t_ai_trace t
         LEFT JOIN (
             SELECT trace_id, COUNT(*) AS step_count
@@ -200,9 +208,47 @@
         LEFT JOIN (
             SELECT trace_id,
                    COUNT(*) AS llm_call_count,
+                   STRING_AGG(DISTINCT lc.provider, ', ' ORDER BY lc.provider) AS provider,
+                   STRING_AGG(DISTINCT lc.model, ', ' ORDER BY lc.model) AS model,
                    COALESCE(SUM(total_tokens), 0) AS total_tokens,
                    COUNT(*) FILTER (WHERE status &lt;&gt; 'SUCCESS') AS failed_llm_calls,
-                   BOOL_OR(fallback_used) AS fallback_used
+                   BOOL_OR(fallback_used) AS fallback_used,
+                   CASE
+                       WHEN SUM(
+                           CASE WHEN lc.cache_reported_by_provider
+                                THEN COALESCE(lc.prompt_cache_hit_tokens, 0) + COALESCE(lc.prompt_cache_miss_tokens, 0)
+                                ELSE 0
+                           END
+                       ) &gt; 0
+                       THEN ROUND(
+                           SUM(
+                               CASE WHEN lc.cache_reported_by_provider
+                                    THEN COALESCE(lc.prompt_cache_hit_tokens, 0)
+                                    ELSE 0
+                               END
+                           )::NUMERIC
+                           / SUM(
+                               CASE WHEN lc.cache_reported_by_provider
+                                    THEN COALESCE(lc.prompt_cache_hit_tokens, 0) + COALESCE(lc.prompt_cache_miss_tokens, 0)
+                                    ELSE 0
+                               END
+                           )::NUMERIC,
+                           6
+                       )
+                       ELSE NULL
+                   END AS provider_prompt_cache_token_hit_rate,
+                   CASE
+                       WHEN COUNT(*) FILTER (WHERE lc.cache_reported_by_provider) &gt; 0
+                       THEN ROUND(
+                           COUNT(*) FILTER (
+                               WHERE lc.cache_reported_by_provider
+                                 AND COALESCE(lc.prompt_cache_hit_tokens, 0) &gt; 0
+                           )::NUMERIC
+                           / COUNT(*) FILTER (WHERE lc.cache_reported_by_provider)::NUMERIC,
+                           6
+                       )
+                       ELSE NULL
+                   END AS provider_prompt_cache_call_hit_rate
             FROM t_ai_llm_call lc
             WHERE 1 = 1
             <include refid="LlmCallFilterPredicates">
