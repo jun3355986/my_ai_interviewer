@@ -279,6 +279,15 @@
                     AS provider_cache_unreported_calls
         FROM t_ai_trace t
         LEFT JOIN t_ai_llm_call c ON c.trace_id = t.id
+        <if test="query.callType != null">
+            AND c.call_type = #{query.callType}
+        </if>
+        <if test="query.provider != null">
+            AND c.provider = #{query.provider}
+        </if>
+        <if test="query.model != null">
+            AND c.model = #{query.model}
+        </if>
         <include refid="TraceWhere"/>
     </select>
 

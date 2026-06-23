@@ -148,6 +148,27 @@ class AiObservabilityServiceTest {
     }
 
     @Test
+    void statsSqlConstrainsCallTypeAggregatesOnEligibleTrace() throws Exception {
+        String selectStats = mapperXmlSelect("selectStats");
+
+        assertThat(selectStats).contains("LEFT JOIN t_ai_llm_call c ON c.trace_id = t.id");
+        assertThat(selectStats).contains("AND c.call_type = #{query.callType}");
+        assertThat(selectStats).contains("<include refid=\"TraceWhere\"/>");
+    }
+
+    @Test
+    void statsSqlConstrainsProviderAndModelAggregatesForProviderCacheDenominators() throws Exception {
+        String selectStats = mapperXmlSelect("selectStats");
+
+        assertThat(selectStats).contains("AND c.provider = #{query.provider}");
+        assertThat(selectStats).contains("AND c.model = #{query.model}");
+        assertThat(selectStats.indexOf("AND c.provider = #{query.provider}"))
+                .isLessThan(selectStats.indexOf("<include refid=\"TraceWhere\"/>"));
+        assertThat(selectStats.indexOf("AND c.model = #{query.model}"))
+                .isLessThan(selectStats.indexOf("<include refid=\"TraceWhere\"/>"));
+    }
+
+    @Test
     void statsIncludeHighConsumptionCallTypesForTheSameQuery() throws Exception {
         AiTraceQuery query = queryForToday();
         when(mapper.selectStats(query)).thenReturn(statsRow(
@@ -180,6 +201,17 @@ class AiObservabilityServiceTest {
             assertThat(invoke(row, "getTotalTokens")).isEqualTo(9_000L);
             assertThat(invoke(row, "getCallCount")).isEqualTo(12L);
         });
+    }
+
+    private String mapperXmlSelect(String selectId) throws Exception {
+        String mapperXml = new ClassPathResource("mapper/AiObservabilityMapper.xml")
+                .getContentAsString(StandardCharsets.UTF_8);
+        String startTag = "<select id=\"" + selectId + "\"";
+        int start = mapperXml.indexOf(startTag);
+        assertThat(start).isGreaterThanOrEqualTo(0);
+        int end = mapperXml.indexOf("</select>", start);
+        assertThat(end).isGreaterThan(start);
+        return mapperXml.substring(start, end);
     }
 
     private AiTraceQuery queryForToday() {
