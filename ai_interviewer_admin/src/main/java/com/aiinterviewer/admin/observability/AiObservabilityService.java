@@ -7,6 +7,7 @@ import com.aiinterviewer.admin.observability.dto.AiObservabilityStatsResponse;
 import com.aiinterviewer.admin.observability.dto.AiTraceDetailResponse;
 import com.aiinterviewer.admin.observability.dto.AiTraceListItem;
 import com.aiinterviewer.admin.observability.dto.AiTraceQuery;
+import com.aiinterviewer.admin.observability.dto.HighConsumptionCallTypeStats;
 import com.aiinterviewer.admin.observability.dto.LlmCallRawPayload;
 import com.aiinterviewer.admin.observability.dto.ObservabilityAccessLog;
 import com.aiinterviewer.admin.observability.mapper.AiObservabilityMapper;
@@ -75,6 +76,8 @@ public class AiObservabilityService {
         if (stats == null) {
             stats = new AiObservabilityStatsResponse();
         }
+        stats.setHighConsumptionCallTypes(defaultHighConsumptionCallTypes(
+                mapper.selectHighConsumptionCallTypes(safeQuery)));
         fillStatDefaults(stats);
         stats.setLlmFailureRate(rate(stats.getFailedLlmCalls(), stats.getTotalLlmCalls()));
         stats.setProviderPromptCacheTokenHitRate(rate(
@@ -185,6 +188,18 @@ public class AiObservabilityService {
         stats.setProviderCacheReportedCalls(defaultLong(stats.getProviderCacheReportedCalls()));
         stats.setProviderCacheUnreportedCalls(defaultLong(stats.getProviderCacheUnreportedCalls()));
         stats.setAverageLatencyMs(defaultDecimal(stats.getAverageLatencyMs()));
+    }
+
+    private List<HighConsumptionCallTypeStats> defaultHighConsumptionCallTypes(
+            List<HighConsumptionCallTypeStats> items) {
+        if (items == null) {
+            return List.of();
+        }
+        items.forEach(item -> {
+            item.setTotalTokens(defaultLong(item.getTotalTokens()));
+            item.setCallCount(defaultLong(item.getCallCount()));
+        });
+        return items;
     }
 
     private Long defaultLong(Long value) {

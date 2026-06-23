@@ -6,6 +6,7 @@ import com.aiinterviewer.admin.observability.dto.AiTraceDetailResponse;
 import com.aiinterviewer.admin.observability.dto.AiTraceListItem;
 import com.aiinterviewer.admin.observability.dto.AiTraceQuery;
 import com.aiinterviewer.admin.observability.dto.AiTraceStepItem;
+import com.aiinterviewer.admin.observability.dto.HighConsumptionCallTypeStats;
 import com.aiinterviewer.admin.observability.dto.LlmCallRawPayload;
 import com.aiinterviewer.admin.observability.dto.ObservabilityAccessLog;
 import java.util.List;
@@ -34,6 +35,8 @@ public interface AiObservabilityMapper {
     LlmCallRawPayload selectLlmCallRawPayload(@Param("callId") UUID callId);
 
     AiObservabilityStatsResponse selectStats(@Param("query") AiTraceQuery query);
+
+    List<HighConsumptionCallTypeStats> selectHighConsumptionCallTypes(@Param("query") AiTraceQuery query);
 
     int insertAccessLog(@Param("log") ObservabilityAccessLog log);
 }

@@ -29,6 +29,22 @@ cd ai_interviewer
 uv sync --group dev
 ```
 
+## Java Unit Tests
+
+Java admin unit and schema tests run with local Maven and JDK 21:
+
+```bash
+cd ai_interviewer_admin
+env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test
+```
+
+The backend monorepo modules currently inherit an older default Surefire plugin that does not discover JUnit 5 tests reliably. For focused JUnit 5 tests in `ai_interview_backend`, compile first and invoke Surefire 3.2.5 explicitly:
+
+```bash
+cd ai_interview_backend
+env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test -Dtest=InterviewUsernamePropagationTest
+```
+
 ## Smoke Tests
 
 The smoke suite is a curl-based, non-UI verification for the P0 journey.

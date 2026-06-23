@@ -67,6 +67,18 @@ public class SSEProxyService {
      * @return SSE事件流
      */
     public Flux<ServerSentEvent<String>> proxyChat(ChatRequest request, Long userId) {
+        return proxyChat(request, userId, null);
+    }
+
+    /**
+     * 代理统一对话接口
+     *
+     * @param request  聊天请求
+     * @param userId   用户ID
+     * @param username 网关透传用户名
+     * @return SSE事件流
+     */
+    public Flux<ServerSentEvent<String>> proxyChat(ChatRequest request, Long userId, String username) {
         // 1. 获取或创建会话
         InterviewSession session = getOrCreateSession(request, userId);
 
@@ -74,7 +86,7 @@ public class SSEProxyService {
         saveUserMessage(session.getId(), request.getMessage(), session.getStage());
 
         // 3. 构建Python请求
-        PythonChatRequest pythonRequest = buildPythonRequest(request, session, userId);
+        PythonChatRequest pythonRequest = buildPythonRequest(request, session, userId, username);
 
         // 用于收集AI响应
         AtomicReference<StringBuilder> aiResponseRef = new AtomicReference<>(new StringBuilder());
@@ -241,12 +253,17 @@ public class SSEProxyService {
     /**
      * 构建Python请求
      */
-    private PythonChatRequest buildPythonRequest(ChatRequest request, InterviewSession session, Long userId) {
+    private PythonChatRequest buildPythonRequest(
+            ChatRequest request,
+            InterviewSession session,
+            Long userId,
+            String username) {
         return PythonChatRequest.builder()
                 .sessionId(session.getPythonSessionId())
                 .requestId(IdUtil.fastSimpleUUID())
                 .javaSessionId(session.getId())
                 .userId(userId)
+                .username(username)
                 .businessType("interview")
                 .entrypoint("interview_chat")
                 .message(request.getMessage())

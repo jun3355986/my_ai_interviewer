@@ -1,6 +1,7 @@
 package com.aiinterviewer.admin.observability.dto;
 
 import java.math.BigDecimal;
+import java.util.List;
 import lombok.Data;
 
 @Data
@@ -21,4 +22,5 @@ public class AiObservabilityStatsResponse {
     private Long providerCacheUnreportedCalls;
     private BigDecimal providerPromptCacheTokenHitRate;
     private BigDecimal providerPromptCacheCallHitRate;
+    private List<HighConsumptionCallTypeStats> highConsumptionCallTypes = List.of();
 }

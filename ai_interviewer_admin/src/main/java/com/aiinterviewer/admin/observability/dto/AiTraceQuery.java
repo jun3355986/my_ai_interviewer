@@ -1,12 +1,14 @@
 package com.aiinterviewer.admin.observability.dto;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
 @Data
 public class AiTraceQuery {
 
+    private UUID traceId;
     private Long userId;
     private String username;
     private String sessionId;
@@ -14,6 +16,7 @@ public class AiTraceQuery {
     private String businessType;
     private String entrypoint;
     private String status;
+    private String callType;
     private String provider;
     private String model;
 
@@ -33,6 +36,7 @@ public class AiTraceQuery {
         businessType = normalizeText(businessType);
         entrypoint = normalizeText(entrypoint);
         status = normalizeText(status);
+        callType = normalizeText(callType);
         provider = normalizeText(provider);
         model = normalizeText(model);
     }

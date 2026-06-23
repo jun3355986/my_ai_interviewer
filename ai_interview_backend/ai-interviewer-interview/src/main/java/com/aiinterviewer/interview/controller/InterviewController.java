@@ -51,7 +51,8 @@ public class InterviewController {
     @Operation(summary = "统一对话接口", description = "SSE流式响应，支持创建新会话或继续已有会话")
     public Flux<ServerSentEvent<String>> chat(
             @Valid @RequestBody ChatRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId) {
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Name", required = false) String username) {
 
         // 如果没有用户ID，使用默认值（开发测试用）
         if (userId == null) {
@@ -59,13 +60,13 @@ public class InterviewController {
             log.warn("No X-User-Id header, using default userId: {}", userId);
         }
 
-        log.info("Chat request: userId={}, sessionId={}, message={}",
-                userId, request.getSessionId(),
+        log.info("Chat request: userId={}, username={}, sessionId={}, message={}",
+                userId, username, request.getSessionId(),
                 request.getMessage().length() > 50 ?
                         request.getMessage().substring(0, 50) + "..." :
                         request.getMessage());
 
-        return sseProxyService.proxyChat(request, userId)
+        return sseProxyService.proxyChat(request, userId, username)
                 .timeout(Duration.ofMinutes(10))
                 .doOnSubscribe(s -> log.debug("SSE stream started"))
                 .doOnComplete(() -> log.debug("SSE stream completed"))

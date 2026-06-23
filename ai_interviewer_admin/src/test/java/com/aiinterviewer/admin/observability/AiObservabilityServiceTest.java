@@ -11,11 +11,15 @@ import com.aiinterviewer.admin.observability.dto.LlmCallRawPayload;
 import com.aiinterviewer.admin.observability.dto.ObservabilityAccessLog;
 import com.aiinterviewer.admin.observability.mapper.AiObservabilityMapper;
 import java.math.BigDecimal;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.core.io.ClassPathResource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -66,6 +70,64 @@ class AiObservabilityServiceTest {
                         && callId.equals(log.getLlmCallId())));
     }
 
+    @Test
+    void traceQueryNormalizesTraceIdAndCallTypeFilters() throws Exception {
+        UUID traceId = UUID.fromString("00000000-0000-0000-0000-000000000301");
+        AiTraceQuery query = new AiTraceQuery();
+        query.getClass().getMethod("setTraceId", UUID.class).invoke(query, traceId);
+        query.getClass().getMethod("setCallType", String.class).invoke(query, "  summary  ");
+
+        query.normalizeFilters();
+
+        assertThat(query.getClass().getMethod("getTraceId").invoke(query)).isEqualTo(traceId);
+        assertThat(query.getClass().getMethod("getCallType").invoke(query)).isEqualTo("summary");
+    }
+
+    @Test
+    void mapperXmlFiltersTraceListByTraceIdAndCallTypeWithoutDuplicateRows() throws Exception {
+        String mapperXml = new ClassPathResource("mapper/AiObservabilityMapper.xml")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(mapperXml).contains("t.id = #{query.traceId}");
+        assertThat(mapperXml).contains("cc.call_type = #{query.callType}");
+        assertThat(mapperXml).contains("SELECT 1\n                FROM t_ai_llm_call cc");
+    }
+
+    @Test
+    void statsIncludeHighConsumptionCallTypesForTheSameQuery() throws Exception {
+        AiTraceQuery query = queryForToday();
+        when(mapper.selectStats(query)).thenReturn(statsRow(
+                10L,
+                2L,
+                1_000L,
+                600L,
+                400L,
+                3L,
+                6L,
+                2L));
+
+        Class<?> itemClass = Class.forName(
+                "com.aiinterviewer.admin.observability.dto.HighConsumptionCallTypeStats");
+        Object item = itemClass.getConstructor().newInstance();
+        itemClass.getMethod("setCallType", String.class).invoke(item, "answer_evaluation");
+        itemClass.getMethod("setTotalTokens", Long.class).invoke(item, 9_000L);
+        itemClass.getMethod("setCallCount", Long.class).invoke(item, 12L);
+
+        Method mapperMethod = AiObservabilityMapper.class.getMethod(
+                "selectHighConsumptionCallTypes",
+                AiTraceQuery.class);
+        when(mapperMethod.invoke(mapper, query)).thenReturn(List.of(item));
+
+        AiObservabilityStatsResponse stats = service.getStats(query);
+
+        Object breakdown = stats.getClass().getMethod("getHighConsumptionCallTypes").invoke(stats);
+        assertThat((List<?>) breakdown).singleElement().satisfies(row -> {
+            assertThat(invoke(row, "getCallType")).isEqualTo("answer_evaluation");
+            assertThat(invoke(row, "getTotalTokens")).isEqualTo(9_000L);
+            assertThat(invoke(row, "getCallCount")).isEqualTo(12L);
+        });
+    }
+
     private AiTraceQuery queryForToday() {
         AiTraceQuery query = new AiTraceQuery();
         query.setStartedFrom(OffsetDateTime.parse("2026-06-23T00:00:00+08:00"));
@@ -103,5 +165,13 @@ class AiObservabilityServiceTest {
         payload.setPromptText("full prompt");
         payload.setResponseText("full response");
         return payload;
+    }
+
+    private Object invoke(Object target, String methodName) {
+        try {
+            return target.getClass().getMethod(methodName).invoke(target);
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError("Failed to invoke " + methodName, ex);
+        }
     }
 }

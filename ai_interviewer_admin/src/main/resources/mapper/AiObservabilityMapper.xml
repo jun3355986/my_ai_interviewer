@@ -110,8 +110,17 @@
         <result property="providerCacheUnreportedCalls" column="provider_cache_unreported_calls"/>
     </resultMap>
 
+    <resultMap id="HighConsumptionCallTypeStatsMap" type="com.aiinterviewer.admin.observability.dto.HighConsumptionCallTypeStats">
+        <result property="callType" column="call_type"/>
+        <result property="totalTokens" column="total_tokens"/>
+        <result property="callCount" column="call_count"/>
+    </resultMap>
+
     <sql id="TraceWhere">
         WHERE 1 = 1
+        <if test="query.traceId != null">
+            AND t.id = #{query.traceId}
+        </if>
         <if test="query.userId != null">
             AND t.user_id = #{query.userId}
         </if>
@@ -132,6 +141,14 @@
         </if>
         <if test="query.status != null">
             AND t.status = #{query.status}
+        </if>
+        <if test="query.callType != null">
+            AND EXISTS (
+                SELECT 1
+                FROM t_ai_llm_call cc
+                WHERE cc.trace_id = t.id
+                  AND cc.call_type = #{query.callType}
+            )
         </if>
         <if test="query.startedFrom != null">
             AND t.started_at &gt;= #{query.startedFrom}
@@ -252,6 +269,27 @@
         FROM t_ai_trace t
         LEFT JOIN t_ai_llm_call c ON c.trace_id = t.id
         <include refid="TraceWhere"/>
+    </select>
+
+    <select id="selectHighConsumptionCallTypes" resultMap="HighConsumptionCallTypeStatsMap">
+        SELECT c.call_type,
+               COALESCE(SUM(c.total_tokens), 0) AS total_tokens,
+               COUNT(c.id) AS call_count
+        FROM t_ai_trace t
+        JOIN t_ai_llm_call c ON c.trace_id = t.id
+        <include refid="TraceWhere"/>
+        <if test="query.callType != null">
+            AND c.call_type = #{query.callType}
+        </if>
+        <if test="query.provider != null">
+            AND c.provider = #{query.provider}
+        </if>
+        <if test="query.model != null">
+            AND c.model = #{query.model}
+        </if>
+        GROUP BY c.call_type
+        ORDER BY total_tokens DESC, call_count DESC, c.call_type ASC
+        LIMIT 10
     </select>
 
     <insert id="insertAccessLog">
