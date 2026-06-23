@@ -32,15 +32,21 @@ TDD mode: tdd
   - Spec review: passed by 019ef548-8cba-7c23-a26d-f18a900b167b (Nietzsche) after three fix rounds.
   - Quality review: passed by 019ef562-4b2b-7513-a9dd-0f383da2279b (Hilbert) after user-authorized round 4 fix.
   - Verification: admin observability tests passed with 15 tests; interview username propagation passed with 4 tests; Python router/langchain observability tests passed with 9 passed, 1 warning; interview module compile passed; diff check passed.
+- Task 5: Admin Frontend Observability Views
+  - Final stage: done
+  - Implementation commits: 613ec1d, 4da0991
+  - Spec review: passed by 019ef586-40a8-7901-86dd-80bab082416d (Hypatia) after one fix round.
+  - Quality review: passed by 019ef586-411f-7542-9766-8d075135e40c (Lovelace) after one fix round.
+  - Verification: admin observability/schema tests passed with 16 tests; frontend build passed; admin Playwright smoke passed with 2 tests.
 
 ## Current Task
 
-Plan task text: **Step 1: Write failing service tests**
-OpenSpec task text: 3.1 Propagate request, user, session, and business correlation identifiers from Java interview flows to Python AI calls; 3.2 Add Java admin read models and query APIs for observability trace list, trace detail, LLM call detail, and statistics; 3.3 Add admin access logging for full prompt and full response reads; 3.4 Ensure admin APIs enforce existing backend-admin authentication and authorization boundaries.
+Plan task text: **Step 1: Add TypeScript contracts**
+OpenSpec task text: 4.1 Add an AI observability menu entry and route in the admin frontend; 4.2 Build trace and LLM call list filters, pagination, status badges, token columns, latency columns, and provider-cache fields; 4.3 Build trace detail timeline with steps, associated LLM calls, errors, fallback records, and raw prompt/response reveal controls; 4.4 Build statistics panels for token totals, call count, failure rate, average duration, provider cache token hit rate, provider cache call hit ratio, and unreported cache calls.
 Stage: checkoff
-Review/fix rounds: 4
+Review/fix rounds: 1
 
-## Implementer
+## Task 4 Implementer
 
 Agent: 019ef510-d3ad-7700-bf15-d9127498b47a (Meitner)
 Status: DONE_WITH_CONCERNS
@@ -60,12 +66,12 @@ RED evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 
 GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 5 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed.
 Concerns: Worktree has coordinator-owned progress file only. No local Maven wrapper exists, so validation used local Maven 3.6.3 with explicit jenv JDK 21.
 
-## Reviews
+## Task 4 Reviews
 
 Spec compliance: passed by 019ef548-8cba-7c23-a26d-f18a900b167b (Nietzsche) after three fix rounds. Covered requirements 3.1, 3.2, 3.3, and 3.4.
 Code quality: passed by 019ef562-4b2b-7513-a9dd-0f383da2279b (Hilbert) after user-authorized round 4 fix. Prior blocker from 019ef54c-e8b7-74a2-b649-d38d02bfcbb7 (Faraday): LLM trace filters used independent `EXISTS` predicates for combined `callType`/`provider`/`model` filters, and raw prompt/response reads lacked seeded `AI_OBSERVABILITY_RAW_READ` enforcement. User explicitly authorized exceeding the 3-round Comet cap on 2026-06-24.
 
-## Fix Round 1
+## Task 4 Fix Round 1
 
 Agent: 019ef520-8862-7fa0-88c3-021ec28e292d (Hume)
 Status: DONE
@@ -88,7 +94,7 @@ RED evidence: Admin test failed before fix with missing `AiTraceQuery.setTraceId
 GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 8 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test -Dtest=InterviewUsernamePropagationTest` passed with 2 tests.
 Concerns: pending fresh spec re-review. Interview module requires explicit Surefire 3.2.5 command to run JUnit 5 test.
 
-## Fix Round 2
+## Task 4 Fix Round 2
 
 Agent: 019ef531-eea0-7a71-ae3f-509cc3a8dc94 (Ptolemy)
 Status: DONE
@@ -111,7 +117,7 @@ RED evidence: Admin test failed before fix because raw PROMPT/RESPONSE responses
 GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 11 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -Dtest=InterviewUsernamePropagationTest test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test` passed with 4 tests; `cd ai_interviewer && uv run pytest tests/test_router_observability.py tests/test_observable_langchain.py -q` passed with 9 passed, 1 warning.
 Concerns: pending fresh spec re-review. Python affected tests keep existing SQLAlchemy declarative_base deprecation warning.
 
-## Fix Round 3
+## Task 4 Fix Round 3
 
 Agent: 019ef542-b12d-79f1-8c32-8784c9c7d9eb (Fermat)
 Status: DONE
@@ -125,7 +131,7 @@ RED evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 
 GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 13 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -Dtest=InterviewUsernamePropagationTest test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test` passed with 4 tests; `cd ai_interviewer && uv run pytest tests/test_router_observability.py tests/test_observable_langchain.py -q` passed with 9 passed, 1 warning; `git diff --check` passed.
 Concerns: spec re-review passed; backend-admin remains on existing coarse `ROLE_ADMIN` boundary rather than per-permission interceptors, consistent with current security model.
 
-## Fix Round 4
+## Task 4 Fix Round 4
 
 Agent: 019ef559-5692-7ea2-9aa0-e7c24a757908 (Averroes)
 Status: DONE
@@ -141,7 +147,7 @@ RED evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 
 GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 15 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -Dtest=InterviewUsernamePropagationTest test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test` passed with 4 tests; `cd ai_interviewer && uv run pytest tests/test_router_observability.py tests/test_observable_langchain.py -q` passed with 9 passed, 1 warning; `git diff --check` passed.
 Concerns: user-authorized over-limit fix; Python tests keep existing SQLAlchemy declarative_base deprecation warning.
 
-## Final Quality Re-review
+## Task 4 Final Quality Re-review
 
 Agent: 019ef562-4b2b-7513-a9dd-0f383da2279b (Hilbert)
 Status: PASS
@@ -149,3 +155,48 @@ Reviewed commit: 785718b
 Findings: no blocking findings. Same-row combined LLM filters, filtered list/stat aggregates, raw read permission enforcement before payload lookup, audit behavior, RBAC seed mapping, and RED/GREEN coverage were accepted.
 Evidence: reviewer reran admin observability tests (15 passed), interview compile (BUILD SUCCESS), interview username propagation (4 passed), Python router/langchain observability tests (9 passed, 1 warning), and diff whitespace checks.
 Non-blocking notes: invalid raw `type` is normalized before permission check, so an unauthorized user with an invalid type receives 400 rather than 403; high-consumption SQL could gain a future provider+model integration assertion.
+
+## Task 5 Implementer
+
+Agent: 019ef568-12a2-7e02-ab6e-172b2d35b769 (Boole)
+Status: DONE
+Commit: 613ec1d
+Allowed files:
+- ai_interviewer_admin_front/src/types.ts
+- ai_interviewer_admin_front/src/api.ts
+- ai_interviewer_admin_front/src/App.tsx
+- ai_interviewer_admin_front/src/styles.css
+- tests/e2e/playwright/tests/admin-web-smoke.spec.ts
+Required verification: TDD RED evidence, `cd ai_interviewer_admin_front && npm run build`, and feasible smoke/test command if local environment permits.
+Summary: added the `AI 观测` menu/view, TypeScript contracts, API client methods, usable monitoring screen with filters/stats/trace list/detail panel, timeline and LLM call sections, and click-only raw prompt/response reveal.
+RED evidence: `ADMIN_WEB_BASE_URL=http://localhost:8091 ./node_modules/.bin/playwright test tests/admin-web-smoke.spec.ts --project=admin-web-chromium --grep "AI observability" --reporter=list` failed before implementation waiting for `getByRole('button', { name: /AI 观测/ })`.
+GREEN evidence: `cd ai_interviewer_admin_front && npm run build` passed; `ADMIN_WEB_BASE_URL=http://localhost:8091 ./node_modules/.bin/playwright test tests/admin-web-smoke.spec.ts --project=admin-web-chromium --reporter=list` passed with 2 tests.
+Concerns: no blocking implementation concern. Local e2e dependency install can pull a newer Playwright that wants a new browser download; implementer used an available local browser-compatible Playwright without committing dependency artifacts.
+
+## Task 5 Reviews
+
+Spec compliance: failed by 019ef579-6fde-7791-8fee-6918147d1bf6 (Lagrange). Blocking issues: trace list renders provider/model/cache columns from fields the real backend list API does not return; smoke does not click a trace row to open the detail panel.
+Code quality: failed by 019ef579-7050-77f0-8d80-bd92660149b8 (Volta). Blocking issues: same trace-list contract mismatch; smoke mocks do not prove list provider/model/cache columns match the real API contract.
+Coordinator verification: `cd ai_interviewer_admin_front && npm run build` passed after commit 613ec1d.
+
+## Task 5 Fix Round 1
+
+Agent: 019ef57d-e7ea-79c0-b918-22dcc5c38dfc (Descartes)
+Status: DONE
+Commit: 4da0991
+Target: fix trace list provider/model/cache API contract mismatch and smoke row-click coverage.
+Changed files:
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/dto/AiTraceListItem.java
+- ai_interviewer_admin/src/main/resources/mapper/AiObservabilityMapper.xml
+- ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/observability/AiObservabilityServiceTest.java
+- tests/e2e/playwright/tests/admin-web-smoke.spec.ts
+- tests/docs/test-cases.md
+RED evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest test` failed before fix because `traceListIncludesProviderModelAndCacheRatesFromFilteredLlmRows` could not call `getProvider` on `AiTraceListItem`, proving the Java list contract lacked provider/model/cache fields.
+GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 16 tests; `cd ai_interviewer_admin_front && npm run build` passed; `cd tests/e2e/playwright && ADMIN_WEB_BASE_URL=http://localhost:8091 npm run test -- --project=admin-web-chromium tests/admin-web-smoke.spec.ts` passed with 2 tests; `git diff --check` passed.
+Concerns: no blocking concern. Smoke used 8091 because 8090 was occupied.
+Coordinator verification after fix: admin observability/schema tests passed with 16 tests; frontend build passed; `ADMIN_WEB_BASE_URL=http://127.0.0.1:8091 npm run test -- --project=admin-web-chromium tests/admin-web-smoke.spec.ts` passed with 2 tests.
+
+## Task 5 Re-reviews After Fix Round 1
+
+Spec compliance: passed by 019ef586-40a8-7901-86dd-80bab082416d (Hypatia). Verified real list contract now includes provider/model/provider-cache fields, list aggregates respect filtered LLM rows, smoke asserts list row values and clicks `查看`, and raw API remains click-only.
+Code quality: passed by 019ef586-411f-7542-9766-8d075135e40c (Lovelace). Verified DTO/resultMap/SQL aliases, safe cache denominators, count/list consistency, scoped smoke assertions, and no raw payload exposure before reveal.

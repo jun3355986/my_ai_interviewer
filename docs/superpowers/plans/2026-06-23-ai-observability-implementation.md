@@ -564,7 +564,7 @@ git commit -m "feat: expose ai observability admin APIs"
 - Modify: `ai_interviewer_admin_front/src/styles.css`
 - Modify: `tests/e2e/playwright/tests/admin-web-smoke.spec.ts`
 
-- [ ] **Step 1: Add TypeScript contracts**
+- [x] **Step 1: Add TypeScript contracts**
 
 Add types:
 
@@ -597,17 +597,17 @@ export interface AiObservabilityStats {
 }
 ```
 
-- [ ] **Step 2: Add API client methods**
+- [x] **Step 2: Add API client methods**
 
 Add `adminApi.aiTraces`, `adminApi.aiTraceDetail`, `adminApi.aiLlmRawPayload`, and `adminApi.aiObservabilityStats`.
 
-- [ ] **Step 3: Add UI route and menu**
+- [x] **Step 3: Add UI route and menu**
 
 Extend `ViewKey` with `aiObservability` and add menu label `AI 观测`.
 
 The first screen must be the usable monitoring view: filters, stats, trace list, and detail drawer/panel. Do not add a marketing or explanatory landing page.
 
-- [ ] **Step 4: Build list/detail/stat views**
+- [x] **Step 4: Build list/detail/stat views**
 
 Use existing admin UI style. Show:
 
@@ -623,7 +623,7 @@ raw prompt / raw response reveal buttons
 
 Raw payload reveal must call the raw API only when clicked.
 
-- [ ] **Step 5: Add smoke coverage**
+- [x] **Step 5: Add smoke coverage**
 
 Extend admin smoke to confirm:
 
@@ -634,7 +634,7 @@ trace table renders empty state or rows
 detail panel opens from a row when test data exists
 ```
 
-- [ ] **Step 6: Run frontend checks**
+- [x] **Step 6: Run frontend checks**
 
 Run:
 
@@ -645,7 +645,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit admin frontend observability views**
+- [x] **Step 7: Commit admin frontend observability views**
 
 ```bash
 git add ai_interviewer_admin_front/src/types.ts ai_interviewer_admin_front/src/api.ts ai_interviewer_admin_front/src/App.tsx ai_interviewer_admin_front/src/styles.css tests/e2e/playwright/tests/admin-web-smoke.spec.ts

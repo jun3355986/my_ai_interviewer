@@ -20,14 +20,14 @@
 
 ## 4. Admin Frontend
 
-- [ ] 4.1 Add an AI observability menu entry and route in the admin frontend.
-- [ ] 4.2 Build trace and LLM call list filters, pagination, status badges, token columns, latency columns, and provider-cache fields.
-- [ ] 4.3 Build trace detail timeline with steps, associated LLM calls, errors, fallback records, and raw prompt/response reveal controls.
-- [ ] 4.4 Build statistics panels for token totals, call count, failure rate, average duration, provider cache token hit rate, provider cache call hit ratio, and unreported cache calls.
+- [x] 4.1 Add an AI observability menu entry and route in the admin frontend.
+- [x] 4.2 Build trace and LLM call list filters, pagination, status badges, token columns, latency columns, and provider-cache fields.
+- [x] 4.3 Build trace detail timeline with steps, associated LLM calls, errors, fallback records, and raw prompt/response reveal controls.
+- [x] 4.4 Build statistics panels for token totals, call count, failure rate, average duration, provider cache token hit rate, provider cache call hit ratio, and unreported cache calls.
 
 ## 5. Verification
 
 - [ ] 5.1 Add Python tests for DeepSeek usage fields, OpenAI-compatible cached tokens, unreported provider cache fields, and parser-before-metadata capture.
 - [ ] 5.2 Add Java API tests or smoke scripts for list, detail, raw payload access audit, and statistics queries.
-- [ ] 5.3 Add frontend route/component tests or browser smoke coverage for observability list, detail, and statistics views.
+- [x] 5.3 Add frontend route/component tests or browser smoke coverage for observability list, detail, and statistics views.
 - [ ] 5.4 Run project build/test commands for the touched Python, Java, and admin frontend modules and record evidence in the verification summary.
