@@ -82,6 +82,22 @@ def test_cached_tokens_greater_than_prompt_does_not_create_negative_miss():
     assert result.cache_reported_by_provider is True
 
 
+def test_negative_openai_cached_tokens_are_ignored():
+    usage = {
+        "prompt_tokens": 100,
+        "completion_tokens": 15,
+        "total_tokens": 115,
+        "prompt_tokens_details": {"cached_tokens": -5},
+    }
+
+    result = normalize_provider_usage("openai", usage)
+
+    assert result.prompt_cache_hit_tokens is None
+    assert result.prompt_cache_miss_tokens is None
+    assert result.prompt_cache_hit_rate is None
+    assert result.cache_reported_by_provider is False
+
+
 def test_invalid_deepseek_cache_tokens_are_ignored():
     usage = {
         "prompt_tokens": 100,
@@ -100,11 +116,42 @@ def test_invalid_deepseek_cache_tokens_are_ignored():
     assert result.cache_reported_by_provider is False
 
 
+def test_negative_deepseek_cache_tokens_are_ignored():
+    usage = {
+        "prompt_tokens": 100,
+        "completion_tokens": 25,
+        "total_tokens": 125,
+        "prompt_cache_hit_tokens": -5,
+        "prompt_cache_miss_tokens": -10,
+    }
+
+    result = normalize_provider_usage("deepseek", usage)
+
+    assert result.prompt_cache_hit_tokens is None
+    assert result.prompt_cache_miss_tokens is None
+    assert result.prompt_cache_hit_rate is None
+    assert result.cache_reported_by_provider is False
+
+
 def test_invalid_provider_token_fields_are_ignored():
     usage = {
         "prompt_tokens": "100",
         "completion_tokens": True,
         "total_tokens": 115.5,
+    }
+
+    result = normalize_provider_usage("openai", usage)
+
+    assert result.prompt_tokens is None
+    assert result.completion_tokens is None
+    assert result.total_tokens is None
+
+
+def test_negative_provider_token_fields_are_ignored():
+    usage = {
+        "prompt_tokens": -100,
+        "completion_tokens": -25,
+        "total_tokens": -125,
     }
 
     result = normalize_provider_usage("openai", usage)
@@ -157,6 +204,20 @@ def test_estimated_total_is_unknown_when_one_estimate_is_missing():
     )
 
     assert result.prompt_tokens == 12
+    assert result.completion_tokens is None
+    assert result.total_tokens is None
+    assert result.token_source == "estimated"
+
+
+def test_negative_estimated_tokens_are_ignored():
+    result = normalize_provider_usage(
+        "unknown",
+        None,
+        estimated_prompt_tokens=-12,
+        estimated_completion_tokens=-8,
+    )
+
+    assert result.prompt_tokens is None
     assert result.completion_tokens is None
     assert result.total_tokens is None
     assert result.token_source == "estimated"
