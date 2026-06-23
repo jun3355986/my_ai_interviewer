@@ -660,11 +660,11 @@ git commit -m "feat: add ai observability admin UI"
 - Create or modify: `tests/fixtures/payloads/ai-observability-chat.json`
 - Create or modify: `tests/api/pytest/test_ai_observability_api.py`
 
-- [ ] **Step 1: Add API smoke fixture**
+- [x] **Step 1: Add API smoke fixture**
 
 Create a payload that starts an interview chat through the Java service and includes enough context to produce a Python trace.
 
-- [ ] **Step 2: Add admin API smoke checks**
+- [x] **Step 2: Add admin API smoke checks**
 
 Add pytest or shell smoke checks that:
 
@@ -676,7 +676,7 @@ queries /admin/ai-observability/stats
 opens raw prompt or response and verifies access log count increases
 ```
 
-- [ ] **Step 3: Update test registry**
+- [x] **Step 3: Update test registry**
 
 Document all new tests in `tests/docs/test-cases.md`, including:
 
@@ -690,7 +690,7 @@ provider cache call hit ratio
 unreported provider cache calls
 ```
 
-- [ ] **Step 4: Update tooling guide**
+- [x] **Step 4: Update tooling guide**
 
 Document required environment variables:
 
@@ -702,7 +702,7 @@ AI_OBSERVABILITY_STORE_RAW_PAYLOAD
 AI_OBSERVABILITY_MAX_RAW_CHARS
 ```
 
-- [ ] **Step 5: Run full touched-module verification**
+- [x] **Step 5: Run full touched-module verification**
 
 Run:
 
@@ -715,11 +715,11 @@ cd ../ai_interviewer_admin_front && npm run build
 
 Expected: all commands PASS.
 
-- [ ] **Step 6: Mark OpenSpec tasks complete**
+- [x] **Step 6: Mark OpenSpec tasks complete**
 
 After implementation and verification, update `openspec/changes/add-ai-observability-center/tasks.md` so completed items are checked.
 
-- [ ] **Step 7: Commit cross-service verification and docs**
+- [x] **Step 7: Commit cross-service verification and docs**
 
 ```bash
 git add tests/docs/test-cases.md tests/docs/tooling-guide.md tests/fixtures/payloads/ai-observability-chat.json tests/api/pytest/test_ai_observability_api.py openspec/changes/add-ai-observability-center/tasks.md

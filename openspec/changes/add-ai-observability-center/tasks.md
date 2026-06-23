@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add PostgreSQL schema for `t_ai_trace`, `t_ai_trace_step`, `t_ai_llm_call`, and `t_ai_observability_access_log`.
 - [x] 1.2 Add Python AI observability configuration for enablement, PostgreSQL DSN, write timeout, raw payload retention, and raw payload maximum length.
-- [ ] 1.3 Add documentation and test registry entries for observability test assets under the root `tests/` directory.
+- [x] 1.3 Add documentation and test registry entries for observability test assets under the root `tests/` directory.
 
 ## 2. Python AI Service Instrumentation
 
@@ -27,7 +27,7 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Add Python tests for DeepSeek usage fields, OpenAI-compatible cached tokens, unreported provider cache fields, and parser-before-metadata capture.
-- [ ] 5.2 Add Java API tests or smoke scripts for list, detail, raw payload access audit, and statistics queries.
+- [x] 5.1 Add Python tests for DeepSeek usage fields, OpenAI-compatible cached tokens, unreported provider cache fields, and parser-before-metadata capture.
+- [x] 5.2 Add Java API tests or smoke scripts for list, detail, raw payload access audit, and statistics queries.
 - [x] 5.3 Add frontend route/component tests or browser smoke coverage for observability list, detail, and statistics views.
-- [ ] 5.4 Run project build/test commands for the touched Python, Java, and admin frontend modules and record evidence in the verification summary.
+- [x] 5.4 Run project build/test commands for the touched Python, Java, and admin frontend modules and record evidence in the verification summary.

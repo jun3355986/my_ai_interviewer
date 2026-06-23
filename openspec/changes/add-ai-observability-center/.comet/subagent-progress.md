@@ -38,11 +38,17 @@ TDD mode: tdd
   - Spec review: passed by 019ef586-40a8-7901-86dd-80bab082416d (Hypatia) after one fix round.
   - Quality review: passed by 019ef586-411f-7542-9766-8d075135e40c (Lovelace) after one fix round.
   - Verification: admin observability/schema tests passed with 16 tests; frontend build passed; admin Playwright smoke passed with 2 tests.
+- Task 6: Cross-Service Verification And Documentation
+  - Final stage: done
+  - Implementation commits: 8cc241b, 0e61ba9
+  - Spec review: passed by 019ef59b-50df-7a12-abbc-f7d3cfe3cc7b (Pasteur) after one fix round.
+  - Quality review: passed by 019ef59b-5172-7be3-8683-95880c782701 (Mencius) after one fix round.
+  - Verification: Python observability/prompt tests passed with 26 passed, 1 warning; admin observability/schema tests passed with 16 tests; interview username propagation passed with 4 tests; admin frontend build passed; new API pytest default/gate checks passed.
 
 ## Current Task
 
-Plan task text: **Step 1: Add TypeScript contracts**
-OpenSpec task text: 4.1 Add an AI observability menu entry and route in the admin frontend; 4.2 Build trace and LLM call list filters, pagination, status badges, token columns, latency columns, and provider-cache fields; 4.3 Build trace detail timeline with steps, associated LLM calls, errors, fallback records, and raw prompt/response reveal controls; 4.4 Build statistics panels for token totals, call count, failure rate, average duration, provider cache token hit rate, provider cache call hit ratio, and unreported cache calls.
+Plan task text: **Step 1: Add API smoke fixture**
+OpenSpec task text: 1.3 Add documentation and test registry entries for observability test assets under the root `tests/` directory; 5.1 Add Python tests for DeepSeek usage fields, OpenAI-compatible cached tokens, unreported provider cache fields, and parser-before-metadata capture; 5.2 Add Java API tests or smoke scripts for list, detail, raw payload access audit, and statistics queries; 5.4 Run project build/test commands for the touched Python, Java, and admin frontend modules and record evidence in the verification summary.
 Stage: checkoff
 Review/fix rounds: 1
 
@@ -200,3 +206,42 @@ Coordinator verification after fix: admin observability/schema tests passed with
 
 Spec compliance: passed by 019ef586-40a8-7901-86dd-80bab082416d (Hypatia). Verified real list contract now includes provider/model/provider-cache fields, list aggregates respect filtered LLM rows, smoke asserts list row values and clicks `查看`, and raw API remains click-only.
 Code quality: passed by 019ef586-411f-7542-9766-8d075135e40c (Lovelace). Verified DTO/resultMap/SQL aliases, safe cache denominators, count/list consistency, scoped smoke assertions, and no raw payload exposure before reveal.
+
+## Task 6 Implementer
+
+Agent: 019ef58b-9663-72d2-943e-9cee9101f33a (Hegel)
+Status: DONE_WITH_CONCERNS
+Commit: 8cc241b
+Allowed files:
+- tests/docs/test-cases.md
+- tests/docs/tooling-guide.md
+- tests/fixtures/payloads/ai-observability-chat.json
+- tests/api/pytest/test_ai_observability_api.py
+Required verification: TDD RED evidence; Python observability tests; admin Java observability tests; interview username propagation tests; admin frontend build; new API pytest collection/skipped run; `git diff --check`.
+Summary: added an AI observability chat fixture, root opt-in live API smoke for Java interview -> Python trace -> admin list/detail/stats/raw access, fixture/docs contract test, and registry/tooling documentation for observability tests and environment variables.
+RED evidence: `cd ai_interviewer && uv run python -m pytest ../tests/api/pytest/test_ai_observability_api.py -q` failed before fixture/docs implementation with `1 failed, 1 skipped` because `tests/fixtures/payloads/ai-observability-chat.json` did not exist.
+GREEN evidence: Python observability/prompt tests passed with 26 passed, 1 warning; admin observability/schema tests passed with 16 tests; interview username propagation passed with 4 tests; admin frontend build passed; `uv run --with pytest python -m pytest tests/api/pytest/test_ai_observability_api.py -q` passed with 1 passed, 1 skipped; `git diff --check` and cached diff check passed.
+Concerns: live cross-service smoke is opt-in and was not run against real services; root system `python3` lacks pytest, so verification uses uv-based pytest commands. Python tests dirtied local Chroma sqlite, which coordinator restored per prior authorization.
+
+## Task 6 Reviews
+
+Spec compliance: passed by 019ef594-7e9f-7680-b2d1-afa608c7bdec (Carson). Accepted opt-in live smoke and optional DB audit count as non-blocking.
+Code quality: failed by 019ef594-7f62-7021-9e2f-be80df8af8c9 (Anscombe). Blocking issue: `RUN_AI_OBSERVABILITY_API_TESTS` skip happens inside the test body after `auth_headers` fixture setup, so enabling live/SSE without the AI-specific gate still attempts gateway login instead of skipping.
+Coordinator verification: restored local Chroma sqlite test side effect; `uv run --with pytest python -m pytest tests/api/pytest/test_ai_observability_api.py -q` passed with 1 passed, 1 skipped; `git diff --check` passed.
+
+## Task 6 Fix Round 1
+
+Agent: 019ef598-7830-70c2-abc1-4971bf42684a (Socrates)
+Status: DONE
+Commit: 0e61ba9
+Target: move or restructure the AI observability live-smoke opt-in gate so missing `RUN_AI_OBSERVABILITY_API_TESTS=1` skips before gateway/admin fixtures make network calls.
+Changed files:
+- tests/api/pytest/test_ai_observability_api.py
+RED evidence: `uv run --with pytest python -m pytest tests/api/pytest/test_ai_observability_api.py::test_ai_observability_live_smoke_gates_auth_fixture_before_network_io -q` failed because the live smoke still directly declared `auth_headers`; the reviewer reproduction also errored at gateway login before the fix.
+GREEN evidence: `RUN_LIVE_API_TESTS=1 RUN_SSE_API_TESTS=1 GATEWAY_BASE_URL=http://127.0.0.1:9 uv run --with pytest python -m pytest tests/api/pytest/test_ai_observability_api.py::test_ai_observability_cross_service_admin_smoke -q` now cleanly skips with 1 skipped; `uv run --with pytest python -m pytest tests/api/pytest/test_ai_observability_api.py -q` passes with 1 passed, 1 skipped; `git diff --check` passed.
+Coordinator verification after fix: reran the reviewer reproduction and default API pytest; both passed/skipped as expected without network errors.
+
+## Task 6 Re-reviews After Fix Round 1
+
+Spec compliance: passed by 019ef59b-50df-7a12-abbc-f7d3cfe3cc7b (Pasteur). Verified fixture, opt-in live smoke, docs registry, tooling env vars, and AI gate fix still satisfy Task 6.
+Code quality: passed by 019ef59b-5172-7be3-8683-95880c782701 (Mencius). Verified AI-specific gate skips before auth fixture/network I/O, default run remains deterministic, full opt-in path still reaches auth, docs are not misleading, and diff hygiene is clean.
