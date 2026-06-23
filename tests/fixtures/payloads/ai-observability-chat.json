@@ -1,0 +1,9 @@
+{
+  "sessionId": null,
+  "message": "请开始一次 AI 观测中心冒烟面试。我做过 Spring Boot、Redis 和 PostgreSQL 的订单系统，最近负责接口耗时治理、慢查询分析和故障排查。",
+  "resumeId": null,
+  "resumeContent": "候选人：观测冒烟候选人。经验：3 年 Java 后端开发，熟悉 Spring Boot、Spring Cloud Gateway、Redis、PostgreSQL、消息队列和基础可观测性建设。项目：参与订单服务性能优化，补充 traceId 日志、慢 SQL 排查和缓存命中率分析。",
+  "jobId": null,
+  "jobRequirements": "Java 后端工程师。要求熟悉 Spring Boot、PostgreSQL、Redis、微服务网关、SSE 流式接口和线上问题定位；能说明如何通过日志、指标和调用链分析 AI 面试链路问题。",
+  "candidateName": "观测冒烟候选人"
+}

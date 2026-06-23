@@ -102,6 +102,68 @@ SSE tests are opt-in because they can call the real LLM provider:
 RUN_LIVE_API_TESTS=1 RUN_SSE_API_TESTS=1 python3 -m pytest tests/api/pytest/test_interview_api.py
 ```
 
+### AI Observability Cross-Service Smoke
+
+The AI observability API smoke is deliberately opt-in because it starts a real interview chat through the Java interview service, can call the Python LLM path, and then checks the admin observability API.
+
+Fixture:
+
+```text
+tests/fixtures/payloads/ai-observability-chat.json
+```
+
+Contract-only collection and docs check:
+
+```bash
+cd ai_interviewer
+uv run python -m pytest ../tests/api/pytest/test_ai_observability_api.py::test_ai_observability_fixture_and_docs_contract -q
+```
+
+Live cross-service smoke:
+
+```bash
+cd ai_interviewer
+RUN_LIVE_API_TESTS=1 \
+RUN_SSE_API_TESTS=1 \
+RUN_AI_OBSERVABILITY_API_TESTS=1 \
+uv run python -m pytest ../tests/api/pytest/test_ai_observability_api.py -q
+```
+
+The live test calls:
+
+```text
+POST /api/v1/interviews/chat
+GET  /admin/ai-observability/traces
+GET  /admin/ai-observability/traces/{traceId}
+GET  /admin/ai-observability/stats
+GET  /admin/ai-observability/llm-calls/{callId}/raw?type=PROMPT
+GET  /admin/ai-observability/llm-calls/{callId}/raw?type=RESPONSE
+```
+
+AI observability runtime variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AI_OBSERVABILITY_ENABLED` | `true` in Python config | Enables Python trace, step, and LLM-call writes. |
+| `AI_OBSERVABILITY_DB_URL` | Empty | SQLAlchemy PostgreSQL URL for Python writes; the API smoke also reuses it for optional `psql` access-log count verification. Do not commit credentials. |
+| `AI_OBSERVABILITY_WRITE_TIMEOUT_MS` | `300` | Best-effort write timeout for observability persistence. |
+| `AI_OBSERVABILITY_STORE_RAW_PAYLOAD` | `true` | Controls whether raw prompt and response text are stored for admin audit reads. |
+| `AI_OBSERVABILITY_MAX_RAW_CHARS` | `200000` | Maximum raw prompt/response characters retained per LLM call. |
+
+Live smoke variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RUN_AI_OBSERVABILITY_API_TESTS` | unset | Additional opt-in gate for the cross-service observability smoke. |
+| `GATEWAY_BASE_URL` | `http://localhost:9000` | Gateway base for user login and Java interview chat. |
+| `ADMIN_API_BASE_URL` | `GATEWAY_BASE_URL` | Admin API base; set to `http://localhost:9010` when bypassing gateway and calling `ai_interviewer_admin` directly. |
+| `ADMIN_SMOKE_USERNAME` | `admin` | Admin account for `/admin/auth/login`; must have `ROLE_ADMIN` and `AI_OBSERVABILITY_RAW_READ`. |
+| `ADMIN_SMOKE_PASSWORD` | `admin123` | Admin password for the live smoke account. |
+| `AI_OBSERVABILITY_TRACE_WAIT_SECONDS` | `45` | Poll timeout while waiting for a new admin trace after interview chat. |
+| `AI_OBSERVABILITY_SSE_MAX_TIME` | `SSE_MAX_TIME` or `60` | Timeout for the interview chat SSE request. |
+
+If `AI_OBSERVABILITY_DB_URL` is unset or `psql` is unavailable, the smoke still opens raw prompt/response through the admin API but skips the direct `t_ai_observability_access_log` count assertion. When DB access is configured, the count must increase by at least 2 after reading both raw payloads.
+
 Postman collection exports, when needed, should be stored under `tests/api/postman`.
 
 ## Web E2E
