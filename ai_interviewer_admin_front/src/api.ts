@@ -2,11 +2,17 @@ import type {
   AdminProfile,
   ApiResult,
   AuditLogRow,
+  AiLlmCall,
+  AiObservabilityStats,
+  AiRawPayloadType,
+  AiTraceDetail,
+  AiTraceRow,
   DashboardOverview,
   InterviewRow,
   JobCreatePayload,
   JobRow,
   LoginResponse,
+  LlmCallRawPayload,
   PageResult,
   QuestionCreatePayload,
   QuestionImportBatch,
@@ -176,5 +182,20 @@ export const adminApi = {
   },
   auditLogs(params: Record<string, unknown>) {
     return request<PageResult<AuditLogRow>>(`/audit/logs${queryString(params)}`);
+  },
+  aiTraces(params: Record<string, unknown>) {
+    return request<PageResult<AiTraceRow>>(`/ai-observability/traces${queryString(params)}`);
+  },
+  aiTraceDetail(traceId: string) {
+    return request<AiTraceDetail>(`/ai-observability/traces/${traceId}`);
+  },
+  aiLlmCallDetail(callId: string) {
+    return request<AiLlmCall>(`/ai-observability/llm-calls/${callId}`);
+  },
+  aiLlmCallRaw(callId: string, type: AiRawPayloadType) {
+    return request<LlmCallRawPayload>(`/ai-observability/llm-calls/${callId}/raw${queryString({ type })}`);
+  },
+  aiObservabilityStats(params: Record<string, unknown>) {
+    return request<AiObservabilityStats>(`/ai-observability/stats${queryString(params)}`);
   },
 };

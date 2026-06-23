@@ -2,6 +2,11 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'rea
 import { adminApi, clearSession, getToken, readProfile, saveSession } from './api';
 import type {
   AdminProfile,
+  AiLlmCall,
+  AiObservabilityStats,
+  AiRawPayloadType,
+  AiTraceDetail,
+  AiTraceRow,
   AuditLogRow,
   DashboardOverview,
   InterviewRow,
@@ -14,7 +19,7 @@ import type {
   UserRow,
 } from './types';
 
-type ViewKey = 'dashboard' | 'users' | 'jobs' | 'interviews' | 'questions' | 'audit';
+type ViewKey = 'dashboard' | 'users' | 'jobs' | 'interviews' | 'questions' | 'audit' | 'aiObservability';
 
 const views: Array<{ key: ViewKey; label: string; eyebrow: string }> = [
   { key: 'dashboard', label: '运营总览', eyebrow: 'Overview' },
@@ -22,6 +27,7 @@ const views: Array<{ key: ViewKey; label: string; eyebrow: string }> = [
   { key: 'jobs', label: '职位管理', eyebrow: 'Jobs' },
   { key: 'interviews', label: '面试监控', eyebrow: 'Interviews' },
   { key: 'questions', label: '题库管理', eyebrow: 'Question Bank' },
+  { key: 'aiObservability', label: 'AI 观测', eyebrow: 'AI Observability' },
   { key: 'audit', label: '审计日志', eyebrow: 'Audit' },
 ];
 
@@ -87,6 +93,68 @@ function statusTone(value?: number | null) {
   return 'warn';
 }
 
+function textStatusTone(value?: string | null) {
+  const normalized = (value || '').toUpperCase();
+  if (['SUCCESS', 'COMPLETED', 'OK'].includes(normalized)) {
+    return 'good';
+  }
+  if (['FAILED', 'ERROR', 'TIMEOUT'].includes(normalized)) {
+    return 'danger';
+  }
+  if (['RUNNING', 'PROCESSING', 'PENDING'].includes(normalized)) {
+    return 'info';
+  }
+  return 'muted';
+}
+
+function formatNumber(value?: number | null) {
+  return value == null ? '-' : Intl.NumberFormat('zh-CN').format(value);
+}
+
+function formatDuration(value?: number | null) {
+  return value == null ? '-' : `${Intl.NumberFormat('zh-CN').format(Math.round(value))}ms`;
+}
+
+function formatPercent(value?: number | null) {
+  if (value == null) {
+    return '-';
+  }
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function compactId(value?: string | null) {
+  if (!value) {
+    return '-';
+  }
+  return value.length > 14 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
+function providerModel(call?: Pick<AiLlmCall, 'provider' | 'model'> | null) {
+  if (!call?.provider && !call?.model) {
+    return '-';
+  }
+  return `${call.provider || '-'} / ${call.model || '-'}`;
+}
+
+function statNumber(stats: AiObservabilityStats | null, frontendKey: keyof AiObservabilityStats, backendKey?: keyof AiObservabilityStats) {
+  if (!stats) {
+    return 0;
+  }
+  const direct = stats[frontendKey];
+  const fallback = backendKey ? stats[backendKey] : undefined;
+  const value = typeof direct === 'number' ? direct : typeof fallback === 'number' ? fallback : 0;
+  return value;
+}
+
+function statRate(stats: AiObservabilityStats | null, frontendKey: keyof AiObservabilityStats, backendKey?: keyof AiObservabilityStats) {
+  if (!stats) {
+    return null;
+  }
+  const direct = stats[frontendKey];
+  const fallback = backendKey ? stats[backendKey] : undefined;
+  return typeof direct === 'number' ? direct : typeof fallback === 'number' ? fallback : null;
+}
+
 function splitList(value: string) {
   return value
     .split(/[,\n，]/)
@@ -110,6 +178,15 @@ export default function App() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [pageData, setPageData] = useState<PageResult<unknown> | null>(null);
   const [importBatches, setImportBatches] = useState<PageResult<QuestionImportBatch> | null>(null);
+  const [aiStats, setAiStats] = useState<AiObservabilityStats | null>(null);
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [traceDetail, setTraceDetail] = useState<AiTraceDetail | null>(null);
+  const [traceDetailLoading, setTraceDetailLoading] = useState(false);
+  const [aiProvider, setAiProvider] = useState('');
+  const [aiModel, setAiModel] = useState('');
+  const [aiCallType, setAiCallType] = useState('');
+  const [rawPayloads, setRawPayloads] = useState<Record<string, Partial<Record<AiRawPayloadType, string>>>>({});
+  const [rawLoadingKey, setRawLoadingKey] = useState('');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,8 +210,15 @@ export default function App() {
     setActiveView(view);
     setQuery('');
     setStatus('');
+    setAiProvider('');
+    setAiModel('');
+    setAiCallType('');
     setCurrentPage(1);
     setPageData(null);
+    setAiStats(null);
+    setSelectedTraceId(null);
+    setTraceDetail(null);
+    setRawPayloads({});
     setError('');
   }
 
@@ -146,6 +230,24 @@ export default function App() {
         setOverview(await adminApi.dashboard());
         setPageData(null);
         setImportBatches(null);
+        setAiStats(null);
+      } else if (activeView === 'aiObservability') {
+        const params = aiObservabilityParams();
+        const [traces, stats] = await Promise.all([
+          adminApi.aiTraces(params),
+          adminApi.aiObservabilityStats(params),
+        ]);
+        setPageData(traces);
+        setAiStats(stats);
+        setImportBatches(null);
+        const nextTraceId = traces.records.find((row) => row.id === selectedTraceId)?.id || traces.records[0]?.id || null;
+        if (nextTraceId) {
+          await loadAiTraceDetail(nextTraceId);
+        } else {
+          setSelectedTraceId(null);
+          setTraceDetail(null);
+          setRawPayloads({});
+        }
       } else {
         if (activeView === 'questions') {
           const [questions, imports] = await Promise.all([
@@ -171,7 +273,7 @@ export default function App() {
     }
   }
 
-  function loadPage(view: Exclude<ViewKey, 'dashboard'>) {
+  function loadPage(view: Exclude<ViewKey, 'dashboard' | 'aiObservability'>) {
     const baseParams = { current: currentPage, size: 10 };
     if (view === 'users') {
       return adminApi.users({ ...baseParams, username: query, status });
@@ -186,6 +288,50 @@ export default function App() {
       return adminApi.questions({ ...baseParams, keyword: query, status });
     }
     return adminApi.auditLogs({ ...baseParams, module: query });
+  }
+
+  function aiObservabilityParams() {
+    const baseParams = { current: currentPage, size: 10 };
+    return {
+      ...baseParams,
+      requestId: query,
+      status,
+      provider: aiProvider,
+      model: aiModel,
+      callType: aiCallType,
+    };
+  }
+
+  async function loadAiTraceDetail(traceId: string) {
+    setSelectedTraceId(traceId);
+    setTraceDetailLoading(true);
+    setRawPayloads({});
+    try {
+      setTraceDetail(await adminApi.aiTraceDetail(traceId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI 调用链路详情加载失败');
+    } finally {
+      setTraceDetailLoading(false);
+    }
+  }
+
+  async function revealAiRawPayload(callId: string, type: AiRawPayloadType) {
+    const key = `${callId}:${type}`;
+    setRawLoadingKey(key);
+    try {
+      const payload = await adminApi.aiLlmCallRaw(callId, type);
+      setRawPayloads((current) => ({
+        ...current,
+        [callId]: {
+          ...(current[callId] || {}),
+          [type]: payload.rawText || payload.promptText || payload.responseText || '',
+        },
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '原文读取失败');
+    } finally {
+      setRawLoadingKey('');
+    }
   }
 
   async function handleLogin(login: { profile: AdminProfile }) {
@@ -319,6 +465,31 @@ export default function App() {
         {error && <div className="error-banner">{error}</div>}
         {activeView === 'dashboard' ? (
           <DashboardPanel overview={overview} loading={loading} />
+        ) : activeView === 'aiObservability' ? (
+          <AiObservabilityPanel
+            stats={aiStats}
+            pageData={pageData as PageResult<AiTraceRow> | null}
+            loading={loading}
+            query={query}
+            status={status}
+            provider={aiProvider}
+            model={aiModel}
+            callType={aiCallType}
+            selectedTraceId={selectedTraceId}
+            traceDetail={traceDetail}
+            detailLoading={traceDetailLoading}
+            rawPayloads={rawPayloads}
+            rawLoadingKey={rawLoadingKey}
+            onQueryChange={setQuery}
+            onStatusChange={setStatus}
+            onProviderChange={setAiProvider}
+            onModelChange={setAiModel}
+            onCallTypeChange={setAiCallType}
+            onSubmit={submitSearch}
+            onSelectTrace={(traceId) => void loadAiTraceDetail(traceId)}
+            onRevealRaw={(callId, type) => void revealAiRawPayload(callId, type)}
+            onPageChange={setCurrentPage}
+          />
         ) : (
           <section className="panel">
             <div className="panel-header">
@@ -524,6 +695,356 @@ function DashboardPanel({ overview, loading }: { overview: DashboardOverview | n
   );
 }
 
+function AiObservabilityPanel({
+  stats,
+  pageData,
+  loading,
+  query,
+  status,
+  provider,
+  model,
+  callType,
+  selectedTraceId,
+  traceDetail,
+  detailLoading,
+  rawPayloads,
+  rawLoadingKey,
+  onQueryChange,
+  onStatusChange,
+  onProviderChange,
+  onModelChange,
+  onCallTypeChange,
+  onSubmit,
+  onSelectTrace,
+  onRevealRaw,
+  onPageChange,
+}: {
+  stats: AiObservabilityStats | null;
+  pageData: PageResult<AiTraceRow> | null;
+  loading: boolean;
+  query: string;
+  status: string;
+  provider: string;
+  model: string;
+  callType: string;
+  selectedTraceId: string | null;
+  traceDetail: AiTraceDetail | null;
+  detailLoading: boolean;
+  rawPayloads: Record<string, Partial<Record<AiRawPayloadType, string>>>;
+  rawLoadingKey: string;
+  onQueryChange: (value: string) => void;
+  onStatusChange: (value: string) => void;
+  onProviderChange: (value: string) => void;
+  onModelChange: (value: string) => void;
+  onCallTypeChange: (value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+  onSelectTrace: (traceId: string) => void;
+  onRevealRaw: (callId: string, type: AiRawPayloadType) => void;
+  onPageChange: (page: number) => void;
+}) {
+  const failedCalls = statNumber(stats, 'failedCalls', 'failedLlmCalls');
+  const totalCalls = statNumber(stats, 'totalLlmCalls');
+  const failureRate = statRate(stats, 'llmFailureRate') ?? (totalCalls > 0 ? failedCalls / totalCalls : 0);
+  const averageLatency = statRate(stats, 'avgDurationMs', 'averageLatencyMs');
+
+  return (
+    <div className="ai-observability-view">
+      <section className="panel">
+        <div className="panel-header ai-filter-header">
+          <form className="filter-row ai-filter-row" onSubmit={onSubmit}>
+            <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="按 Request ID 搜索" />
+            <select value={status} onChange={(event) => onStatusChange(event.target.value)}>
+              <option value="">全部状态</option>
+              <option value="SUCCESS">SUCCESS</option>
+              <option value="FAILED">FAILED</option>
+              <option value="RUNNING">RUNNING</option>
+            </select>
+            <input value={provider} onChange={(event) => onProviderChange(event.target.value)} placeholder="Provider" />
+            <input value={model} onChange={(event) => onModelChange(event.target.value)} placeholder="Model" />
+            <select value={callType} onChange={(event) => onCallTypeChange(event.target.value)}>
+              <option value="">全部调用类型</option>
+              <option value="CHAT">CHAT</option>
+              <option value="EMBEDDING">EMBEDDING</option>
+              <option value="RERANK">RERANK</option>
+            </select>
+            <button type="submit">查询</button>
+          </form>
+        </div>
+
+        <div className="metric-strip ai-metrics">
+          <article className="metric-card compact">
+            <span>Traces</span>
+            <strong>{formatNumber(statNumber(stats, 'totalTraces', 'traceCount'))}</strong>
+          </article>
+          <article className="metric-card compact">
+            <span>LLM Calls</span>
+            <strong>{formatNumber(totalCalls)}</strong>
+          </article>
+          <article className="metric-card compact">
+            <span>Total Tokens</span>
+            <strong>{formatNumber(statNumber(stats, 'totalTokens'))}</strong>
+          </article>
+          <article className="metric-card compact">
+            <span>Failure Rate</span>
+            <strong>{formatPercent(failureRate)}</strong>
+          </article>
+          <article className="metric-card compact">
+            <span>Avg Duration</span>
+            <strong>{formatDuration(averageLatency)}</strong>
+          </article>
+          <article className="metric-card compact">
+            <span>Provider Cache Token Hit Rate</span>
+            <strong>{formatPercent(statRate(stats, 'providerPromptCacheTokenHitRate'))}</strong>
+          </article>
+          <article className="metric-card compact">
+            <span>Provider Cache Call Hit Ratio</span>
+            <strong>{formatPercent(statRate(stats, 'providerPromptCacheCallHitRate'))}</strong>
+          </article>
+          <article className="metric-card compact">
+            <span>Provider Cache Unreported Calls</span>
+            <strong>{formatNumber(statNumber(stats, 'providerCacheUnreportedCalls'))}</strong>
+          </article>
+        </div>
+      </section>
+
+      <section className="ai-observability-grid">
+        <div className="panel ai-list-panel">
+          <div className="panel-title">
+            <p>Traces</p>
+            <h2>调用链路</h2>
+          </div>
+          <AiTraceTable
+            pageData={pageData}
+            loading={loading}
+            selectedTraceId={selectedTraceId}
+            onSelectTrace={onSelectTrace}
+          />
+          <Pagination pageData={pageData as PageResult<unknown> | null} onPageChange={onPageChange} />
+        </div>
+        <AiTraceDetailPanel
+          traceDetail={traceDetail}
+          detailLoading={detailLoading}
+          rawPayloads={rawPayloads}
+          rawLoadingKey={rawLoadingKey}
+          onRevealRaw={onRevealRaw}
+        />
+      </section>
+    </div>
+  );
+}
+
+function AiTraceTable({
+  pageData,
+  loading,
+  selectedTraceId,
+  onSelectTrace,
+}: {
+  pageData: PageResult<AiTraceRow> | null;
+  loading: boolean;
+  selectedTraceId: string | null;
+  onSelectTrace: (traceId: string) => void;
+}) {
+  if (loading && !pageData) {
+    return <div className="loading-block">正在加载 AI 调用链路...</div>;
+  }
+  const records = pageData?.records || [];
+  if (records.length === 0) {
+    return <div className="empty-state">暂无 AI 调用链路，可以调整筛选条件。</div>;
+  }
+
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>Trace</th>
+          <th>Session</th>
+          <th>业务</th>
+          <th>状态</th>
+          <th>Provider / Model</th>
+          <th>Tokens</th>
+          <th>Cache</th>
+          <th>耗时</th>
+          <th>开始时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {records.map((row) => (
+          <tr key={row.id} className={selectedTraceId === row.id ? 'selected-row' : undefined}>
+            <td className="mono-cell">
+              {compactId(row.id)}
+              <small>{row.requestId || '-'}</small>
+            </td>
+            <td>{row.sessionId || row.pythonSessionId || '-'}</td>
+            <td>
+              <strong>{row.businessType || '-'}</strong>
+              <small>{row.entrypoint || '-'}</small>
+            </td>
+            <td>
+              <span className={`status ${textStatusTone(row.status)}`}>{row.status || '-'}</span>
+              {row.fallbackUsed && <small className="warn-text">fallback</small>}
+            </td>
+            <td>{providerModel(row)}</td>
+            <td>
+              {formatNumber(row.totalTokens)}
+              <small>{formatNumber(row.llmCallCount)} calls</small>
+            </td>
+            <td>
+              <span>{formatPercent(row.providerPromptCacheTokenHitRate)}</span>
+              <small>{formatPercent(row.providerPromptCacheCallHitRate)} calls</small>
+            </td>
+            <td>{formatDuration(row.durationMs)}</td>
+            <td>{formatDate(row.startedAt)}</td>
+            <td className="table-actions">
+              <button type="button" onClick={() => onSelectTrace(row.id)}>
+                查看
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function AiTraceDetailPanel({
+  traceDetail,
+  detailLoading,
+  rawPayloads,
+  rawLoadingKey,
+  onRevealRaw,
+}: {
+  traceDetail: AiTraceDetail | null;
+  detailLoading: boolean;
+  rawPayloads: Record<string, Partial<Record<AiRawPayloadType, string>>>;
+  rawLoadingKey: string;
+  onRevealRaw: (callId: string, type: AiRawPayloadType) => void;
+}) {
+  if (detailLoading && !traceDetail) {
+    return <section className="panel ai-detail-panel loading-block">正在加载链路详情...</section>;
+  }
+  if (!traceDetail) {
+    return <section className="panel ai-detail-panel empty-state">请选择一条 AI 调用链路。</section>;
+  }
+
+  return (
+    <section className="panel ai-detail-panel">
+      <div className="panel-title">
+        <p>Trace Detail</p>
+        <h2>{compactId(traceDetail.id)}</h2>
+      </div>
+      <div className="trace-summary">
+        <span className={`status ${textStatusTone(traceDetail.status)}`}>{traceDetail.status}</span>
+        <strong>{traceDetail.businessType}</strong>
+        <span>{traceDetail.sessionId || traceDetail.pythonSessionId || '-'}</span>
+        <span>{formatDuration(traceDetail.durationMs)}</span>
+      </div>
+      {traceDetail.errorMessage && <div className="error-banner compact">{traceDetail.errorMessage}</div>}
+
+      <section className="detail-section">
+        <div className="panel-title compact-title">
+          <p>Timeline</p>
+          <h3>Step Timeline</h3>
+        </div>
+        {traceDetail.steps.length === 0 ? (
+          <div className="empty-state compact">暂无步骤记录。</div>
+        ) : (
+          <ol className="timeline">
+            {traceDetail.steps.map((step) => (
+              <li key={step.id}>
+                <span className={`status ${textStatusTone(step.status)}`}>{step.status || '-'}</span>
+                <div>
+                  <strong>{step.stepName || step.stepType || `Step ${step.stepOrder || ''}`}</strong>
+                  <small>
+                    {step.stepType || '-'} · {formatDuration(step.durationMs)} · {formatDate(step.startedAt)}
+                  </small>
+                  {step.errorMessage && <em>{step.errorMessage}</em>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      <section className="detail-section">
+        <div className="panel-title compact-title">
+          <p>LLM Calls</p>
+          <h3>关联调用</h3>
+        </div>
+        {traceDetail.llmCalls.length === 0 ? (
+          <div className="empty-state compact">暂无 LLM 调用。</div>
+        ) : (
+          <div className="llm-call-list">
+            {traceDetail.llmCalls.map((call) => {
+              const promptRaw = rawPayloads[call.id]?.PROMPT;
+              const responseRaw = rawPayloads[call.id]?.RESPONSE;
+              return (
+                <article key={call.id} className="llm-call-card">
+                  <header>
+                    <div>
+                      <strong>{providerModel(call)}</strong>
+                      <small>
+                        {call.callType || '-'} · {compactId(call.id)}
+                      </small>
+                    </div>
+                    <span className={`status ${textStatusTone(call.status)}`}>{call.status || '-'}</span>
+                  </header>
+                  <div className="call-metrics">
+                    <span>
+                      Tokens <strong>{formatNumber(call.totalTokens)}</strong>
+                    </span>
+                    <span>
+                      Prompt <strong>{formatNumber(call.promptTokens)}</strong>
+                    </span>
+                    <span>
+                      Completion <strong>{formatNumber(call.completionTokens)}</strong>
+                    </span>
+                    <span>
+                      Latency <strong>{formatDuration(call.latencyMs)}</strong>
+                    </span>
+                    <span>
+                      Cache Hit <strong>{formatPercent(call.promptCacheHitRate)}</strong>
+                    </span>
+                    <span>
+                      Provider Cache <strong>{call.cacheReportedByProvider ? 'reported' : 'unreported'}</strong>
+                    </span>
+                  </div>
+                  {call.fallbackUsed && (
+                    <div className="fallback-note">
+                      Fallback from <strong>{call.fallbackFromModel || '-'}</strong>
+                    </div>
+                  )}
+                  {call.errorMessage && <div className="form-error compact">{call.errorMessage}</div>}
+                  <div className="raw-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={rawLoadingKey === `${call.id}:PROMPT`}
+                      onClick={() => onRevealRaw(call.id, 'PROMPT')}
+                    >
+                      Reveal Prompt
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={rawLoadingKey === `${call.id}:RESPONSE`}
+                      onClick={() => onRevealRaw(call.id, 'RESPONSE')}
+                    >
+                      Reveal Response
+                    </button>
+                  </div>
+                  {promptRaw != null && <pre className="raw-block">{promptRaw || 'EMPTY PROMPT'}</pre>}
+                  {responseRaw != null && <pre className="raw-block">{responseRaw || 'EMPTY RESPONSE'}</pre>}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </section>
+  );
+}
+
 function DataTable({
   view,
   pageData,
@@ -532,7 +1053,7 @@ function DataTable({
   onResetPassword,
   onQuestionAction,
 }: {
-  view: Exclude<ViewKey, 'dashboard'>;
+  view: Exclude<ViewKey, 'dashboard' | 'aiObservability'>;
   pageData: PageResult<unknown> | null;
   loading: boolean;
   onDisableUser: (user: UserRow) => void;

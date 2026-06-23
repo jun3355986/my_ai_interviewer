@@ -132,6 +132,118 @@ export interface AuditLogRow {
   createdAt?: string | null;
 }
 
+export interface AiTraceRow {
+  id: string;
+  requestId?: string | null;
+  userId?: number | null;
+  username?: string | null;
+  sessionId?: string | null;
+  pythonSessionId?: string | null;
+  businessType: string;
+  entrypoint?: string | null;
+  status: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  totalTokens?: number | null;
+  llmCallCount?: number | null;
+  stepCount?: number | null;
+  failedLlmCalls?: number | null;
+  fallbackUsed?: boolean | null;
+  provider?: string | null;
+  model?: string | null;
+  providerPromptCacheTokenHitRate?: number | null;
+  providerPromptCacheCallHitRate?: number | null;
+  durationMs?: number | null;
+  startedAt: string;
+  endedAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface AiTraceStep {
+  id: string;
+  traceId?: string | null;
+  stepOrder?: number | null;
+  stepType?: string | null;
+  stepName?: string | null;
+  status?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  durationMs?: number | null;
+  metadataJson?: string | null;
+  errorMessage?: string | null;
+  createdAt?: string | null;
+}
+
+export interface AiLlmCall {
+  id: string;
+  traceId?: string | null;
+  stepId?: string | null;
+  callType?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  fallbackUsed?: boolean | null;
+  fallbackFromModel?: string | null;
+  status?: string | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+  tokenSource?: string | null;
+  promptCacheHitTokens?: number | null;
+  promptCacheMissTokens?: number | null;
+  promptCacheHitRate?: number | null;
+  cacheReportedByProvider?: boolean | null;
+  latencyMs?: number | null;
+  rawUsageJson?: string | null;
+  metadataJson?: string | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface AiTraceDetail extends AiTraceRow {
+  metadataJson?: string | null;
+  steps: AiTraceStep[];
+  llmCalls: AiLlmCall[];
+}
+
+export interface AiObservabilityStats {
+  totalTraces?: number;
+  traceCount?: number;
+  totalLlmCalls: number;
+  totalTokens: number;
+  failedCalls?: number;
+  failedLlmCalls?: number;
+  llmFailureRate?: number | null;
+  avgDurationMs?: number | null;
+  averageLatencyMs?: number | null;
+  totalPromptTokens?: number | null;
+  totalCompletionTokens?: number | null;
+  providerPromptCacheHitTokens?: number | null;
+  providerPromptCacheMissTokens?: number | null;
+  providerPromptCacheHitCalls?: number | null;
+  providerCacheReportedCalls?: number | null;
+  providerPromptCacheTokenHitRate?: number | null;
+  providerPromptCacheCallHitRate?: number | null;
+  providerCacheUnreportedCalls: number;
+  highConsumptionCallTypes?: Array<{
+    callType?: string | null;
+    callCount?: number | null;
+    totalTokens?: number | null;
+  }>;
+}
+
+export type AiRawPayloadType = 'PROMPT' | 'RESPONSE';
+
+export interface LlmCallRawPayload {
+  callId: string;
+  traceId?: string | null;
+  accessType: AiRawPayloadType;
+  promptText?: string | null;
+  responseText?: string | null;
+  rawText?: string | null;
+}
+
 export interface JobCreatePayload {
   title: string;
   company?: string;

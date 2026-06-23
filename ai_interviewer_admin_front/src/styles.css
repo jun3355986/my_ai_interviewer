@@ -164,6 +164,7 @@ textarea:focus {
 .profile-pill button,
 .pagination button,
 .table-actions button,
+.raw-actions button,
 .dialog header button {
   border-radius: 999px;
   background: #18211f;
@@ -187,6 +188,12 @@ textarea:focus {
   color: #b64622;
   padding: 12px 14px;
   font-weight: 700;
+}
+
+.form-error.compact,
+.error-banner.compact {
+  margin: 10px 0;
+  padding: 9px 12px;
 }
 
 .app-shell {
@@ -354,6 +361,21 @@ code,
   letter-spacing: -0.06em;
 }
 
+.metric-card.compact {
+  min-height: 112px;
+  padding: 18px;
+}
+
+.metric-card.compact span {
+  min-height: 34px;
+  line-height: 1.35;
+}
+
+.metric-card.compact strong {
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
 .panel {
   padding: 22px;
   overflow: hidden;
@@ -379,6 +401,15 @@ code,
 .panel-title h2 {
   margin: 0;
   font-size: 24px;
+}
+
+.compact-title {
+  margin-bottom: 12px;
+}
+
+.compact-title h3 {
+  margin: 0;
+  font-size: 18px;
 }
 
 .trend-chart {
@@ -455,6 +486,50 @@ code,
   width: 150px;
 }
 
+.ai-observability-view {
+  display: grid;
+  gap: 20px;
+}
+
+.ai-filter-header {
+  align-items: stretch;
+}
+
+.ai-filter-row {
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.ai-filter-row input {
+  width: min(210px, 100%);
+}
+
+.ai-filter-row select {
+  width: 170px;
+}
+
+.ai-metrics {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.ai-observability-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.85fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.ai-list-panel {
+  overflow-x: auto;
+}
+
+.ai-detail-panel {
+  position: sticky;
+  top: 28px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -473,6 +548,10 @@ td {
   border-bottom: 1px solid rgba(24, 33, 31, 0.08);
   padding: 14px 10px;
   vertical-align: top;
+}
+
+.selected-row {
+  background: rgba(225, 116, 64, 0.08);
 }
 
 td small {
@@ -522,6 +601,142 @@ td small {
 .status.muted {
   background: #e8e8e2;
   color: #74766f;
+}
+
+.warn-text {
+  color: #996019;
+  font-weight: 800;
+}
+
+.trace-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 18px;
+  color: #647069;
+}
+
+.trace-summary strong {
+  color: #18211f;
+}
+
+.detail-section {
+  border-top: 1px solid rgba(24, 33, 31, 0.08);
+  padding-top: 18px;
+  margin-top: 18px;
+}
+
+.timeline {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+}
+
+.timeline li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(237, 241, 231, 0.72);
+}
+
+.timeline strong,
+.timeline small,
+.timeline em {
+  display: block;
+}
+
+.timeline em {
+  margin-top: 6px;
+  color: #aa3d28;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.llm-call-list {
+  display: grid;
+  gap: 14px;
+}
+
+.llm-call-card {
+  border: 1px solid rgba(24, 33, 31, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 253, 246, 0.82);
+  padding: 14px;
+}
+
+.llm-call-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.llm-call-card header small {
+  display: block;
+  margin-top: 4px;
+  color: #7d8983;
+}
+
+.call-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.call-metrics span {
+  border-radius: 14px;
+  background: #edf1e7;
+  color: #66736b;
+  padding: 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.call-metrics strong {
+  display: block;
+  margin-top: 4px;
+  color: #18211f;
+  font-size: 14px;
+}
+
+.fallback-note {
+  margin-top: 12px;
+  border-radius: 14px;
+  background: #fff0d6;
+  color: #8a5615;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.raw-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.raw-actions button {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.raw-block {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 14px;
+  background: #17201d;
+  color: #fffdf6;
+  padding: 12px;
+  line-height: 1.55;
 }
 
 .table-actions {
@@ -651,6 +866,17 @@ td small {
 
   .panel {
     overflow-x: auto;
+  }
+
+  .ai-metrics,
+  .ai-observability-grid,
+  .call-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-detail-panel {
+    position: static;
+    max-height: none;
   }
 }
 
