@@ -30,6 +30,8 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -139,6 +141,18 @@ public class SSEProxyService {
      * @return SSE事件流
      */
     public Flux<ServerSentEvent<String>> proxyResume(String sessionId, Long userId) {
+        return proxyResume(sessionId, userId, null);
+    }
+
+    /**
+     * 代理恢复会话接口
+     *
+     * @param sessionId 会话ID
+     * @param userId    用户ID
+     * @param username  网关透传用户名
+     * @return SSE事件流
+     */
+    public Flux<ServerSentEvent<String>> proxyResume(String sessionId, Long userId, String username) {
         // 1. 验证会话存在且属于该用户
         InterviewSession session = sessionMapper.selectById(sessionId);
         if (session == null) {
@@ -161,7 +175,7 @@ public class SSEProxyService {
         return webClient.post()
                 .uri(pythonBaseUrl + "/interview/resume")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue("{\"session_id\":\"" + activeSession.getPythonSessionId() + "\"}")
+                .bodyValue(buildPythonResumeRequest(activeSession, userId, username))
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
                 .timeout(Duration.ofMinutes(5))
@@ -194,6 +208,21 @@ public class SSEProxyService {
                             .data(errorJson)
                             .build());
                 });
+    }
+
+    private Map<String, Object> buildPythonResumeRequest(
+            InterviewSession session,
+            Long userId,
+            String username) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("session_id", session.getPythonSessionId());
+        request.put("request_id", IdUtil.fastSimpleUUID());
+        request.put("java_session_id", session.getId());
+        request.put("user_id", userId);
+        request.put("username", username);
+        request.put("business_type", "interview");
+        request.put("entrypoint", "interview_resume");
+        return request;
     }
 
     /**

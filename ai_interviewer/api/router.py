@@ -227,38 +227,50 @@ def resume_stream(req: ResumeStreamRequest):
     """恢复会话状态（SSE）"""
 
     def event_generator():
-        try:
-            session = interview_service.get_session(req.session_id)
-            if not session:
+        with observability_trace(
+            request_id=req.request_id,
+            user_id=req.user_id,
+            username=req.username,
+            session_id=req.java_session_id or req.session_id,
+            python_session_id=req.session_id,
+            business_type=req.business_type or "interview",
+            entrypoint=req.entrypoint or "interview_resume",
+            metadata={"resume": True},
+        ) as trace:
+            try:
+                session = interview_service.get_session(req.session_id)
+                if not session:
+                    trace.mark_error("SESSION_NOT_FOUND", f"会话不存在: {req.session_id}")
+                    yield format_sse(
+                        EVENT_ERROR,
+                        {"code": "SESSION_NOT_FOUND", "message": f"会话不存在: {req.session_id}"},
+                    )
+                    return
+
+                stage = session.stage.value
+                yield format_sse(EVENT_STATUS, {"session_id": session.session_id, "stage": stage})
+
+                last_question = _last_ai_message(session)
+                if last_question:
+                    for piece in stream_text_chunks(last_question):
+                        yield format_sse(EVENT_CHUNK, {"content": piece})
+                    yield format_sse(
+                        EVENT_RESULT,
+                        {"next_stage": stage, "next_question": last_question},
+                    )
+                else:
+                    yield format_sse(EVENT_RESULT, {"next_stage": stage})
+
                 yield format_sse(
-                    EVENT_ERROR,
-                    {"code": "SESSION_NOT_FOUND", "message": f"会话不存在: {req.session_id}"},
+                    EVENT_DONE,
+                    {
+                        "stage": stage,
+                        "is_interview_complete": stage == InterviewStage.CONCLUDED.value,
+                    },
                 )
-                return
-
-            stage = session.stage.value
-            yield format_sse(EVENT_STATUS, {"session_id": session.session_id, "stage": stage})
-
-            last_question = _last_ai_message(session)
-            if last_question:
-                for piece in stream_text_chunks(last_question):
-                    yield format_sse(EVENT_CHUNK, {"content": piece})
-                yield format_sse(
-                    EVENT_RESULT,
-                    {"next_stage": stage, "next_question": last_question},
-                )
-            else:
-                yield format_sse(EVENT_RESULT, {"next_stage": stage})
-
-            yield format_sse(
-                EVENT_DONE,
-                {
-                    "stage": stage,
-                    "is_interview_complete": stage == InterviewStage.CONCLUDED.value,
-                },
-            )
-        except Exception as exc:
-            yield format_sse(EVENT_ERROR, {"code": "RESUME_ERROR", "message": str(exc)})
+            except Exception as exc:
+                trace.mark_error("RESUME_ERROR", str(exc))
+                yield format_sse(EVENT_ERROR, {"code": "RESUME_ERROR", "message": str(exc)})
 
     return StreamingResponse(
         event_generator(),

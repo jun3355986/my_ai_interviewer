@@ -80,15 +80,16 @@ public class InterviewController {
     @Operation(summary = "恢复面试", description = "恢复未完成的面试会话，返回历史摘要和当前问题")
     public Flux<ServerSentEvent<String>> resumeInterview(
             @Parameter(description = "会话ID") @PathVariable("sessionId") String sessionId,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId) {
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Name", required = false) String username) {
 
         if (userId == null) {
             userId = 1L;
         }
 
-        log.info("Resume interview: userId={}, sessionId={}", userId, sessionId);
+        log.info("Resume interview: userId={}, username={}, sessionId={}", userId, username, sessionId);
 
-        return sseProxyService.proxyResume(sessionId, userId)
+        return sseProxyService.proxyResume(sessionId, userId, username)
                 .timeout(Duration.ofMinutes(5));
     }
 

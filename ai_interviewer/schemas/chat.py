@@ -34,6 +34,12 @@ class UnifiedChatRequest(BaseModel):
 
 class ResumeStreamRequest(BaseModel):
     session_id: str = Field(..., description="会话ID")
+    request_id: Optional[str] = Field(default=None, description="上游请求ID")
+    java_session_id: Optional[str] = Field(default=None, description="Java面试会话ID")
+    user_id: Optional[int] = Field(default=None, description="用户ID")
+    username: Optional[str] = Field(default=None, description="用户名")
+    business_type: Optional[str] = Field(default=None, description="业务类型")
+    entrypoint: Optional[str] = Field(default=None, description="观测入口")
 
 
 # 面试流程相关Schemas

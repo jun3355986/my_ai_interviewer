@@ -32,6 +32,8 @@ public interface AiObservabilityMapper {
 
     List<AiLlmCallDetailItem> selectLlmCalls(@Param("traceId") UUID traceId);
 
+    AiLlmCallDetailItem selectLlmCallById(@Param("callId") UUID callId);
+
     LlmCallRawPayload selectLlmCallRawPayload(@Param("callId") UUID callId);
 
     AiObservabilityStatsResponse selectStats(@Param("query") AiTraceQuery query);

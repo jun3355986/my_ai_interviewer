@@ -241,6 +241,17 @@
         ORDER BY started_at ASC, id ASC
     </select>
 
+    <select id="selectLlmCallById" resultMap="AiLlmCallDetailItemMap">
+        SELECT id, trace_id, step_id, call_type, provider, model, fallback_used,
+               fallback_from_model, status, prompt_tokens, completion_tokens, total_tokens,
+               token_source, prompt_cache_hit_tokens, prompt_cache_miss_tokens,
+               prompt_cache_hit_rate, cache_reported_by_provider, latency_ms,
+               raw_usage_json::text AS raw_usage_json, metadata::text AS metadata_json,
+               error_message, started_at, ended_at, created_at
+        FROM t_ai_llm_call
+        WHERE id = #{callId}
+    </select>
+
     <select id="selectLlmCallRawPayload" resultMap="LlmCallRawPayloadMap">
         SELECT id AS call_id, trace_id, prompt_text, response_text
         FROM t_ai_llm_call

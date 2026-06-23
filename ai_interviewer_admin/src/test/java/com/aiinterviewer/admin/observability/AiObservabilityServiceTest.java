@@ -1,10 +1,13 @@
 package com.aiinterviewer.admin.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.aiinterviewer.admin.observability.dto.AiLlmCallDetailItem;
 import com.aiinterviewer.admin.observability.dto.AiObservabilityStatsResponse;
 import com.aiinterviewer.admin.observability.dto.AiTraceQuery;
 import com.aiinterviewer.admin.observability.dto.LlmCallRawPayload;
@@ -20,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -68,6 +72,56 @@ class AiObservabilityServiceTest {
                 "PROMPT".equals(log.getAccessType())
                         && adminUserId.equals(log.getAdminUserId())
                         && callId.equals(log.getLlmCallId())));
+    }
+
+    @Test
+    void promptRawPayloadDoesNotExposeResponseText() {
+        UUID callId = UUID.fromString("00000000-0000-0000-0000-000000000102");
+        when(mapper.selectLlmCallRawPayload(callId)).thenReturn(rawPayload(callId));
+
+        LlmCallRawPayload payload = service.getLlmCallRawPayload(callId, 9002L, "PROMPT");
+
+        assertThat(payload.getAccessType()).isEqualTo("PROMPT");
+        assertThat(payload.getRawText()).isEqualTo("full prompt");
+        assertThat(payload.getPromptText()).isEqualTo("full prompt");
+        assertThat(payload.getResponseText()).isNull();
+        verify(mapper).insertAccessLog(argThat(log -> "PROMPT".equals(log.getAccessType())));
+    }
+
+    @Test
+    void responseRawPayloadDoesNotExposePromptText() {
+        UUID callId = UUID.fromString("00000000-0000-0000-0000-000000000103");
+        when(mapper.selectLlmCallRawPayload(callId)).thenReturn(rawPayload(callId));
+
+        LlmCallRawPayload payload = service.getLlmCallRawPayload(callId, 9003L, " response ");
+
+        assertThat(payload.getAccessType()).isEqualTo("RESPONSE");
+        assertThat(payload.getRawText()).isEqualTo("full response");
+        assertThat(payload.getPromptText()).isNull();
+        assertThat(payload.getResponseText()).isEqualTo("full response");
+        verify(mapper).insertAccessLog(argThat(log -> "RESPONSE".equals(log.getAccessType())));
+    }
+
+    @Test
+    void standaloneLlmCallDetailEndpointAndServiceUseNonRawDetailContract() throws Exception {
+        UUID callId = UUID.fromString("00000000-0000-0000-0000-000000000104");
+        assertThat(AiObservabilityController.class.getMethod("getLlmCallDetail", UUID.class)
+                .getAnnotation(GetMapping.class).value())
+                .containsExactly("/llm-calls/{callId}");
+        assertThat(AiObservabilityMapper.class.getMethod("selectLlmCallById", UUID.class))
+                .isNotNull();
+
+        AiLlmCallDetailItem detail = new AiLlmCallDetailItem();
+        detail.setId(callId);
+        when(mapper.selectLlmCallById(callId)).thenReturn(detail);
+
+        AiLlmCallDetailItem result = service.getLlmCallDetail(callId);
+
+        assertThat(result).isSameAs(detail);
+        assertThat(result.getClass().getMethods())
+                .extracting(Method::getName)
+                .doesNotContain("getPromptText", "getResponseText", "getRawText");
+        verify(mapper, never()).insertAccessLog(any(ObservabilityAccessLog.class));
     }
 
     @Test

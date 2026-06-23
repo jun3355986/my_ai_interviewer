@@ -55,6 +55,15 @@ public class AiObservabilityService {
         return detail;
     }
 
+    public AiLlmCallDetailItem getLlmCallDetail(UUID callId) {
+        ensureUuid(callId, "callId");
+        AiLlmCallDetailItem detail = mapper.selectLlmCallById(callId);
+        if (detail == null) {
+            throw new AdminBusinessException(404, "LLM 调用记录不存在");
+        }
+        return detail;
+    }
+
     @Transactional
     public LlmCallRawPayload getLlmCallRawPayload(UUID callId, Long adminUserId, String type) {
         ensureUuid(callId, "callId");
@@ -66,6 +75,11 @@ public class AiObservabilityService {
 
         payload.setAccessType(accessType);
         payload.setRawText("PROMPT".equals(accessType) ? payload.getPromptText() : payload.getResponseText());
+        if ("PROMPT".equals(accessType)) {
+            payload.setResponseText(null);
+        } else {
+            payload.setPromptText(null);
+        }
         mapper.insertAccessLog(buildAccessLog(payload, adminUserId, accessType));
         return payload;
     }

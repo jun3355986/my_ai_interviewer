@@ -2,6 +2,7 @@ package com.aiinterviewer.admin.observability;
 
 import com.aiinterviewer.admin.common.model.PageResult;
 import com.aiinterviewer.admin.common.model.Result;
+import com.aiinterviewer.admin.observability.dto.AiLlmCallDetailItem;
 import com.aiinterviewer.admin.observability.dto.AiObservabilityStatsResponse;
 import com.aiinterviewer.admin.observability.dto.AiTraceDetailResponse;
 import com.aiinterviewer.admin.observability.dto.AiTraceListItem;
@@ -32,6 +33,11 @@ public class AiObservabilityController {
     @GetMapping("/traces/{traceId}")
     public Result<AiTraceDetailResponse> getTraceDetail(@PathVariable UUID traceId) {
         return Result.success(service.getTraceDetail(traceId));
+    }
+
+    @GetMapping("/llm-calls/{callId}")
+    public Result<AiLlmCallDetailItem> getLlmCallDetail(@PathVariable UUID callId) {
+        return Result.success(service.getLlmCallDetail(callId));
     }
 
     @GetMapping("/llm-calls/{callId}/raw")
