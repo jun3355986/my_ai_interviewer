@@ -5,11 +5,11 @@ import json
 import re
 from typing import List, Dict, Optional, Tuple
 
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from core.config import get_llm
 from services.interview_session import InterviewSession, InterviewStage
+from services.observability.langchain import invoke_observable
 from services.question_bank import QuestionBank
 
 
@@ -43,8 +43,12 @@ class Interviewer:
             ("human", "{context}\n\n请生成面试开场白："),
         ])
         
-        chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({"context": context})
+        return invoke_observable(
+            prompt=prompt,
+            llm=self.llm,
+            input_values={"context": context},
+            call_type="generate_opening",
+        ).text
     
     def ask_self_introduction(self) -> str:
         """请面试者自我介绍"""
@@ -55,8 +59,12 @@ class Interviewer:
             ("human", "请让面试者做自我介绍"),
         ])
         
-        chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({})
+        return invoke_observable(
+            prompt=prompt,
+            llm=self.llm,
+            input_values={},
+            call_type="ask_self_introduction",
+        ).text
     
     def generate_project_questions(
         self,
@@ -101,8 +109,12 @@ class Interviewer:
             ("human", "{context}\n\n请生成项目问题："),
         ])
         
-        chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"count": target_count, "context": context})
+        response = invoke_observable(
+            prompt=prompt,
+            llm=self.llm,
+            input_values={"count": target_count, "context": context},
+            call_type="generate_project_questions",
+        ).text
         
         # 解析问题列表
         questions = []
@@ -149,8 +161,12 @@ class Interviewer:
             ("human", "{context}\n\n请评估这个回答："),
         ])
         
-        chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"context": context})
+        response = invoke_observable(
+            prompt=prompt,
+            llm=self.llm,
+            input_values={"context": context},
+            call_type="evaluate_answer",
+        ).text
         
         # 解析JSON响应
         try:
@@ -190,8 +206,12 @@ class Interviewer:
             ("human", "{context}\n\n请生成追问问题："),
         ])
         
-        chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({"context": context})
+        return invoke_observable(
+            prompt=prompt,
+            llm=self.llm,
+            input_values={"context": context},
+            call_type="generate_followup_question",
+        ).text
     
     def select_technical_questions(
         self,
@@ -284,8 +304,12 @@ class Interviewer:
             ("human", "{context}\n\n请总结面试并给出最终评分："),
         ])
         
-        chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"context": context})
+        response = invoke_observable(
+            prompt=prompt,
+            llm=self.llm,
+            input_values={"context": context},
+            call_type="conclude_interview",
+        ).text
         
         # 解析JSON
         try:
@@ -322,8 +346,12 @@ class Interviewer:
             ("human", "{question}"),
         ])
         
-        chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({
-            "question": question,
-            "history": safe_history,
-        })
+        return invoke_observable(
+            prompt=prompt,
+            llm=self.llm,
+            input_values={
+                "question": question,
+                "history": safe_history,
+            },
+            call_type="ask",
+        ).text

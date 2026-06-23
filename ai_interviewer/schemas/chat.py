@@ -24,6 +24,12 @@ class UnifiedChatRequest(BaseModel):
     resume_content: Optional[str] = Field(default=None, description="简历内容（首次建议传入）")
     job_requirements: Optional[str] = Field(default=None, description="职位要求")
     candidate_name: Optional[str] = Field(default=None, description="候选人姓名")
+    request_id: Optional[str] = Field(default=None, description="上游请求ID")
+    java_session_id: Optional[str] = Field(default=None, description="Java面试会话ID")
+    user_id: Optional[int] = Field(default=None, description="用户ID")
+    username: Optional[str] = Field(default=None, description="用户名")
+    business_type: Optional[str] = Field(default=None, description="业务类型")
+    entrypoint: Optional[str] = Field(default=None, description="观测入口")
 
 
 class ResumeStreamRequest(BaseModel):

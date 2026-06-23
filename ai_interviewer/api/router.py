@@ -35,6 +35,7 @@ from api.sse import (
 )
 from services.interview_service import interview_service
 from services.interview_session import InterviewStage, session_manager
+from services.observability.context import observability_trace
 from services.question_bank import QuestionBank
 from services.resume_parser import ResumeParser
 
@@ -78,111 +79,124 @@ def chat_stream(req: UnifiedChatRequest):
     """统一流式对话接口（SSE）"""
 
     def event_generator():
-        try:
-            if req.session_id:
-                session = interview_service.get_session(req.session_id)
-                if not session:
-                    yield format_sse(
-                        EVENT_ERROR,
-                        {"code": "SESSION_NOT_FOUND", "message": f"会话不存在: {req.session_id}"},
+        with observability_trace(
+            request_id=req.request_id,
+            user_id=req.user_id,
+            username=req.username,
+            session_id=req.java_session_id or req.session_id,
+            python_session_id=req.session_id,
+            business_type=req.business_type or "interview",
+            entrypoint=req.entrypoint or "interview_chat",
+            metadata={"has_existing_session": req.session_id is not None},
+        ) as trace:
+            try:
+                if req.session_id:
+                    session = interview_service.get_session(req.session_id)
+                    if not session:
+                        trace.mark_error("SESSION_NOT_FOUND", f"会话不存在: {req.session_id}")
+                        yield format_sse(
+                            EVENT_ERROR,
+                            {"code": "SESSION_NOT_FOUND", "message": f"会话不存在: {req.session_id}"},
+                        )
+                        return
+                else:
+                    session_id = str(uuid.uuid4())
+                    session = session_manager.create_session(
+                        session_id=session_id,
+                        resume_content=req.resume_content,
+                        job_requirements=req.job_requirements,
                     )
-                    return
-            else:
-                session_id = str(uuid.uuid4())
-                session = session_manager.create_session(
-                    session_id=session_id,
-                    resume_content=req.resume_content,
-                    job_requirements=req.job_requirements,
-                )
-                session.candidate_name = req.candidate_name
-                session.stage = InterviewStage.OPENING
-                interview_service._save_session(session)
+                    session.candidate_name = req.candidate_name
+                    session.stage = InterviewStage.OPENING
+                    interview_service._save_session(session)
 
-            current_stage = session.stage
-            yield format_sse(
-                EVENT_STATUS,
-                {"session_id": session.session_id, "stage": current_stage.value},
-            )
-
-            score = None
-            feedback = None
-            next_question = None
-            next_stage = current_stage.value
-            final_message = None
-
-            if req.session_id is None:
-                try:
-                    opening = interview_service.interviewer.generate_opening(
-                        session.resume_content or "",
-                        session.job_requirements,
-                    )
-                except Exception:
-                    opening = "您好，欢迎参加本次面试。接下来我们将按流程进行，请先放松并准备开始。"
-
-                session.add_message("system", opening)
-                interview_service._save_session(session)
-                final_message = opening
-
-            elif current_stage == InterviewStage.OPENING:
-                result = interview_service.handle_opening_response(session.session_id)
-                next_question = result.get("question")
-                next_stage = result.get("stage", current_stage.value)
-                final_message = next_question
-
-            elif current_stage == InterviewStage.SELF_INTRO:
-                result = interview_service.handle_self_introduction(session.session_id, req.message)
-                next_question = result.get("question")
-                next_stage = result.get("stage", current_stage.value)
-                final_message = next_question
-
-            elif current_stage == InterviewStage.PROJECT_QNA:
-                result = interview_service.handle_project_answer(session.session_id, req.message)
-                score = result.get("score")
-                feedback = result.get("feedback")
-                next_question = result.get("next_question")
-                next_stage = result.get("stage", current_stage.value)
-                message = result.get("message", "")
-                final_message = (
-                    f"{message}\n\n{next_question}"
-                    if message and next_question
-                    else next_question or message
+                current_stage = session.stage
+                yield format_sse(
+                    EVENT_STATUS,
+                    {"session_id": session.session_id, "stage": current_stage.value},
                 )
 
-            elif current_stage == InterviewStage.TECHNICAL_QNA:
-                result = interview_service.handle_technical_answer(session.session_id, req.message)
-                score = result.get("score")
-                feedback = result.get("feedback")
-                next_question = result.get("next_question")
-                next_stage = result.get("stage", current_stage.value)
-                final_message = next_question or result.get("message", "")
+                score = None
+                feedback = None
+                next_question = None
+                next_stage = current_stage.value
+                final_message = None
 
-            else:
-                next_stage = InterviewStage.CONCLUDED.value
-                final_message = "当前面试已结束。"
+                if req.session_id is None:
+                    try:
+                        opening = interview_service.interviewer.generate_opening(
+                            session.resume_content or "",
+                            session.job_requirements,
+                        )
+                    except Exception:
+                        opening = "您好，欢迎参加本次面试。接下来我们将按流程进行，请先放松并准备开始。"
 
-            if score is not None:
-                yield format_sse(EVENT_SCORE, {"score": int(score), "feedback": feedback or ""})
+                    session.add_message("system", opening)
+                    interview_service._save_session(session)
+                    final_message = opening
 
-            if final_message:
-                for piece in stream_text_chunks(final_message):
-                    yield format_sse(EVENT_CHUNK, {"content": piece})
+                elif current_stage == InterviewStage.OPENING:
+                    result = interview_service.handle_opening_response(session.session_id)
+                    next_question = result.get("question")
+                    next_stage = result.get("stage", current_stage.value)
+                    final_message = next_question
 
-            result_payload: dict[str, object] = {"next_stage": str(next_stage)}
-            if next_question:
-                result_payload["next_question"] = str(next_question)
-            yield format_sse(EVENT_RESULT, result_payload)
+                elif current_stage == InterviewStage.SELF_INTRO:
+                    result = interview_service.handle_self_introduction(session.session_id, req.message)
+                    next_question = result.get("question")
+                    next_stage = result.get("stage", current_stage.value)
+                    final_message = next_question
 
-            yield format_sse(
-                EVENT_DONE,
-                {
-                    "stage": next_stage,
-                    "is_interview_complete": next_stage == InterviewStage.CONCLUDED.value,
-                },
-            )
-        except ValueError as exc:
-            yield format_sse(EVENT_ERROR, {"code": "BAD_REQUEST", "message": str(exc)})
-        except Exception as exc:
-            yield format_sse(EVENT_ERROR, {"code": "INTERNAL_ERROR", "message": str(exc)})
+                elif current_stage == InterviewStage.PROJECT_QNA:
+                    result = interview_service.handle_project_answer(session.session_id, req.message)
+                    score = result.get("score")
+                    feedback = result.get("feedback")
+                    next_question = result.get("next_question")
+                    next_stage = result.get("stage", current_stage.value)
+                    message = result.get("message", "")
+                    final_message = (
+                        f"{message}\n\n{next_question}"
+                        if message and next_question
+                        else next_question or message
+                    )
+
+                elif current_stage == InterviewStage.TECHNICAL_QNA:
+                    result = interview_service.handle_technical_answer(session.session_id, req.message)
+                    score = result.get("score")
+                    feedback = result.get("feedback")
+                    next_question = result.get("next_question")
+                    next_stage = result.get("stage", current_stage.value)
+                    final_message = next_question or result.get("message", "")
+
+                else:
+                    next_stage = InterviewStage.CONCLUDED.value
+                    final_message = "当前面试已结束。"
+
+                if score is not None:
+                    yield format_sse(EVENT_SCORE, {"score": int(score), "feedback": feedback or ""})
+
+                if final_message:
+                    for piece in stream_text_chunks(final_message):
+                        yield format_sse(EVENT_CHUNK, {"content": piece})
+
+                result_payload: dict[str, object] = {"next_stage": str(next_stage)}
+                if next_question:
+                    result_payload["next_question"] = str(next_question)
+                yield format_sse(EVENT_RESULT, result_payload)
+
+                yield format_sse(
+                    EVENT_DONE,
+                    {
+                        "stage": next_stage,
+                        "is_interview_complete": next_stage == InterviewStage.CONCLUDED.value,
+                    },
+                )
+            except ValueError as exc:
+                trace.mark_error("BAD_REQUEST", str(exc))
+                yield format_sse(EVENT_ERROR, {"code": "BAD_REQUEST", "message": str(exc)})
+            except Exception as exc:
+                trace.mark_error("INTERNAL_ERROR", str(exc))
+                yield format_sse(EVENT_ERROR, {"code": "INTERNAL_ERROR", "message": str(exc)})
 
     return StreamingResponse(
         event_generator(),
