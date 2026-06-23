@@ -31,20 +31,90 @@ TDD mode: tdd
 
 Plan task text: **Step 1: Write failing service tests**
 OpenSpec task text: 3.1 Propagate request, user, session, and business correlation identifiers from Java interview flows to Python AI calls; 3.2 Add Java admin read models and query APIs for observability trace list, trace detail, LLM call detail, and statistics; 3.3 Add admin access logging for full prompt and full response reads; 3.4 Ensure admin APIs enforce existing backend-admin authentication and authorization boundaries.
-Stage: implementing
-Review/fix rounds: 0
+Stage: blocked
+Review/fix rounds: 3
 
 ## Implementer
 
-Agent: pending
-Status: pending
-Commit: pending
-Changed files: pending
-RED evidence: pending
-GREEN evidence: pending
-Concerns: pending
+Agent: 019ef510-d3ad-7700-bf15-d9127498b47a (Meitner)
+Status: DONE_WITH_CONCERNS
+Commit: e624aee
+Changed files:
+- ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/dto/PythonChatRequest.java
+- ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/service/SSEProxyService.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/AiObservabilityController.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/AiObservabilityService.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/mapper/AiObservabilityMapper.java
+- ai_interviewer_admin/src/main/resources/mapper/AiObservabilityMapper.xml
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/dto/*.java
+- ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/observability/AiObservabilityServiceTest.java
+- ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/AdminApplicationTests.java
+- tests/docs/test-cases.md
+RED evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest test` failed before implementation because service, mapper, and DTO classes did not exist.
+GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 5 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed.
+Concerns: Worktree has coordinator-owned progress file only. No local Maven wrapper exists, so validation used local Maven 3.6.3 with explicit jenv JDK 21.
 
 ## Reviews
 
-Spec compliance: pending
-Code quality: pending
+Spec compliance: passed by 019ef548-8cba-7c23-a26d-f18a900b167b (Nietzsche) after three fix rounds. Covered requirements 3.1, 3.2, 3.3, and 3.4.
+Code quality: failed by 019ef54c-e8b7-74a2-b649-d38d02bfcbb7 (Faraday) after the third fix round. Blocking issues: LLM trace filters are independent `EXISTS` predicates so combined `callType`/`provider`/`model` filters can admit traces without a same-row matching call; raw prompt/response reads are protected only by coarse `ROLE_ADMIN` and do not enforce seeded `AI_OBSERVABILITY_RAW_READ` permission.
+
+## Fix Round 1
+
+Agent: 019ef520-8862-7fa0-88c3-021ec28e292d (Hume)
+Status: DONE
+Commit: 14c5d9e
+Target: complete Task 4 spec gaps for username correlation, traceId/callType trace filters, and high-consumption call type statistics.
+Changed files:
+- ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/controller/InterviewController.java
+- ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/service/SSEProxyService.java
+- ai_interview_backend/ai-interviewer-interview/src/test/java/com/aiinterviewer/interview/service/InterviewUsernamePropagationTest.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/AiObservabilityService.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/dto/AiObservabilityStatsResponse.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/dto/AiTraceQuery.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/dto/HighConsumptionCallTypeStats.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/mapper/AiObservabilityMapper.java
+- ai_interviewer_admin/src/main/resources/mapper/AiObservabilityMapper.xml
+- ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/observability/AiObservabilityServiceTest.java
+- tests/docs/test-cases.md
+- tests/docs/tooling-guide.md
+RED evidence: Admin test failed before fix with missing `AiTraceQuery.setTraceId(UUID)`, missing traceId XML filter, and missing `HighConsumptionCallTypeStats`; interview test failed before fix because controller did not accept `X-User-Name` and service lacked username-aware build path.
+GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 8 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test -Dtest=InterviewUsernamePropagationTest` passed with 2 tests.
+Concerns: pending fresh spec re-review. Interview module requires explicit Surefire 3.2.5 command to run JUnit 5 test.
+
+## Fix Round 2
+
+Agent: 019ef531-eea0-7a71-ae3f-509cc3a8dc94 (Ptolemy)
+Status: DONE
+Commit: 5b80c05
+Target: fix raw payload redaction/audit consistency, add standalone LLM call detail API, and propagate/trace resume-flow correlation context.
+Changed files:
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/AiObservabilityController.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/AiObservabilityService.java
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability/mapper/AiObservabilityMapper.java
+- ai_interviewer_admin/src/main/resources/mapper/AiObservabilityMapper.xml
+- ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/observability/AiObservabilityServiceTest.java
+- ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/controller/InterviewController.java
+- ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/service/SSEProxyService.java
+- ai_interview_backend/ai-interviewer-interview/src/test/java/com/aiinterviewer/interview/service/InterviewUsernamePropagationTest.java
+- ai_interviewer/schemas/chat.py
+- ai_interviewer/api/router.py
+- ai_interviewer/tests/test_router_observability.py
+- tests/docs/test-cases.md
+RED evidence: Admin test failed before fix because raw PROMPT/RESPONSE responses exposed the opposite raw text and standalone call detail endpoint was missing; interview test failed before fix because resume did not accept `X-User-Name` or build a correlated Python resume request; Python resume observability test failed because no trace was created.
+GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 11 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -Dtest=InterviewUsernamePropagationTest test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test` passed with 4 tests; `cd ai_interviewer && uv run pytest tests/test_router_observability.py tests/test_observable_langchain.py -q` passed with 9 passed, 1 warning.
+Concerns: pending fresh spec re-review. Python affected tests keep existing SQLAlchemy declarative_base deprecation warning.
+
+## Fix Round 3
+
+Agent: 019ef542-b12d-79f1-8c32-8784c9c7d9eb (Fermat)
+Status: DONE
+Commit: c9a7d13
+Target: constrain `selectStats` LLM-call aggregates to the requested `callType`/`provider`/`model` filters while preserving trace-level filters and provider cache denominator semantics.
+Changed files:
+- ai_interviewer_admin/src/main/resources/mapper/AiObservabilityMapper.xml
+- ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/observability/AiObservabilityServiceTest.java
+- tests/docs/test-cases.md
+RED evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest test` failed before fix with 2 failures showing missing `AND c.call_type = #{query.callType}` and missing provider/model aggregate filters.
+GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 13 tests; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -DskipTests compile` passed; `cd ai_interview_backend && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview -Dtest=InterviewUsernamePropagationTest test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test` passed with 4 tests; `cd ai_interviewer && uv run pytest tests/test_router_observability.py tests/test_observable_langchain.py -q` passed with 9 passed, 1 warning; `git diff --check` passed.
+Concerns: spec re-review passed; backend-admin remains on existing coarse `ROLE_ADMIN` boundary rather than per-permission interceptors, consistent with current security model.
