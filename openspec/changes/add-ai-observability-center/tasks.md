@@ -6,7 +6,7 @@
 
 ## 2. Python AI Service Instrumentation
 
-- [ ] 2.1 Implement provider usage normalization for DeepSeek, OpenAI-compatible cached tokens, unreported cache fields, and estimated-token fallback.
+- [x] 2.1 Implement provider usage normalization for DeepSeek, OpenAI-compatible cached tokens, unreported cache fields, and estimated-token fallback.
 - [ ] 2.2 Implement trace, step, and LLM call writers using best-effort PostgreSQL persistence.
 - [ ] 2.3 Instrument core interview and answer-generation LLM calls before `StrOutputParser` can discard `AIMessage` metadata.
 - [ ] 2.4 Record fallback model usage, retrieval/tool-like activity, errors, durations, raw prompt text, and raw response text.

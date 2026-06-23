@@ -202,7 +202,7 @@ git commit -m "feat: add ai observability schema"
 - Create: `ai_interviewer/services/observability/provider_usage.py`
 - Test: `ai_interviewer/tests/test_observability_provider_usage.py`
 
-- [ ] **Step 1: Write failing provider usage tests**
+- [x] **Step 1: Write failing provider usage tests**
 
 Create tests covering DeepSeek, OpenAI/Azure, unreported cache fields, and estimated fallback:
 
@@ -273,7 +273,7 @@ Run: `cd ai_interviewer && uv run pytest tests/test_observability_provider_usage
 
 Expected before implementation: FAIL because the module does not exist.
 
-- [ ] **Step 2: Implement normalized usage dataclass**
+- [x] **Step 2: Implement normalized usage dataclass**
 
 Create `models.py` with:
 
@@ -295,7 +295,7 @@ class NormalizedUsage:
     raw_usage: dict[str, Any] = field(default_factory=dict)
 ```
 
-- [ ] **Step 3: Implement provider normalizer**
+- [x] **Step 3: Implement provider normalizer**
 
 Create `provider_usage.py` with a pure function that:
 
@@ -306,13 +306,13 @@ Create `provider_usage.py` with a pure function that:
 - Calculates hit rate only when hit + miss is greater than zero.
 - Uses `token_source="estimated"` only when provider usage is missing.
 
-- [ ] **Step 4: Run provider usage tests**
+- [x] **Step 4: Run provider usage tests**
 
 Run: `cd ai_interviewer && uv run pytest tests/test_observability_provider_usage.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit provider usage normalization**
+- [x] **Step 5: Commit provider usage normalization**
 
 ```bash
 git add ai_interviewer/services/observability/models.py ai_interviewer/services/observability/provider_usage.py ai_interviewer/tests/test_observability_provider_usage.py
