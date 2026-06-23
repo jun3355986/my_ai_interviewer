@@ -18,6 +18,8 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
   const app = new AppShell(page);
   const traceId = '11111111-1111-1111-1111-111111111111';
   const callId = '22222222-2222-2222-2222-222222222222';
+  const traceRequests: string[] = [];
+  const statsRequests: string[] = [];
   const rawRequests: string[] = [];
 
   await page.addInitScript(() => {
@@ -46,6 +48,7 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
     });
   });
   await page.route('**/admin/ai-observability/stats**', async (route) => {
+    statsRequests.push(route.request().url());
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -66,6 +69,7 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
     });
   });
   await page.route('**/admin/ai-observability/traces**', async (route) => {
+    traceRequests.push(route.request().url());
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -85,7 +89,7 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
               sessionId: 'session-smoke',
               businessType: 'INTERVIEW',
               entrypoint: 'generate-question',
-              status: 'SUCCESS',
+              status: 'ERROR',
               totalTokens: 2048,
               llmCallCount: 1,
               provider: 'list-provider',
@@ -114,7 +118,7 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
           sessionId: 'session-smoke',
           businessType: 'INTERVIEW',
           entrypoint: 'generate-question',
-          status: 'SUCCESS',
+          status: 'ERROR',
           totalTokens: 2048,
           durationMs: 678,
           startedAt: '2026-06-23T10:00:00+08:00',
@@ -133,10 +137,10 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
             {
               id: callId,
               traceId,
-              callType: 'CHAT',
+              callType: 'generate_opening',
               provider: 'deepseek',
               model: 'deepseek-chat',
-              status: 'SUCCESS',
+              status: 'ERROR',
               totalTokens: 2048,
               promptTokens: 1024,
               completionTokens: 1024,
@@ -184,6 +188,18 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
   await expect(traceRow.getByText('33.33% calls')).toBeVisible();
   await expect(traceRow.getByText('2,048')).toBeVisible();
   await expect(traceRow.getByText('678ms')).toBeVisible();
+
+  await page.locator('form.ai-filter-row select').first().selectOption('ERROR');
+  await page.locator('form.ai-filter-row select').nth(1).selectOption('generate_opening');
+  await page.locator('form.ai-filter-row button[type="submit"]').click();
+
+  await expect
+    .poll(() => traceRequests.some((url) => url.includes('status=ERROR') && url.includes('callType=generate_opening')))
+    .toBeTruthy();
+  await expect
+    .poll(() => statsRequests.some((url) => url.includes('status=ERROR') && url.includes('callType=generate_opening')))
+    .toBeTruthy();
+  await expect(traceRow).toBeVisible();
 
   await traceRow.getByRole('button', { name: '查看' }).click();
 

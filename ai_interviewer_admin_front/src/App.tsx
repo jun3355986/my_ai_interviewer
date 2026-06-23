@@ -31,6 +31,22 @@ const views: Array<{ key: ViewKey; label: string; eyebrow: string }> = [
   { key: 'audit', label: '审计日志', eyebrow: 'Audit' },
 ];
 
+const aiObservabilityStatusOptions = [
+  { value: 'SUCCESS', label: 'Success' },
+  { value: 'ERROR', label: 'Error' },
+  { value: 'RUNNING', label: 'Running' },
+];
+
+const aiObservabilityCallTypeOptions = [
+  { value: 'generate_opening', label: 'Generate opening' },
+  { value: 'ask_self_introduction', label: 'Ask self introduction' },
+  { value: 'generate_project_questions', label: 'Generate project questions' },
+  { value: 'evaluate_answer', label: 'Evaluate answer' },
+  { value: 'generate_followup_question', label: 'Generate follow-up question' },
+  { value: 'conclude_interview', label: 'Conclude interview' },
+  { value: 'ask', label: 'Ask' },
+];
+
 function formatDate(value?: string | null) {
   if (!value) {
     return '-';
@@ -755,17 +771,21 @@ function AiObservabilityPanel({
             <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="按 Request ID 搜索" />
             <select value={status} onChange={(event) => onStatusChange(event.target.value)}>
               <option value="">全部状态</option>
-              <option value="SUCCESS">SUCCESS</option>
-              <option value="FAILED">FAILED</option>
-              <option value="RUNNING">RUNNING</option>
+              {aiObservabilityStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
             <input value={provider} onChange={(event) => onProviderChange(event.target.value)} placeholder="Provider" />
             <input value={model} onChange={(event) => onModelChange(event.target.value)} placeholder="Model" />
             <select value={callType} onChange={(event) => onCallTypeChange(event.target.value)}>
               <option value="">全部调用类型</option>
-              <option value="CHAT">CHAT</option>
-              <option value="EMBEDDING">EMBEDDING</option>
-              <option value="RERANK">RERANK</option>
+              {aiObservabilityCallTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
             <button type="submit">查询</button>
           </form>
