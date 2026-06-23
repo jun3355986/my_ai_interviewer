@@ -1,6 +1,6 @@
 ## 1. Data Model And Configuration
 
-- [ ] 1.1 Add PostgreSQL schema for `t_ai_trace`, `t_ai_trace_step`, `t_ai_llm_call`, and `t_ai_observability_access_log`.
+- [x] 1.1 Add PostgreSQL schema for `t_ai_trace`, `t_ai_trace_step`, `t_ai_llm_call`, and `t_ai_observability_access_log`.
 - [ ] 1.2 Add Python AI observability configuration for enablement, PostgreSQL DSN, write timeout, raw payload retention, and raw payload maximum length.
 - [ ] 1.3 Add documentation and test registry entries for observability test assets under the root `tests/` directory.
 

@@ -69,7 +69,7 @@ base-ref: fc53e43a0f607f5ff0ce183ed1d8c9a40d281c51
 - Create: `ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/schema/AiObservabilitySchemaMigrationTest.java`
 - Modify: `tests/docs/test-cases.md`
 
-- [ ] **Step 1: Write the schema migration test**
+- [x] **Step 1: Write the schema migration test**
 
 Add a test that boots the admin schema migration and asserts these tables exist:
 
@@ -87,7 +87,7 @@ Run: `JENV_ROOT="$HOME/.jenv" /opt/homebrew/bin/jenv version` and then `cd ai_in
 
 Expected before implementation: FAIL because `V2__ai_observability.sql` does not exist.
 
-- [ ] **Step 2: Add the observability migration**
+- [x] **Step 2: Add the observability migration**
 
 Create `V2__ai_observability.sql` with these table responsibilities:
 
@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS t_ai_observability_access_log (
 
 Add indexes for `started_at`, `session_id`, `user_id`, `status`, `provider`, `model`, `call_type`, `cache_reported_by_provider`, and `trace_id`.
 
-- [ ] **Step 3: Seed admin menu and permissions**
+- [x] **Step 3: Seed admin menu and permissions**
 
 In the same migration, insert menu code `ai_observability` and permissions for:
 
@@ -182,13 +182,13 @@ AI_OBSERVABILITY_STATS
 
 Use `ON CONFLICT`-safe inserts consistent with existing seed style in `V1__admin_schema.sql`.
 
-- [ ] **Step 4: Run schema tests**
+- [x] **Step 4: Run schema tests**
 
 Run: `cd ai_interviewer_admin && ./mvnw -Dtest=AiObservabilitySchemaMigrationTest test`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit schema task**
 
 ```bash
 git add ai_interviewer_admin/src/main/resources/db/migration/V2__ai_observability.sql ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/schema/AiObservabilitySchemaMigrationTest.java tests/docs/test-cases.md
@@ -312,7 +312,7 @@ Run: `cd ai_interviewer && uv run pytest tests/test_observability_provider_usage
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit provider usage normalization**
 
 ```bash
 git add ai_interviewer/services/observability/models.py ai_interviewer/services/observability/provider_usage.py ai_interviewer/tests/test_observability_provider_usage.py
@@ -438,7 +438,7 @@ uv run pytest tests/test_observability_provider_usage.py tests/test_observable_l
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 8: Commit Python observability capture**
 
 ```bash
 git add ai_interviewer/services/observability ai_interviewer/api/interviewer.py ai_interviewer/api/router.py ai_interviewer/schemas/chat.py ai_interviewer/tests/test_observable_langchain.py
@@ -548,7 +548,7 @@ cd ../ai_interview_backend
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Commit Java observability APIs**
 
 ```bash
 git add ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/dto/PythonChatRequest.java ai_interview_backend/ai-interviewer-interview/src/main/java/com/aiinterviewer/interview/service/SSEProxyService.java ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/observability ai_interviewer_admin/src/main/resources/mapper/AiObservabilityMapper.xml ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/observability/AiObservabilityServiceTest.java
@@ -645,7 +645,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Commit admin frontend observability views**
 
 ```bash
 git add ai_interviewer_admin_front/src/types.ts ai_interviewer_admin_front/src/api.ts ai_interviewer_admin_front/src/App.tsx ai_interviewer_admin_front/src/styles.css tests/e2e/playwright/tests/admin-web-smoke.spec.ts
@@ -719,7 +719,7 @@ Expected: all commands PASS.
 
 After implementation and verification, update `openspec/changes/add-ai-observability-center/tasks.md` so completed items are checked.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Commit cross-service verification and docs**
 
 ```bash
 git add tests/docs/test-cases.md tests/docs/tooling-guide.md tests/fixtures/payloads/ai-observability-chat.json tests/api/pytest/test_ai_observability_api.py openspec/changes/add-ai-observability-center/tasks.md
