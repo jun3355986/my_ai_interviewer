@@ -83,6 +83,31 @@ def _infer_model(llm: Any, ai_message: Any, explicit_model: str | None) -> str:
     return explicit_model or "unknown"
 
 
+def _infer_declared_model(llm: Any, seen: set[int] | None = None) -> str | None:
+    if llm is None:
+        return None
+
+    seen = seen or set()
+    object_id = id(llm)
+    if object_id in seen:
+        return None
+    seen.add(object_id)
+
+    for key in ("model_name", "model", "model_id", "deployment_name"):
+        value = getattr(llm, key, None)
+        if value:
+            return str(value)
+
+    for key in ("runnable", "bound"):
+        nested = getattr(llm, key, None)
+        if nested is not None:
+            nested_model = _infer_declared_model(nested, seen)
+            if nested_model:
+                return nested_model
+
+    return None
+
+
 def _truncate_payload(
     value: str | None,
     *,
@@ -115,6 +140,7 @@ def invoke_observable(
 ) -> ObservableLLMResponse:
     prompt_value = prompt.invoke(input_values)
     prompt_text = _prompt_text(prompt_value)
+    expected_primary_model = model or _infer_declared_model(llm)
 
     context = current_trace_context()
     resolved_repository = repository or (
@@ -154,7 +180,7 @@ def invoke_observable(
             step_id=step_id,
             call_type=call_type,
             provider=provider,
-            model=model or _infer_model(llm, None, None),
+            model=expected_primary_model or _infer_model(llm, None, None),
             status="ERROR",
             token_source="estimated",
             latency_ms=latency_ms,
@@ -189,8 +215,8 @@ def invoke_observable(
 
     ended_at = _utcnow()
     latency_ms = _duration_ms(start_time)
-    text = _message_text(ai_message)
     raw_usage = _extract_usage(ai_message)
+    text = _message_text(ai_message)
     normalized_usage = normalize_provider_usage(provider, raw_usage)
     response_metadata = _as_dict(getattr(ai_message, "response_metadata", None))
     usage_metadata = _as_dict(getattr(ai_message, "usage_metadata", None))
@@ -201,9 +227,13 @@ def invoke_observable(
     }
     fallback_from_model = None
     fallback_used = False
-    if model and resolved_model != model:
+    if (
+        expected_primary_model
+        and resolved_model != "unknown"
+        and resolved_model != expected_primary_model
+    ):
         fallback_used = True
-        fallback_from_model = model
+        fallback_from_model = expected_primary_model
 
     call_id = resolved_repository.record_llm_call(
         trace_id=trace_id,

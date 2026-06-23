@@ -77,32 +77,35 @@ class SqlAlchemyObservabilityRepository:
         status: str = "RUNNING",
     ) -> str:
         resolved_trace_id = str(trace_id or uuid.uuid4())
-        self._run_best_effort(
-            """
-            INSERT INTO t_ai_trace (
-                id, request_id, user_id, username, session_id, python_session_id,
-                business_type, entrypoint, status, started_at, metadata
+        try:
+            self._run_best_effort(
+                """
+                INSERT INTO t_ai_trace (
+                    id, request_id, user_id, username, session_id, python_session_id,
+                    business_type, entrypoint, status, started_at, metadata
+                )
+                VALUES (
+                    :id, :request_id, :user_id, :username, :session_id, :python_session_id,
+                    :business_type, :entrypoint, :status, :started_at,
+                    CAST(:metadata AS JSONB)
+                )
+                """,
+                {
+                    "id": resolved_trace_id,
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "username": username,
+                    "session_id": session_id,
+                    "python_session_id": python_session_id,
+                    "business_type": business_type,
+                    "entrypoint": entrypoint,
+                    "status": status,
+                    "started_at": started_at or _utcnow(),
+                    "metadata": _json_dumps(metadata),
+                },
             )
-            VALUES (
-                :id, :request_id, :user_id, :username, :session_id, :python_session_id,
-                :business_type, :entrypoint, :status, :started_at,
-                CAST(:metadata AS JSONB)
-            )
-            """,
-            {
-                "id": resolved_trace_id,
-                "request_id": request_id,
-                "user_id": user_id,
-                "username": username,
-                "session_id": session_id,
-                "python_session_id": python_session_id,
-                "business_type": business_type,
-                "entrypoint": entrypoint,
-                "status": status,
-                "started_at": started_at or _utcnow(),
-                "metadata": _json_dumps(metadata),
-            },
-        )
+        except Exception:
+            logger.exception("observability write failed")
         return resolved_trace_id
 
     def finish_trace(
@@ -152,28 +155,31 @@ class SqlAlchemyObservabilityRepository:
         status: str = "RUNNING",
     ) -> str:
         resolved_step_id = str(step_id or uuid.uuid4())
-        self._run_best_effort(
-            """
-            INSERT INTO t_ai_trace_step (
-                id, trace_id, step_order, step_type, step_name, status, started_at,
-                metadata
+        try:
+            self._run_best_effort(
+                """
+                INSERT INTO t_ai_trace_step (
+                    id, trace_id, step_order, step_type, step_name, status, started_at,
+                    metadata
+                )
+                VALUES (
+                    :id, :trace_id, :step_order, :step_type, :step_name, :status,
+                    :started_at, CAST(:metadata AS JSONB)
+                )
+                """,
+                {
+                    "id": resolved_step_id,
+                    "trace_id": trace_id,
+                    "step_order": step_order,
+                    "step_type": step_type,
+                    "step_name": step_name,
+                    "status": status,
+                    "started_at": started_at or _utcnow(),
+                    "metadata": _json_dumps(metadata),
+                },
             )
-            VALUES (
-                :id, :trace_id, :step_order, :step_type, :step_name, :status,
-                :started_at, CAST(:metadata AS JSONB)
-            )
-            """,
-            {
-                "id": resolved_step_id,
-                "trace_id": trace_id,
-                "step_order": step_order,
-                "step_type": step_type,
-                "step_name": step_name,
-                "status": status,
-                "started_at": started_at or _utcnow(),
-                "metadata": _json_dumps(metadata),
-            },
-        )
+        except Exception:
+            logger.exception("observability write failed")
         return resolved_step_id
 
     def finish_step(
@@ -237,54 +243,57 @@ class SqlAlchemyObservabilityRepository:
         ended_at: datetime | None = None,
     ) -> str:
         resolved_call_id = str(call_id or uuid.uuid4())
-        self._run_best_effort(
-            """
-            INSERT INTO t_ai_llm_call (
-                id, trace_id, step_id, call_type, provider, model, fallback_used,
-                fallback_from_model, status, prompt_tokens, completion_tokens,
-                total_tokens, token_source, prompt_cache_hit_tokens,
-                prompt_cache_miss_tokens, prompt_cache_hit_rate,
-                cache_reported_by_provider, latency_ms, prompt_text, response_text,
-                raw_usage_json, metadata, error_message, started_at, ended_at
+        try:
+            self._run_best_effort(
+                """
+                INSERT INTO t_ai_llm_call (
+                    id, trace_id, step_id, call_type, provider, model, fallback_used,
+                    fallback_from_model, status, prompt_tokens, completion_tokens,
+                    total_tokens, token_source, prompt_cache_hit_tokens,
+                    prompt_cache_miss_tokens, prompt_cache_hit_rate,
+                    cache_reported_by_provider, latency_ms, prompt_text, response_text,
+                    raw_usage_json, metadata, error_message, started_at, ended_at
+                )
+                VALUES (
+                    :id, :trace_id, :step_id, :call_type, :provider, :model,
+                    :fallback_used, :fallback_from_model, :status, :prompt_tokens,
+                    :completion_tokens, :total_tokens, :token_source,
+                    :prompt_cache_hit_tokens, :prompt_cache_miss_tokens,
+                    :prompt_cache_hit_rate, :cache_reported_by_provider, :latency_ms,
+                    :prompt_text, :response_text, CAST(:raw_usage_json AS JSONB),
+                    CAST(:metadata AS JSONB), :error_message, :started_at, :ended_at
+                )
+                """,
+                {
+                    "id": resolved_call_id,
+                    "trace_id": trace_id,
+                    "step_id": step_id,
+                    "call_type": call_type,
+                    "provider": provider,
+                    "model": model,
+                    "fallback_used": fallback_used,
+                    "fallback_from_model": fallback_from_model,
+                    "status": status,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "token_source": token_source,
+                    "prompt_cache_hit_tokens": prompt_cache_hit_tokens,
+                    "prompt_cache_miss_tokens": prompt_cache_miss_tokens,
+                    "prompt_cache_hit_rate": prompt_cache_hit_rate,
+                    "cache_reported_by_provider": cache_reported_by_provider,
+                    "latency_ms": latency_ms,
+                    "prompt_text": prompt_text,
+                    "response_text": response_text,
+                    "raw_usage_json": _json_dumps(raw_usage_json),
+                    "metadata": _json_dumps(metadata),
+                    "error_message": error_message,
+                    "started_at": started_at or _utcnow(),
+                    "ended_at": ended_at,
+                },
             )
-            VALUES (
-                :id, :trace_id, :step_id, :call_type, :provider, :model,
-                :fallback_used, :fallback_from_model, :status, :prompt_tokens,
-                :completion_tokens, :total_tokens, :token_source,
-                :prompt_cache_hit_tokens, :prompt_cache_miss_tokens,
-                :prompt_cache_hit_rate, :cache_reported_by_provider, :latency_ms,
-                :prompt_text, :response_text, CAST(:raw_usage_json AS JSONB),
-                CAST(:metadata AS JSONB), :error_message, :started_at, :ended_at
-            )
-            """,
-            {
-                "id": resolved_call_id,
-                "trace_id": trace_id,
-                "step_id": step_id,
-                "call_type": call_type,
-                "provider": provider,
-                "model": model,
-                "fallback_used": fallback_used,
-                "fallback_from_model": fallback_from_model,
-                "status": status,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-                "token_source": token_source,
-                "prompt_cache_hit_tokens": prompt_cache_hit_tokens,
-                "prompt_cache_miss_tokens": prompt_cache_miss_tokens,
-                "prompt_cache_hit_rate": prompt_cache_hit_rate,
-                "cache_reported_by_provider": cache_reported_by_provider,
-                "latency_ms": latency_ms,
-                "prompt_text": prompt_text,
-                "response_text": response_text,
-                "raw_usage_json": _json_dumps(raw_usage_json),
-                "metadata": _json_dumps(metadata),
-                "error_message": error_message,
-                "started_at": started_at or _utcnow(),
-                "ended_at": ended_at,
-            },
-        )
+        except Exception:
+            logger.exception("observability write failed")
         return resolved_call_id
 
 
@@ -321,4 +330,3 @@ def _build_repository(config: ObservabilityConfig):
 @lru_cache(maxsize=1)
 def get_observability_repository():
     return _build_repository(load_observability_config())
-

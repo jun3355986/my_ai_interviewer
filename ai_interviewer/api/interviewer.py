@@ -2,15 +2,30 @@
 AI面试官：支持完整面试流程的智能面试助手
 """
 import json
+import logging
 import re
+from datetime import datetime, timezone
+from time import perf_counter
 from typing import List, Dict, Optional, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from core.config import get_llm
 from services.interview_session import InterviewSession, InterviewStage
+from services.observability.context import current_trace_context
 from services.observability.langchain import invoke_observable
 from services.question_bank import QuestionBank
+
+
+logger = logging.getLogger(__name__)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _duration_ms(start_time: float) -> int:
+    return max(0, int((perf_counter() - start_time) * 1000))
 
 
 class Interviewer:
@@ -250,7 +265,54 @@ class Interviewer:
         
         # 检索问题
         total_count = sum(counts.values())
-        documents = self.question_bank.search_questions(query, k=total_count * 2)
+        search_k = total_count * 2
+        retrieval_step_id = None
+        retrieval_started_at = _utcnow()
+        retrieval_start_time = perf_counter()
+        trace_context = current_trace_context()
+        if trace_context:
+            try:
+                retrieval_step_id = trace_context.repository.create_step(
+                    trace_id=trace_context.trace_id,
+                    step_name="question_bank.search_questions",
+                    step_type="retrieval",
+                    metadata={
+                        "operation": "question_bank.search_questions",
+                        "k": search_k,
+                        "question_types": list(question_types),
+                        "requested_counts": dict(counts),
+                    },
+                    started_at=retrieval_started_at,
+                )
+            except Exception:
+                logger.exception("observability write failed")
+
+        try:
+            documents = self.question_bank.search_questions(query, k=search_k)
+        except Exception as exc:
+            if trace_context and retrieval_step_id:
+                try:
+                    trace_context.repository.finish_step(
+                        step_id=retrieval_step_id,
+                        status="ERROR",
+                        error_message=str(exc),
+                        ended_at=_utcnow(),
+                        duration_ms=_duration_ms(retrieval_start_time),
+                    )
+                except Exception:
+                    logger.exception("observability write failed")
+            raise
+
+        if trace_context and retrieval_step_id:
+            try:
+                trace_context.repository.finish_step(
+                    step_id=retrieval_step_id,
+                    status="SUCCESS",
+                    ended_at=_utcnow(),
+                    duration_ms=_duration_ms(retrieval_start_time),
+                )
+            except Exception:
+                logger.exception("observability write failed")
         
         # 简单筛选：提取问题文本
         questions = []
