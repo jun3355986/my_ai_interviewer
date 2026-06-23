@@ -79,17 +79,42 @@ def chat_stream(req: UnifiedChatRequest):
     """统一流式对话接口（SSE）"""
 
     def event_generator():
+        prepared_session = None
+        prepared_error = None
+        generated_session_id = None
+
+        if req.session_id is None:
+            generated_session_id = str(uuid.uuid4())
+            try:
+                prepared_session = session_manager.create_session(
+                    session_id=generated_session_id,
+                    resume_content=req.resume_content,
+                    job_requirements=req.job_requirements,
+                )
+                prepared_session.candidate_name = req.candidate_name
+                prepared_session.stage = InterviewStage.OPENING
+                interview_service._save_session(prepared_session)
+            except Exception as exc:
+                prepared_error = exc
+
+        trace_python_session_id = (
+            req.session_id
+            or (prepared_session.session_id if prepared_session else generated_session_id)
+        )
         with observability_trace(
             request_id=req.request_id,
             user_id=req.user_id,
             username=req.username,
-            session_id=req.java_session_id or req.session_id,
-            python_session_id=req.session_id,
+            session_id=req.java_session_id or trace_python_session_id,
+            python_session_id=trace_python_session_id,
             business_type=req.business_type or "interview",
             entrypoint=req.entrypoint or "interview_chat",
             metadata={"has_existing_session": req.session_id is not None},
         ) as trace:
             try:
+                if prepared_error is not None:
+                    raise prepared_error
+
                 if req.session_id:
                     session = interview_service.get_session(req.session_id)
                     if not session:
@@ -100,15 +125,7 @@ def chat_stream(req: UnifiedChatRequest):
                         )
                         return
                 else:
-                    session_id = str(uuid.uuid4())
-                    session = session_manager.create_session(
-                        session_id=session_id,
-                        resume_content=req.resume_content,
-                        job_requirements=req.job_requirements,
-                    )
-                    session.candidate_name = req.candidate_name
-                    session.stage = InterviewStage.OPENING
-                    interview_service._save_session(session)
+                    session = prepared_session
 
                 current_stage = session.stage
                 yield format_sse(

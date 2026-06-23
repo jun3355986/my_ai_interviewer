@@ -18,6 +18,7 @@ dependencies = [
     "uvicorn>=0.30.0",
     "python-multipart>=0.0.9",
     "dashscope>=1.17.0",
+    "psycopg[binary]>=3.2",
 ]
 
 [dependency-groups]
