@@ -47,10 +47,63 @@ TDD mode: tdd
 
 ## Current Task
 
-Plan task text: **Step 1: Add API smoke fixture**
-OpenSpec task text: 1.3 Add documentation and test registry entries for observability test assets under the root `tests/` directory; 5.1 Add Python tests for DeepSeek usage fields, OpenAI-compatible cached tokens, unreported provider cache fields, and parser-before-metadata capture; 5.2 Add Java API tests or smoke scripts for list, detail, raw payload access audit, and statistics queries; 5.4 Run project build/test commands for the touched Python, Java, and admin frontend modules and record evidence in the verification summary.
-Stage: checkoff
-Review/fix rounds: 1
+Plan task text: final overall review
+OpenSpec task text: all planned tasks checked
+Stage: final-review
+Review/fix rounds: 3
+
+## Final Overall Review
+
+Agent: 019ef59f-4245-76b2-b17c-7cec26948208 (Huygens)
+Status: FAIL
+Findings: admin Spring/MyBatis Plus application context fails during full `mvn test` because `AiObservabilityMapper.xml` UUID result mappings have no runtime type handler. Targeted mapper tests masked this by manually registering a UUID handler in test-only SqlSessionFactory setup. Coordinator reproduced with `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn test`; surefire reports show `Failed to parse mapping resource ... AiObservabilityMapper.xml` and `No typehandler found for property id`.
+
+## Final Fix Round 1
+
+Agent: 019ef5a7-44e5-7100-892d-5ee901350081 (Kepler)
+Status: DONE
+Commit: c20b32a
+Target: register runtime PostgreSQL UUID handling for admin MyBatis Plus mapper parsing and make full admin test suite pass.
+Changed files:
+- ai_interviewer_admin/src/main/java/com/aiinterviewer/admin/common/mybatis/PostgresUuidTypeHandler.java
+- ai_interviewer_admin/src/main/resources/application.yml
+- ai_interviewer_admin/src/test/java/com/aiinterviewer/admin/common/mybatis/PostgresUuidTypeHandlerTest.java
+- tests/docs/test-cases.md
+RED evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn test` failed before fix with 95 errors; surefire reports showed `Failed to parse mapping resource ... AiObservabilityMapper.xml` and `No typehandler found for property id`. Focused `mvn -Dtest=PostgresUuidTypeHandlerTest test` failed at testCompile before the production handler existed.
+GREEN evidence: `cd ai_interviewer_admin && env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -Dtest=PostgresUuidTypeHandlerTest test` passed with 3 tests; `mvn -Dtest=AiObservabilityServiceTest,AiObservabilitySchemaMigrationTest test` passed with 16 tests; full `mvn test` passed with 138 tests; `git diff --check` and `git diff --check HEAD~1..HEAD` passed.
+Concerns: pending fresh final overall review. Runtime UUID registration is now configured through `mybatis-plus.type-handlers-package`.
+
+## Final Overall Re-review After Fix Round 1
+
+Agent: 019ef5b0-3ad0-7d02-a8ed-ba5745b566b0 (Franklin)
+Status: FAIL
+Target: re-review the full change at HEAD after runtime PostgreSQL UUID handler registration, with emphasis on the prior MyBatis mapper parsing blocker and full admin test suite.
+Findings: runtime UUID/MyBatis blocker is fixed and full admin `mvn test` passed with 138 tests. New important blocker: admin frontend AI observability filters hard-code `FAILED` for status and `CHAT`/`EMBEDDING`/`RERANK` for call type, but backend exact-matches persisted `ERROR`/`SUCCESS`/`RUNNING` statuses and Python emits call types such as `generate_opening`, `ask_self_introduction`, `generate_project_questions`, `evaluate_answer`, `generate_followup_question`, `conclude_interview`, and `ask`. Result: visible UI filters can silently hide the data they are meant to expose.
+Verification: reviewer ran full admin tests, Python observability tests, API pytest default/gate checks, interview username propagation tests, and diff check. No Chroma sqlite dirtying reported.
+
+## Final Fix Round 2
+
+Agent: 019ef5b6-2c0e-7dc0-85ad-6a58ca7058bf (Dalton)
+Status: DONE
+Commit: 13e6976
+Target: align admin frontend AI observability status/call-type filters with persisted backend/Python values and add regression smoke coverage.
+Changed files:
+- ai_interviewer_admin_front/src/App.tsx
+- tests/e2e/playwright/tests/admin-web-smoke.spec.ts
+- tests/docs/test-cases.md
+RED evidence: `cd tests/e2e/playwright && ADMIN_WEB_BASE_URL=http://127.0.0.1:8091 npm run test -- --project=admin-web-chromium tests/admin-web-smoke.spec.ts --grep "AI observability"` failed before implementation because Playwright could not select `ERROR`; the status dropdown did not contain that backend-persisted exact-match value.
+GREEN evidence: targeted AI observability smoke passed with 1 test; admin frontend `npm run build` passed; full admin smoke passed with 2 tests; `git diff --check` passed.
+Concerns: pending fresh final overall review. Verification used local Vite dev server on 127.0.0.1:8091 and stopped it after use.
+Coordinator verification after fix: `cd ai_interviewer_admin_front && npm run build` passed; with Vite dev server on 127.0.0.1:8091, `cd tests/e2e/playwright && ADMIN_WEB_BASE_URL=http://127.0.0.1:8091 npm run test -- --project=admin-web-chromium tests/admin-web-smoke.spec.ts` passed with 2 tests; `git diff --check` passed.
+
+## Final Overall Re-review After Fix Round 2
+
+Agent: 019ef5bc-39a9-7182-9f13-d5346a3a5d47 (Wegener)
+Status: PASS
+Target: re-review the full change at HEAD after UUID runtime handler and frontend exact-match filter fixes.
+Findings: no remaining Critical, Important, or Minor issues. Reviewer confirmed the OpenSpec/task shape across schema, Python capture, Java correlation/admin APIs, raw-payload audit, React admin UI, and root tests/docs.
+Verification: `git diff --check fc53e43a0f607f5ff0ce183ed1d8c9a40d281c51..HEAD` passed; admin frontend build passed; admin Playwright smoke passed with 2 tests against local Vite 127.0.0.1:8091; full Java admin suite passed with 138 tests; Python observability tests passed with 24 passed and one existing SQLAlchemy deprecation warning. Opt-in live cross-service smoke was not run because it requires live services and may call the real LLM path. No Chroma sqlite dirtying reported.
+Assessment: PASS. Both prior final-review blockers are fixed in runtime paths: MyBatis UUID handling is production-registered, and frontend filters align with backend exact-match SQL plus current Python-emitted LLM call types with regression smoke coverage.
 
 ## Task 4 Implementer
 
