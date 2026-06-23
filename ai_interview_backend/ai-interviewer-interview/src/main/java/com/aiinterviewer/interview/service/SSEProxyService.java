@@ -74,7 +74,7 @@ public class SSEProxyService {
         saveUserMessage(session.getId(), request.getMessage(), session.getStage());
 
         // 3. 构建Python请求
-        PythonChatRequest pythonRequest = buildPythonRequest(request, session);
+        PythonChatRequest pythonRequest = buildPythonRequest(request, session, userId);
 
         // 用于收集AI响应
         AtomicReference<StringBuilder> aiResponseRef = new AtomicReference<>(new StringBuilder());
@@ -241,9 +241,14 @@ public class SSEProxyService {
     /**
      * 构建Python请求
      */
-    private PythonChatRequest buildPythonRequest(ChatRequest request, InterviewSession session) {
+    private PythonChatRequest buildPythonRequest(ChatRequest request, InterviewSession session, Long userId) {
         return PythonChatRequest.builder()
                 .sessionId(session.getPythonSessionId())
+                .requestId(IdUtil.fastSimpleUUID())
+                .javaSessionId(session.getId())
+                .userId(userId)
+                .businessType("interview")
+                .entrypoint("interview_chat")
                 .message(request.getMessage())
                 .resumeContent(session.getResumeContent())
                 .jobRequirements(session.getJobRequirements())

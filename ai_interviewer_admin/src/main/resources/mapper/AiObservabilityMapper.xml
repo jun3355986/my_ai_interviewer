@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiinterviewer.admin.observability.mapper.AiObservabilityMapper">
+
+    <resultMap id="AiTraceListItemMap" type="com.aiinterviewer.admin.observability.dto.AiTraceListItem">
+        <id property="id" column="id"/>
+        <result property="requestId" column="request_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="username" column="username"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="pythonSessionId" column="python_session_id"/>
+        <result property="businessType" column="business_type"/>
+        <result property="entrypoint" column="entrypoint"/>
+        <result property="status" column="status"/>
+        <result property="errorCode" column="error_code"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="endedAt" column="ended_at"/>
+        <result property="durationMs" column="duration_ms"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="stepCount" column="step_count"/>
+        <result property="llmCallCount" column="llm_call_count"/>
+        <result property="totalTokens" column="total_tokens"/>
+        <result property="failedLlmCalls" column="failed_llm_calls"/>
+        <result property="fallbackUsed" column="fallback_used"/>
+    </resultMap>
+
+    <resultMap id="AiTraceDetailMap" type="com.aiinterviewer.admin.observability.dto.AiTraceDetailResponse">
+        <id property="id" column="id"/>
+        <result property="requestId" column="request_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="username" column="username"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="pythonSessionId" column="python_session_id"/>
+        <result property="businessType" column="business_type"/>
+        <result property="entrypoint" column="entrypoint"/>
+        <result property="status" column="status"/>
+        <result property="errorCode" column="error_code"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="endedAt" column="ended_at"/>
+        <result property="durationMs" column="duration_ms"/>
+        <result property="metadataJson" column="metadata_json"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="AiTraceStepItemMap" type="com.aiinterviewer.admin.observability.dto.AiTraceStepItem">
+        <id property="id" column="id"/>
+        <result property="traceId" column="trace_id"/>
+        <result property="stepOrder" column="step_order"/>
+        <result property="stepType" column="step_type"/>
+        <result property="stepName" column="step_name"/>
+        <result property="status" column="status"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="endedAt" column="ended_at"/>
+        <result property="durationMs" column="duration_ms"/>
+        <result property="metadataJson" column="metadata_json"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="AiLlmCallDetailItemMap" type="com.aiinterviewer.admin.observability.dto.AiLlmCallDetailItem">
+        <id property="id" column="id"/>
+        <result property="traceId" column="trace_id"/>
+        <result property="stepId" column="step_id"/>
+        <result property="callType" column="call_type"/>
+        <result property="provider" column="provider"/>
+        <result property="model" column="model"/>
+        <result property="fallbackUsed" column="fallback_used"/>
+        <result property="fallbackFromModel" column="fallback_from_model"/>
+        <result property="status" column="status"/>
+        <result property="promptTokens" column="prompt_tokens"/>
+        <result property="completionTokens" column="completion_tokens"/>
+        <result property="totalTokens" column="total_tokens"/>
+        <result property="tokenSource" column="token_source"/>
+        <result property="promptCacheHitTokens" column="prompt_cache_hit_tokens"/>
+        <result property="promptCacheMissTokens" column="prompt_cache_miss_tokens"/>
+        <result property="promptCacheHitRate" column="prompt_cache_hit_rate"/>
+        <result property="cacheReportedByProvider" column="cache_reported_by_provider"/>
+        <result property="latencyMs" column="latency_ms"/>
+        <result property="rawUsageJson" column="raw_usage_json"/>
+        <result property="metadataJson" column="metadata_json"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="endedAt" column="ended_at"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="LlmCallRawPayloadMap" type="com.aiinterviewer.admin.observability.dto.LlmCallRawPayload">
+        <id property="callId" column="call_id"/>
+        <result property="traceId" column="trace_id"/>
+        <result property="promptText" column="prompt_text"/>
+        <result property="responseText" column="response_text"/>
+    </resultMap>
+
+    <resultMap id="AiObservabilityStatsMap" type="com.aiinterviewer.admin.observability.dto.AiObservabilityStatsResponse">
+        <result property="traceCount" column="trace_count"/>
+        <result property="totalLlmCalls" column="total_llm_calls"/>
+        <result property="failedLlmCalls" column="failed_llm_calls"/>
+        <result property="totalPromptTokens" column="total_prompt_tokens"/>
+        <result property="totalCompletionTokens" column="total_completion_tokens"/>
+        <result property="totalTokens" column="total_tokens"/>
+        <result property="averageLatencyMs" column="average_latency_ms"/>
+        <result property="providerPromptCacheHitTokens" column="provider_prompt_cache_hit_tokens"/>
+        <result property="providerPromptCacheMissTokens" column="provider_prompt_cache_miss_tokens"/>
+        <result property="providerPromptCacheHitCalls" column="provider_prompt_cache_hit_calls"/>
+        <result property="providerCacheReportedCalls" column="provider_cache_reported_calls"/>
+        <result property="providerCacheUnreportedCalls" column="provider_cache_unreported_calls"/>
+    </resultMap>
+
+    <sql id="TraceWhere">
+        WHERE 1 = 1
+        <if test="query.userId != null">
+            AND t.user_id = #{query.userId}
+        </if>
+        <if test="query.username != null">
+            AND t.username ILIKE CONCAT('%', #{query.username}, '%')
+        </if>
+        <if test="query.sessionId != null">
+            AND (t.session_id = #{query.sessionId} OR t.python_session_id = #{query.sessionId})
+        </if>
+        <if test="query.requestId != null">
+            AND t.request_id = #{query.requestId}
+        </if>
+        <if test="query.businessType != null">
+            AND t.business_type = #{query.businessType}
+        </if>
+        <if test="query.entrypoint != null">
+            AND t.entrypoint = #{query.entrypoint}
+        </if>
+        <if test="query.status != null">
+            AND t.status = #{query.status}
+        </if>
+        <if test="query.startedFrom != null">
+            AND t.started_at &gt;= #{query.startedFrom}
+        </if>
+        <if test="query.startedTo != null">
+            AND t.started_at &lt;= #{query.startedTo}
+        </if>
+        <if test="query.provider != null">
+            AND EXISTS (
+                SELECT 1
+                FROM t_ai_llm_call pc
+                WHERE pc.trace_id = t.id
+                  AND pc.provider = #{query.provider}
+            )
+        </if>
+        <if test="query.model != null">
+            AND EXISTS (
+                SELECT 1
+                FROM t_ai_llm_call mc
+                WHERE mc.trace_id = t.id
+                  AND mc.model = #{query.model}
+            )
+        </if>
+    </sql>
+
+    <sql id="TraceFilter">
+        FROM t_ai_trace t
+        <include refid="TraceWhere"/>
+    </sql>
+
+    <select id="countTraces" resultType="long">
+        SELECT COUNT(*)
+        <include refid="TraceFilter"/>
+    </select>
+
+    <select id="selectTraces" resultMap="AiTraceListItemMap">
+        SELECT t.id, t.request_id, t.user_id, t.username, t.session_id, t.python_session_id,
+               t.business_type, t.entrypoint, t.status, t.error_code, t.error_message,
+               t.started_at, t.ended_at, t.duration_ms, t.created_at,
+               COALESCE(step_counts.step_count, 0) AS step_count,
+               COALESCE(llm_counts.llm_call_count, 0) AS llm_call_count,
+               COALESCE(llm_counts.total_tokens, 0) AS total_tokens,
+               COALESCE(llm_counts.failed_llm_calls, 0) AS failed_llm_calls,
+               COALESCE(llm_counts.fallback_used, FALSE) AS fallback_used
+        FROM t_ai_trace t
+        LEFT JOIN (
+            SELECT trace_id, COUNT(*) AS step_count
+            FROM t_ai_trace_step
+            GROUP BY trace_id
+        ) step_counts ON step_counts.trace_id = t.id
+        LEFT JOIN (
+            SELECT trace_id,
+                   COUNT(*) AS llm_call_count,
+                   COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                   COUNT(*) FILTER (WHERE status &lt;&gt; 'SUCCESS') AS failed_llm_calls,
+                   BOOL_OR(fallback_used) AS fallback_used
+            FROM t_ai_llm_call
+            GROUP BY trace_id
+        ) llm_counts ON llm_counts.trace_id = t.id
+        <include refid="TraceWhere"/>
+        ORDER BY t.started_at DESC, t.created_at DESC, t.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectTraceById" resultMap="AiTraceDetailMap">
+        SELECT id, request_id, user_id, username, session_id, python_session_id,
+               business_type, entrypoint, status, error_code, error_message,
+               started_at, ended_at, duration_ms, metadata::text AS metadata_json, created_at
+        FROM t_ai_trace
+        WHERE id = #{traceId}
+    </select>
+
+    <select id="selectTraceSteps" resultMap="AiTraceStepItemMap">
+        SELECT id, trace_id, step_order, step_type, step_name, status, started_at, ended_at,
+               duration_ms, metadata::text AS metadata_json, error_message, created_at
+        FROM t_ai_trace_step
+        WHERE trace_id = #{traceId}
+        ORDER BY step_order ASC, started_at ASC, id ASC
+    </select>
+
+    <select id="selectLlmCalls" resultMap="AiLlmCallDetailItemMap">
+        SELECT id, trace_id, step_id, call_type, provider, model, fallback_used,
+               fallback_from_model, status, prompt_tokens, completion_tokens, total_tokens,
+               token_source, prompt_cache_hit_tokens, prompt_cache_miss_tokens,
+               prompt_cache_hit_rate, cache_reported_by_provider, latency_ms,
+               raw_usage_json::text AS raw_usage_json, metadata::text AS metadata_json,
+               error_message, started_at, ended_at, created_at
+        FROM t_ai_llm_call
+        WHERE trace_id = #{traceId}
+        ORDER BY started_at ASC, id ASC
+    </select>
+
+    <select id="selectLlmCallRawPayload" resultMap="LlmCallRawPayloadMap">
+        SELECT id AS call_id, trace_id, prompt_text, response_text
+        FROM t_ai_llm_call
+        WHERE id = #{callId}
+    </select>
+
+    <select id="selectStats" resultMap="AiObservabilityStatsMap">
+        SELECT COUNT(DISTINCT t.id) AS trace_count,
+               COUNT(c.id) AS total_llm_calls,
+               COUNT(c.id) FILTER (WHERE c.status &lt;&gt; 'SUCCESS') AS failed_llm_calls,
+               COALESCE(SUM(c.prompt_tokens), 0) AS total_prompt_tokens,
+               COALESCE(SUM(c.completion_tokens), 0) AS total_completion_tokens,
+               COALESCE(SUM(c.total_tokens), 0) AS total_tokens,
+               COALESCE(AVG(c.latency_ms), 0) AS average_latency_ms,
+               COALESCE(SUM(CASE WHEN c.cache_reported_by_provider THEN c.prompt_cache_hit_tokens ELSE 0 END), 0)
+                    AS provider_prompt_cache_hit_tokens,
+               COALESCE(SUM(CASE WHEN c.cache_reported_by_provider THEN c.prompt_cache_miss_tokens ELSE 0 END), 0)
+                    AS provider_prompt_cache_miss_tokens,
+               COUNT(c.id) FILTER (
+                    WHERE c.cache_reported_by_provider
+                      AND COALESCE(c.prompt_cache_hit_tokens, 0) &gt; 0
+               ) AS provider_prompt_cache_hit_calls,
+               COUNT(c.id) FILTER (WHERE c.cache_reported_by_provider) AS provider_cache_reported_calls,
+               COUNT(c.id) FILTER (WHERE c.id IS NOT NULL AND NOT c.cache_reported_by_provider)
+                    AS provider_cache_unreported_calls
+        FROM t_ai_trace t
+        LEFT JOIN t_ai_llm_call c ON c.trace_id = t.id
+        <include refid="TraceWhere"/>
+    </select>
+
+    <insert id="insertAccessLog">
+        INSERT INTO t_ai_observability_access_log
+            (admin_user_id, trace_id, llm_call_id, access_type, request_uri, ip_address, user_agent)
+        VALUES
+            (#{log.adminUserId}, #{log.traceId}, #{log.llmCallId}, #{log.accessType},
+             #{log.requestUri}, #{log.ipAddress}, #{log.userAgent})
+    </insert>
+</mapper>

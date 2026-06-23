@@ -23,6 +23,40 @@ public class PythonChatRequest implements Serializable {
     private String sessionId;
 
     /**
+     * Java侧每次请求ID，用于贯通Java日志与Python AI观测链路
+     */
+    @JsonProperty("request_id")
+    private String requestId;
+
+    /**
+     * Java面试会话ID
+     */
+    @JsonProperty("java_session_id")
+    private String javaSessionId;
+
+    /**
+     * 当前用户ID
+     */
+    @JsonProperty("user_id")
+    private Long userId;
+
+    /**
+     * 当前用户名（若网关透传）
+     */
+    private String username;
+
+    /**
+     * 业务类型
+     */
+    @JsonProperty("business_type")
+    private String businessType;
+
+    /**
+     * Java入口点
+     */
+    private String entrypoint;
+
+    /**
      * 用户消息
      */
     private String message;
