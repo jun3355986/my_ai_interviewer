@@ -13,6 +13,22 @@ When a development task or bug fix requires tests:
 
 Use project-native locations for isolated unit tests and the root `tests/` tree for cross-project or release-quality tests.
 
+## Python AI Unit Tests
+
+Python AI unit tests live under `ai_interviewer/tests` and use pytest through uv.
+
+```bash
+cd ai_interviewer
+uv run pytest tests/test_observability_provider_usage.py -q
+```
+
+`pytest` is declared in the Python AI project's `dev` dependency group in `ai_interviewer/pyproject.toml`. For a fresh environment, sync that group before running unit tests:
+
+```bash
+cd ai_interviewer
+uv sync --group dev
+```
+
 ## Smoke Tests
 
 The smoke suite is a curl-based, non-UI verification for the P0 journey.

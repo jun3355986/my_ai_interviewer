@@ -49,6 +49,71 @@ def test_openai_cached_tokens_are_normalized():
     assert result.raw_usage == usage
 
 
+def test_invalid_openai_cached_tokens_are_ignored():
+    usage = {
+        "prompt_tokens": 100,
+        "completion_tokens": 15,
+        "total_tokens": 115,
+        "prompt_tokens_details": {"cached_tokens": "35"},
+    }
+
+    result = normalize_provider_usage("openai", usage)
+
+    assert result.prompt_tokens == 100
+    assert result.prompt_cache_hit_tokens is None
+    assert result.prompt_cache_miss_tokens is None
+    assert result.prompt_cache_hit_rate is None
+    assert result.cache_reported_by_provider is False
+
+
+def test_cached_tokens_greater_than_prompt_does_not_create_negative_miss():
+    usage = {
+        "prompt_tokens": 100,
+        "completion_tokens": 15,
+        "total_tokens": 115,
+        "prompt_tokens_details": {"cached_tokens": 120},
+    }
+
+    result = normalize_provider_usage("openai", usage)
+
+    assert result.prompt_cache_hit_tokens == 120
+    assert result.prompt_cache_miss_tokens is None
+    assert result.prompt_cache_hit_rate is None
+    assert result.cache_reported_by_provider is True
+
+
+def test_invalid_deepseek_cache_tokens_are_ignored():
+    usage = {
+        "prompt_tokens": 100,
+        "completion_tokens": 25,
+        "total_tokens": 125,
+        "prompt_cache_hit_tokens": "60",
+        "prompt_cache_miss_tokens": True,
+    }
+
+    result = normalize_provider_usage("deepseek", usage)
+
+    assert result.prompt_tokens == 100
+    assert result.prompt_cache_hit_tokens is None
+    assert result.prompt_cache_miss_tokens is None
+    assert result.prompt_cache_hit_rate is None
+    assert result.cache_reported_by_provider is False
+
+
+def test_invalid_provider_token_fields_are_ignored():
+    usage = {
+        "prompt_tokens": "100",
+        "completion_tokens": True,
+        "total_tokens": 115.5,
+    }
+
+    result = normalize_provider_usage("openai", usage)
+
+    assert result.prompt_tokens is None
+    assert result.completion_tokens is None
+    assert result.total_tokens is None
+
+
 def test_unreported_cache_fields_are_excluded_from_cache_metrics():
     result = normalize_provider_usage(
         "azure_openai",
