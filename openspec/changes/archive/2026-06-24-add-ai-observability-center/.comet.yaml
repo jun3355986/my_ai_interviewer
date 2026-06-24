@@ -16,7 +16,7 @@ verification_report: docs/superpowers/reports/2026-06-24-add-ai-observability-ce
 branch_status: handled
 created_at: 2026-06-23
 verified_at: 2026-06-23
-archived: false
+archived: true
 handoff_context: openspec/changes/add-ai-observability-center/.comet/handoff/design-context.json
 handoff_hash: 18f3e19f1a665cde7c5797544a0ee6a769ad3be7068dc4c777c931a80a156e12
 build_command: env JAVA_HOME=/Users/junjielong/.jenv/versions/21 PATH=/Users/junjielong/.jenv/versions/21/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin mvn -f ai_interviewer_admin/pom.xml test

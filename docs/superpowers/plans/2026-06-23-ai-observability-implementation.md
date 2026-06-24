@@ -2,6 +2,7 @@
 change: add-ai-observability-center
 design-doc: docs/superpowers/specs/2026-06-23-ai-observability-design.md
 base-ref: fc53e43a0f607f5ff0ce183ed1d8c9a40d281c51
+archived-with: 2026-06-24-add-ai-observability-center
 ---
 
 # AI Observability Center Implementation Plan
@@ -14,6 +15,7 @@ base-ref: fc53e43a0f607f5ff0ce183ed1d8c9a40d281c51
 
 **Tech Stack:** FastAPI, LangChain, `langchain_openai.ChatOpenAI`, PostgreSQL, Spring Boot 3.3.5, MyBatis, Flyway-style SQL migration, React, TypeScript, Vite, Maven, uv, pytest.
 
+archived-with: 2026-06-24-add-ai-observability-center
 ---
 
 ## File Structure

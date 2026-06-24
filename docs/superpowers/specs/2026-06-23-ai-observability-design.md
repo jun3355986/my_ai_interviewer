@@ -2,6 +2,8 @@
 comet_change: add-ai-observability-center
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-06-24-add-ai-observability-center
+status: final
 ---
 
 # AI 调用观测中心设计文档
