@@ -2,7 +2,7 @@
 面试会话管理：管理面试流程状态和记录
 """
 from enum import Enum
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from datetime import datetime
 from dataclasses import dataclass, field
 
@@ -44,7 +44,7 @@ class InterviewSession:
     project_questions_count: int = 0  # 已问的项目问题数
     target_project_questions: int = 5  # 目标项目问题数
     project_questions_pool: List[str] = field(default_factory=list)  # 项目问题池
-    technical_questions_pool: List[str] = field(default_factory=list)  # 技术问题池
+    technical_questions_pool: List[Any] = field(default_factory=list)  # 技术问题池，兼容旧字符串和结构化题目对象
     final_score: Optional[int] = None
     final_feedback: Optional[str] = None
     current_question_followup_count: int = 0 # 当前问题追问次数
@@ -239,4 +239,3 @@ class SessionManager:
 
 # 全局会话管理器
 session_manager = SessionManager()
-

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../api/interview_api.dart';
 import '../models/chat_message.dart';
 import '../models/job.dart';
+import '../models/question_media.dart';
 
 class InterviewService extends ChangeNotifier {
   final InterviewApi _interviewApi;
@@ -105,8 +106,40 @@ class InterviewService extends ChangeNotifier {
           _mapStage(data['stage']);
         }
         break;
+      case 'question':
+        final question = data['question'];
+        if (question is Map<String, dynamic>) {
+          final content = question['text'] as String? ?? '';
+          final rawMedia = question['media'];
+          final media = rawMedia is List
+              ? rawMedia
+                  .whereType<Map<String, dynamic>>()
+                  .map(QuestionMedia.fromJson)
+                  .toList()
+              : <QuestionMedia>[];
+
+          if (content.isNotEmpty) {
+            _messages.add(ChatMessage(
+              isAI: true,
+              content: content,
+              time: _getCurrentTime(),
+              media: media,
+            ));
+            _currentStreamContent = content;
+            notifyListeners();
+          }
+        }
+        break;
       case 'chunk':
         final content = data['content'] as String? ?? '';
+        if (_messages.isNotEmpty &&
+            _messages.last.isAI &&
+            _messages.last.media.isNotEmpty &&
+            _currentStreamContent == _messages.last.content &&
+            content.isNotEmpty &&
+            _messages.last.content.contains(content)) {
+          break;
+        }
         _currentStreamContent += content;
 
         if (_messages.isEmpty || !_messages.last.isAI) {

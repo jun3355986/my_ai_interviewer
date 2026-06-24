@@ -15,4 +15,5 @@ public class QuestionImportRow {
     private String skillArea;
     private Long jobId;
     private Integer status;
+    private List<QuestionMediaRequest> media = List.of();
 }

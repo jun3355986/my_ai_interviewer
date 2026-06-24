@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
 import com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch;
+import com.aiinterviewer.admin.questionbank.entity.QuestionMedia;
 import com.aiinterviewer.admin.support.AdminPostgresIntegrationTest;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -89,6 +90,29 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void markdownImportParsesImageMedia() {
+        QuestionImportBatch batch = questionImportService.importQuestionFile(
+                "rich.md",
+                text("""
+                        题目：请结合下图说明两个 Lua 脚本关系。
+                        ![图 10-17](https://example.com/figure.png)
+                        参考答案：入口脚本调用底层限流脚本。
+                        题型：TECHNICAL
+                        难度：MEDIUM
+                        技能领域：Redis
+                        标签：Redis;Lua
+                        """),
+                23L);
+
+        assertThat(batch.getStatus()).isEqualTo("SUCCESS");
+        QuestionBankItem item = questionService.getQuestion(questionIdByText("请结合下图说明两个 Lua 脚本关系。"));
+        assertThat(item.getMedia()).extracting(QuestionMedia::getMediaUrl)
+                .containsExactly("https://example.com/figure.png");
+        assertThat(item.getMedia()).extracting(QuestionMedia::getCaption)
+                .containsExactly("图 10-17");
+    }
+
+    @Test
     void txtImportRejectsUnsupportedFreeFormBlocksWithRowLikeErrors() {
         QuestionImportBatch batch = questionImportService.importQuestionFile(
                 "bad.txt",
@@ -111,8 +135,8 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
     void robustCsvBoundariesImportSuccessfully() {
         QuestionImportBatch batch = questionImportService.importCsv(
                 "robust.csv",
-                csv("\uFEFFquestion_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status\r\n"
-                        + "\"带逗号,题目\",\"第一行\r\n第二行 \"\"引用\"\"\",TECHNICAL,MEDIUM,Java;CSV,Java,101,1\r\n"),
+                csv("\uFEFFquestion_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status,media_urls,media_captions\r\n"
+                        + "\"带逗号,题目\",\"第一行\r\n第二行 \"\"引用\"\"\",TECHNICAL,MEDIUM,Java;CSV,Java,101,1,,\r\n"),
                 11L);
 
         assertThat(batch.getStatus()).isEqualTo("SUCCESS");
@@ -127,12 +151,43 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
     }
 
     @Test
+    void csvImportSupportsMediaUrlsAndCaptions() {
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "rich.csv",
+                csv("""
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status,media_urls,media_captions
+                        请结合下图说明两个 Lua 脚本关系,入口脚本调用底层限流脚本,TECHNICAL,MEDIUM,Redis;Lua,Redis,,2,https://example.com/figure.png,图 10-17
+                        """),
+                24L);
+
+        assertThat(batch.getStatus()).isEqualTo("SUCCESS");
+        QuestionBankItem item = questionService.getQuestion(questionIdByText("请结合下图说明两个 Lua 脚本关系"));
+        assertThat(item.getMedia()).extracting(QuestionMedia::getCaption)
+                .containsExactly("图 10-17");
+    }
+
+    @Test
+    void csvImportRejectsInvalidMediaUrlAsRowError() {
+        QuestionImportBatch batch = questionImportService.importCsv(
+                "bad-media.csv",
+                csv("""
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status,media_urls,media_captions
+                        图文 URL 无效题目,参考答案,TECHNICAL,MEDIUM,Redis,Redis,,2,ftp://example.com/bad.png,坏图
+                        """),
+                25L);
+
+        assertThat(batch.getStatus()).isEqualTo("FAILED");
+        assertThat(batch.getErrorMessage()).contains("media_urls 只支持 http:// 或 https://");
+        assertThat(questionExists("图文 URL 无效题目")).isFalse();
+    }
+
+    @Test
     void rowMissingQuestionTextIsRejectedWithRowNumber() {
         QuestionImportBatch batch = questionImportService.importCsv(
                 "missing-question-text.csv",
                 csv("""
-                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
-                        ,参考答案,TECHNICAL,MEDIUM,Java;Spring,Java,101,1
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status,media_urls,media_captions
+                        ,参考答案,TECHNICAL,MEDIUM,Java;Spring,Java,101,1,,
                         """),
                 8L);
 
@@ -149,10 +204,10 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
         QuestionImportBatch batch = questionImportService.importCsv(
                 "duplicate-question.csv",
                 csv("""
-                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
-                        同批次重复题目,参考答案一,TECHNICAL,MEDIUM,Java;Spring,Java,101,1
-                        同批次重复题目,参考答案二,TECHNICAL,HARD,Java,Java,101,1
-                        唯一题目,参考答案三,BEHAVIORAL,EASY,Communication,Communication,,1
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status,media_urls,media_captions
+                        同批次重复题目,参考答案一,TECHNICAL,MEDIUM,Java;Spring,Java,101,1,,
+                        同批次重复题目,参考答案二,TECHNICAL,HARD,Java,Java,101,1,,
+                        唯一题目,参考答案三,BEHAVIORAL,EASY,Communication,Communication,,1,,
                         """),
                 9L);
 
@@ -169,10 +224,10 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
         QuestionImportBatch batch = questionImportService.importCsv(
                 "partial-failure.csv",
                 csv("""
-                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
-                        有效题目一,参考答案一,TECHNICAL,MEDIUM,Java;Spring,Java,101,1
-                        缺少难度题目,参考答案二,TECHNICAL,,Java,Java,101,1
-                        有效题目二,参考答案三,BEHAVIORAL,EASY,Communication,Communication,,1
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status,media_urls,media_captions
+                        有效题目一,参考答案一,TECHNICAL,MEDIUM,Java;Spring,Java,101,1,,
+                        缺少难度题目,参考答案二,TECHNICAL,,Java,Java,101,1,,
+                        有效题目二,参考答案三,BEHAVIORAL,EASY,Communication,Communication,,1,,
                         """),
                 10L);
 
@@ -192,12 +247,12 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
         QuestionImportBatch batch = questionImportService.importCsv(
                 "parse-partial-failure.csv",
                 csv("""
-                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status
-                        解析有效题目一,参考答案一,TECHNICAL,MEDIUM,Java,Java,101,1
-                        job无效题目,参考答案二,TECHNICAL,MEDIUM,Java,Java,bad,1
-                        状态无效题目,参考答案三,TECHNICAL,MEDIUM,Java,Java,101,bad
+                        question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status,media_urls,media_captions
+                        解析有效题目一,参考答案一,TECHNICAL,MEDIUM,Java,Java,101,1,,
+                        job无效题目,参考答案二,TECHNICAL,MEDIUM,Java,Java,bad,1,,
+                        状态无效题目,参考答案三,TECHNICAL,MEDIUM,Java,Java,101,bad,,
                         列数错误题目,参考答案四,TECHNICAL,MEDIUM,Java,Java,101
-                        解析有效题目二,参考答案五,BEHAVIORAL,EASY,Communication,Communication,,1
+                        解析有效题目二,参考答案五,BEHAVIORAL,EASY,Communication,Communication,,1,,
                         """),
                 12L);
 
@@ -221,11 +276,11 @@ class QuestionImportServiceTest extends AdminPostgresIntegrationTest {
     @Test
     void manyInvalidRowsAreFailedAndErrorMessageIsTruncated() {
         StringBuilder content = new StringBuilder(
-                "question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status\n");
+                "question_text,answer_reference,question_type,difficulty,tags,skill_area,job_id,status,media_urls,media_captions\n");
         for (int i = 0; i < 700; i++) {
             content.append("错误题目")
                     .append(i)
-                    .append(",参考答案,TECHNICAL,MEDIUM,Java,Java,bad,1\n");
+                    .append(",参考答案,TECHNICAL,MEDIUM,Java,Java,bad,1,,\n");
         }
 
         QuestionImportBatch batch = questionImportService.importCsv(

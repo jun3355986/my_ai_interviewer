@@ -4,6 +4,7 @@ import com.aiinterviewer.admin.common.exception.AdminBusinessException;
 import com.aiinterviewer.admin.common.model.PageResult;
 import com.aiinterviewer.admin.questionbank.dto.QuestionCreateRequest;
 import com.aiinterviewer.admin.questionbank.dto.QuestionImportRow;
+import com.aiinterviewer.admin.questionbank.dto.QuestionMediaRequest;
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
 import com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch;
 import com.aiinterviewer.admin.questionbank.mapper.QuestionMapper;
@@ -48,12 +49,15 @@ public class QuestionImportService {
             "tags",
             "skill_area",
             "job_id",
-            "status");
+            "status",
+            "media_urls",
+            "media_captions");
     private static final int MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
     private static final int MAX_DATA_ROWS = 5000;
     private static final int MAX_ERROR_MESSAGE_LENGTH = 8000;
     private static final String ERROR_TRUNCATION_MARKER = "...(错误信息已截断)";
     private static final Pattern FIELD_PATTERN = Pattern.compile("^\\s*([\\p{L}A-Za-z0-9_ ]{1,24})\\s*[:：]\\s*(.*)\\s*$");
+    private static final Pattern MARKDOWN_IMAGE_PATTERN = Pattern.compile("!\\[([^\\]]*)]\\((https?://[^\\s)]+)\\)");
     private static final Pattern QUESTION_BLOCK_SPLITTER = Pattern.compile("\\n\\s*\\n+");
 
     private final QuestionMapper questionMapper;
@@ -264,6 +268,15 @@ public class QuestionImportService {
             if (!StringUtils.hasText(line)) {
                 continue;
             }
+            Matcher imageMatcher = MARKDOWN_IMAGE_PATTERN.matcher(line);
+            if (imageMatcher.find()) {
+                List<QuestionMediaRequest> media = new ArrayList<>(row.getMedia());
+                String caption = trimToNull(imageMatcher.group(1));
+                String url = imageMatcher.group(2).trim();
+                media.add(new QuestionMediaRequest("image", url, caption, caption));
+                row.setMedia(media);
+                continue;
+            }
             Matcher matcher = FIELD_PATTERN.matcher(line.replaceFirst("^[-*#>\\s]+", ""));
             if (!matcher.matches()) {
                 if (!answerLines.isEmpty()) {
@@ -375,6 +388,7 @@ public class QuestionImportService {
         row.setSkillArea(trimToNull(columns.get(5)));
         row.setJobId(parseLong(rowNumber, "job_id", columns.get(6), rowErrors));
         row.setStatus(parseInteger(rowNumber, "status", columns.get(7), rowErrors));
+        row.setMedia(parseMedia(columns.get(8), columns.get(9), rowNumber, rowErrors));
         if (!rowErrors.isEmpty()) {
             errors.addAll(rowErrors);
             return null;
@@ -410,6 +424,7 @@ public class QuestionImportService {
         request.setStatus(row.getStatus());
         request.setCreatedBy(importedBy);
         request.setTags(row.getTags());
+        request.setMedia(row.getMedia());
         return request;
     }
 
@@ -436,6 +451,38 @@ public class QuestionImportService {
             }
         }
         return new ArrayList<>(tags);
+    }
+
+    private List<QuestionMediaRequest> parseMedia(String rawUrls, String rawCaptions, int rowNumber, List<String> errors) {
+        if (!StringUtils.hasText(rawUrls)) {
+            return List.of();
+        }
+        List<String> urls = splitSemicolon(rawUrls);
+        List<String> captions = splitSemicolon(rawCaptions);
+        List<QuestionMediaRequest> media = new ArrayList<>();
+        for (int index = 0; index < urls.size(); index++) {
+            String url = urls.get(index);
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                errors.add(rowError(rowNumber, "media_urls 只支持 http:// 或 https://"));
+                continue;
+            }
+            String caption = index < captions.size() ? captions.get(index) : null;
+            media.add(new QuestionMediaRequest("image", url, caption, caption));
+        }
+        return media;
+    }
+
+    private List<String> splitSemicolon(String value) {
+        if (!StringUtils.hasText(value)) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (String item : value.split(";")) {
+            if (StringUtils.hasText(item)) {
+                values.add(item.trim());
+            }
+        }
+        return values;
     }
 
     private Long parseLong(int rowNumber, String columnName, String rawValue, List<String> errors) {

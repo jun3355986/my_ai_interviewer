@@ -2,6 +2,7 @@ package com.aiinterviewer.admin.questionbank;
 
 import com.aiinterviewer.admin.questionbank.client.PythonQuestionBankClient;
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
+import com.aiinterviewer.admin.questionbank.entity.QuestionMedia;
 import com.aiinterviewer.admin.questionbank.entity.QuestionVectorSyncRecord;
 import com.aiinterviewer.admin.questionbank.mapper.QuestionMapper;
 import java.util.ArrayList;
@@ -31,6 +32,7 @@ public class QuestionVectorSyncService {
     public SyncResult syncPendingQuestions() {
         List<QuestionBankItem> questions = questionMapper.selectQuestionsEligibleForVectorSync();
         hydrateTags(questions);
+        hydrateMedia(questions);
         List<QuestionBankItem> deleteQuestions = questionMapper.selectQuestionsEligibleForVectorDelete();
         if (questions.isEmpty() && deleteQuestions.isEmpty()) {
             return SyncResult.success(0, 0);
@@ -281,6 +283,20 @@ public class QuestionVectorSyncService {
             tagsByQuestionId.computeIfAbsent(row.getQuestionId(), ignored -> new ArrayList<>()).add(row.getTagName());
         }
         questions.forEach(question -> question.setTags(tagsByQuestionId.getOrDefault(question.getId(), List.of())));
+    }
+
+    private void hydrateMedia(List<QuestionBankItem> questions) {
+        if (questions.isEmpty()) {
+            return;
+        }
+        List<Long> questionIds = questions.stream()
+                .map(QuestionBankItem::getId)
+                .toList();
+        Map<Long, List<QuestionMedia>> mediaByQuestionId = new LinkedHashMap<>();
+        for (QuestionMedia media : questionMapper.selectMediaByQuestionIds(questionIds)) {
+            mediaByQuestionId.computeIfAbsent(media.getQuestionId(), ignored -> new ArrayList<>()).add(media);
+        }
+        questions.forEach(question -> question.setMedia(mediaByQuestionId.getOrDefault(question.getId(), List.of())));
     }
 
     @Data

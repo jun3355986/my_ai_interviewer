@@ -4,6 +4,7 @@ import com.aiinterviewer.admin.questionbank.QuestionQuery;
 import com.aiinterviewer.admin.questionbank.QuestionService;
 import com.aiinterviewer.admin.questionbank.entity.QuestionBankItem;
 import com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch;
+import com.aiinterviewer.admin.questionbank.entity.QuestionMedia;
 import com.aiinterviewer.admin.questionbank.entity.QuestionTag;
 import com.aiinterviewer.admin.questionbank.entity.QuestionVectorSyncRecord;
 import java.util.List;
@@ -47,6 +48,12 @@ public interface QuestionMapper {
             @Param("tagId") Long tagId);
 
     List<QuestionService.QuestionTagNameRow> selectTagNamesByQuestionIds(@Param("questionIds") List<Long> questionIds);
+
+    List<QuestionMedia> selectMediaByQuestionIds(@Param("questionIds") List<Long> questionIds);
+
+    int deleteQuestionMedia(@Param("questionId") Long questionId);
+
+    int insertQuestionMedia(@Param("media") QuestionMedia media);
 
     int insertImportBatch(@Param("batch") QuestionImportBatch batch);
 

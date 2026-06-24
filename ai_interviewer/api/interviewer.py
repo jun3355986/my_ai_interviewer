@@ -11,6 +11,7 @@ from typing import List, Dict, Optional, Tuple
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from core.config import get_llm
+from schemas.question_item import QuestionItem
 from services.interview_session import InterviewSession, InterviewStage
 from services.observability.context import current_trace_context
 from services.observability.langchain import invoke_observable
@@ -329,6 +330,84 @@ class Interviewer:
             if q and len(q) > 10:  # 过滤太短的内容
                 questions.append(q)
         
+        return questions[:total_count]
+
+    def select_technical_question_items(
+        self,
+        session: InterviewSession,
+        question_types: List[str],
+        counts: Dict[str, int],
+    ) -> List[QuestionItem]:
+        """选择结构化技术面试题，供图文题链路使用。"""
+        query_parts = []
+        if session.job_requirements:
+            query_parts.append(session.job_requirements)
+
+        type_str = " ".join(question_types)
+        query_parts.append(type_str)
+
+        if session.project_qa_list:
+            avg_score = session.get_average_score()
+            if avg_score:
+                query_parts.append(f"候选人平均分: {avg_score:.1f}")
+
+        query = "\n".join(query_parts)
+        print(f"检索查询内容: {query}")
+
+        total_count = sum(counts.values())
+        search_k = total_count * 2
+        retrieval_step_id = None
+        retrieval_started_at = _utcnow()
+        retrieval_start_time = perf_counter()
+        trace_context = current_trace_context()
+        if trace_context:
+            try:
+                retrieval_step_id = trace_context.repository.create_step(
+                    trace_id=trace_context.trace_id,
+                    step_name="question_bank.search_question_items",
+                    step_type="retrieval",
+                    metadata={
+                        "operation": "question_bank.search_question_items",
+                        "k": search_k,
+                        "question_types": list(question_types),
+                        "requested_counts": dict(counts),
+                    },
+                    started_at=retrieval_started_at,
+                )
+            except Exception:
+                logger.exception("observability write failed")
+
+        try:
+            questions = self.question_bank.search_question_items(
+                query,
+                question_types=question_types,
+                k=search_k,
+            )
+        except Exception as exc:
+            if trace_context and retrieval_step_id:
+                try:
+                    trace_context.repository.finish_step(
+                        step_id=retrieval_step_id,
+                        status="ERROR",
+                        error_message=str(exc),
+                        ended_at=_utcnow(),
+                        duration_ms=_duration_ms(retrieval_start_time),
+                    )
+                except Exception:
+                    logger.exception("observability write failed")
+            raise
+
+        if trace_context and retrieval_step_id:
+            try:
+                trace_context.repository.finish_step(
+                    step_id=retrieval_step_id,
+                    status="SUCCESS",
+                    ended_at=_utcnow(),
+                    duration_ms=_duration_ms(retrieval_start_time),
+                )
+            except Exception:
+                logger.exception("observability write failed")
+
         return questions[:total_count]
     
     def conclude_interview(self, session: InterviewSession) -> Tuple[int, str]:

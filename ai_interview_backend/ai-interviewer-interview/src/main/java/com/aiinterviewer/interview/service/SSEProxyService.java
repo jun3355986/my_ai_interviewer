@@ -325,7 +325,8 @@ public class SSEProxyService {
 
             switch (eventType) {
                 case "status" -> handleStatusEvent(data, session, currentStageRef);
-                case "chunk" -> handleChunkEvent(data, aiResponseRef);
+                case "question" -> handleQuestionEvent(data, session, aiResponseRef);
+                case "chunk" -> handleChunkEvent(data, session, aiResponseRef);
                 case "score" -> handleScoreEvent(data, session, questionIndexRef, userQuestion);
                 case "result" -> handleResultEvent(data, session, currentStageRef);
                 case "done" -> handleDoneEvent(data, session, currentStageRef);
@@ -354,9 +355,33 @@ public class SSEProxyService {
     /**
      * 处理文本块事件
      */
-    private void handleChunkEvent(JsonNode data, AtomicReference<StringBuilder> aiResponseRef) {
+    private void handleChunkEvent(JsonNode data, InterviewSession session, AtomicReference<StringBuilder> aiResponseRef) {
         if (data.has("content")) {
-            aiResponseRef.get().append(data.get("content").asText());
+            String content = data.get("content").asText();
+            StringBuilder response = aiResponseRef.get();
+            if (StrUtil.isNotBlank(session.getLastQuestion())
+                    && response.toString().equals(session.getLastQuestion())
+                    && session.getLastQuestion().startsWith(content)) {
+                response.setLength(0);
+            }
+            response.append(content);
+        }
+    }
+
+    /**
+     * 处理结构化题目事件
+     */
+    private void handleQuestionEvent(JsonNode data, InterviewSession session, AtomicReference<StringBuilder> aiResponseRef) {
+        if (!data.has("question") || data.get("question").isNull()) {
+            return;
+        }
+        JsonNode question = data.get("question");
+        if (question.has("text") && !question.get("text").isNull()) {
+            String text = question.get("text").asText();
+            session.setLastQuestion(text);
+            if (aiResponseRef.get().isEmpty()) {
+                aiResponseRef.get().append(text);
+            }
         }
     }
 

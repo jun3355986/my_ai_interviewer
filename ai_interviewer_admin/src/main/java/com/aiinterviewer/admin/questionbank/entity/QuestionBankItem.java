@@ -35,6 +35,7 @@ public class QuestionBankItem {
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
     private List<String> tags = List.of();
+    private List<QuestionMedia> media = List.of();
 
     public boolean isEligibleForVectorSync() {
         return STATUS_ENABLED == (status == null ? 0 : status)

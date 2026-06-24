@@ -15,8 +15,10 @@ public class QuestionUpdateRequest {
     private Integer status;
     private Long updatedBy;
     private List<String> tags;
+    private List<QuestionMediaRequest> media;
     private boolean answerReferenceSet;
     private boolean tagsSet;
+    private boolean mediaSet;
 
     public void setAnswerReference(String answerReference) {
         this.answerReference = answerReference;
@@ -26,5 +28,10 @@ public class QuestionUpdateRequest {
     public void setTags(List<String> tags) {
         this.tags = tags;
         this.tagsSet = true;
+    }
+
+    public void setMedia(List<QuestionMediaRequest> media) {
+        this.media = media;
+        this.mediaSet = true;
     }
 }

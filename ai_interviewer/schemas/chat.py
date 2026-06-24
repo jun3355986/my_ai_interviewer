@@ -61,7 +61,7 @@ class AnswerRequest(BaseModel):
 
 
 class AnswerResponse(BaseModel):
-    question: Optional[str] = Field(default=None, description="下一个问题")
+    question: Optional[str | Dict[str, object]] = Field(default=None, description="下一个问题")
     next_question: Optional[str] = Field(default=None, description="下一个问题")
     score: Optional[int] = Field(default=None, description="当前回答的分数")
     feedback: Optional[str] = Field(default=None, description="反馈")

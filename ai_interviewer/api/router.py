@@ -26,6 +26,7 @@ from schemas.chat import (
 from api.sse import (
     EVENT_STATUS,
     EVENT_CHUNK,
+    EVENT_QUESTION,
     EVENT_SCORE,
     EVENT_RESULT,
     EVENT_DONE,
@@ -67,11 +68,22 @@ def _streaming_headers() -> dict[str, str]:
     }
 
 
-def _last_ai_message(session) -> str | None:
+def _last_ai_message(session) -> dict | None:
     for msg in reversed(session.history):
         if msg.get("role") == "ai":
-            return msg.get("content")
+            return msg
     return None
+
+
+def _structured_question_payload(value) -> dict | None:
+    return value if isinstance(value, dict) else None
+
+
+def _question_text_from_payload(value: dict | None) -> str | None:
+    if not value:
+        return None
+    text = value.get("text")
+    return text if isinstance(text, str) and text else None
 
 
 @router.post("/chat")
@@ -136,6 +148,7 @@ def chat_stream(req: UnifiedChatRequest):
                 score = None
                 feedback = None
                 next_question = None
+                question_payload = None
                 next_stage = current_stage.value
                 final_message = None
 
@@ -155,35 +168,40 @@ def chat_stream(req: UnifiedChatRequest):
                 elif current_stage == InterviewStage.OPENING:
                     result = interview_service.handle_opening_response(session.session_id)
                     next_question = result.get("question")
+                    question_payload = _structured_question_payload(result.get("question"))
                     next_stage = result.get("stage", current_stage.value)
-                    final_message = next_question
+                    final_message = _question_text_from_payload(question_payload) or next_question
 
                 elif current_stage == InterviewStage.SELF_INTRO:
                     result = interview_service.handle_self_introduction(session.session_id, req.message)
                     next_question = result.get("question")
+                    question_payload = _structured_question_payload(result.get("question"))
                     next_stage = result.get("stage", current_stage.value)
-                    final_message = next_question
+                    final_message = _question_text_from_payload(question_payload) or next_question
 
                 elif current_stage == InterviewStage.PROJECT_QNA:
                     result = interview_service.handle_project_answer(session.session_id, req.message)
                     score = result.get("score")
                     feedback = result.get("feedback")
                     next_question = result.get("next_question")
+                    question_payload = _structured_question_payload(result.get("question"))
                     next_stage = result.get("stage", current_stage.value)
-                    message = result.get("message", "")
                     final_message = (
-                        f"{message}\n\n{next_question}"
-                        if message and next_question
-                        else next_question or message
+                        _question_text_from_payload(question_payload)
+                        or next_question
+                        or result.get("message", "")
                     )
+                    if result.get("message") and final_message == next_question:
+                        final_message = f"{result['message']}\n\n{next_question}"
 
                 elif current_stage == InterviewStage.TECHNICAL_QNA:
                     result = interview_service.handle_technical_answer(session.session_id, req.message)
                     score = result.get("score")
                     feedback = result.get("feedback")
                     next_question = result.get("next_question")
+                    question_payload = _structured_question_payload(result.get("question"))
                     next_stage = result.get("stage", current_stage.value)
-                    final_message = next_question or result.get("message", "")
+                    final_message = _question_text_from_payload(question_payload) or next_question or result.get("message", "")
 
                 else:
                     next_stage = InterviewStage.CONCLUDED.value
@@ -192,13 +210,24 @@ def chat_stream(req: UnifiedChatRequest):
                 if score is not None:
                     yield format_sse(EVENT_SCORE, {"score": int(score), "feedback": feedback or ""})
 
+                if question_payload:
+                    yield format_sse(
+                        EVENT_QUESTION,
+                        {
+                            "question": question_payload,
+                            "next_stage": str(next_stage),
+                        },
+                    )
+
                 if final_message:
-                    for piece in stream_text_chunks(final_message):
+                    for piece in stream_text_chunks(str(final_message)):
                         yield format_sse(EVENT_CHUNK, {"content": piece})
 
                 result_payload: dict[str, object] = {"next_stage": str(next_stage)}
-                if next_question:
-                    result_payload["next_question"] = str(next_question)
+                if question_payload:
+                    result_payload["question"] = question_payload
+                if final_message:
+                    result_payload["next_question"] = str(final_message)
                 yield format_sse(EVENT_RESULT, result_payload)
 
                 yield format_sse(
@@ -250,14 +279,27 @@ def resume_stream(req: ResumeStreamRequest):
                 stage = session.stage.value
                 yield format_sse(EVENT_STATUS, {"session_id": session.session_id, "stage": stage})
 
-                last_question = _last_ai_message(session)
-                if last_question:
-                    for piece in stream_text_chunks(last_question):
-                        yield format_sse(EVENT_CHUNK, {"content": piece})
-                    yield format_sse(
-                        EVENT_RESULT,
-                        {"next_stage": stage, "next_question": last_question},
-                    )
+                last_message = _last_ai_message(session)
+                if last_message:
+                    question_payload = _structured_question_payload(last_message.get("question"))
+                    last_question = last_message.get("content") or _question_text_from_payload(question_payload)
+                    if question_payload:
+                        yield format_sse(
+                            EVENT_QUESTION,
+                            {
+                                "question": question_payload,
+                                "next_stage": stage,
+                            },
+                        )
+                    if last_question:
+                        for piece in stream_text_chunks(str(last_question)):
+                            yield format_sse(EVENT_CHUNK, {"content": piece})
+                    result_payload: dict[str, object] = {"next_stage": stage}
+                    if last_question:
+                        result_payload["next_question"] = str(last_question)
+                    if question_payload:
+                        result_payload["question"] = question_payload
+                    yield format_sse(EVENT_RESULT, result_payload)
                 else:
                     yield format_sse(EVENT_RESULT, {"next_stage": stage})
 

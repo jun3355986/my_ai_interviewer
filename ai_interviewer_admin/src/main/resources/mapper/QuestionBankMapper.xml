@@ -42,6 +42,20 @@
         <result property="tagName" column="tag_name"/>
     </resultMap>
 
+    <resultMap id="QuestionMediaMap" type="com.aiinterviewer.admin.questionbank.entity.QuestionMedia">
+        <id property="id" column="id"/>
+        <result property="questionId" column="question_id"/>
+        <result property="mediaType" column="media_type"/>
+        <result property="mediaUrl" column="media_url"/>
+        <result property="caption" column="caption"/>
+        <result property="altText" column="alt_text"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="deletedAt" column="deleted_at"/>
+    </resultMap>
+
     <resultMap id="QuestionImportBatchMap" type="com.aiinterviewer.admin.questionbank.entity.QuestionImportBatch">
         <id property="id" column="id"/>
         <result property="batchNo" column="batch_no"/>
@@ -228,6 +242,36 @@
         </foreach>
         ORDER BY qtr.question_id ASC, qtr.id ASC
     </select>
+
+    <select id="selectMediaByQuestionIds" resultMap="QuestionMediaMap">
+        SELECT id, question_id, media_type, media_url, caption, alt_text, sort_order, created_by,
+               created_at::timestamp AS created_at,
+               updated_at::timestamp AS updated_at,
+               deleted_at::timestamp AS deleted_at
+        FROM t_question_media
+        WHERE deleted_at IS NULL
+          AND question_id IN
+          <foreach collection="questionIds" item="questionId" open="(" separator="," close=")">
+              #{questionId}
+          </foreach>
+        ORDER BY question_id ASC, sort_order ASC, id ASC
+    </select>
+
+    <update id="deleteQuestionMedia">
+        UPDATE t_question_media
+        SET deleted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE question_id = #{questionId}
+          AND deleted_at IS NULL
+    </update>
+
+    <insert id="insertQuestionMedia" useGeneratedKeys="true" keyProperty="media.id">
+        INSERT INTO t_question_media
+            (question_id, media_type, media_url, caption, alt_text, sort_order, created_by, created_at, updated_at)
+        VALUES
+            (#{media.questionId}, #{media.mediaType}, #{media.mediaUrl}, #{media.caption}, #{media.altText},
+             #{media.sortOrder}, #{media.createdBy}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    </insert>
 
     <insert id="insertImportBatch" useGeneratedKeys="true" keyProperty="batch.id">
         INSERT INTO t_question_import_batch

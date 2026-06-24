@@ -18,6 +18,7 @@ class AdminQuestionSyncItem(BaseModel):
     difficulty: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     skill_area: Optional[str] = Field(default=None, alias="skill_area")
+    media: List[dict[str, Any]] = Field(default_factory=list)
 
 
 class AdminQuestionSyncRequest(BaseModel):
