@@ -177,6 +177,16 @@ docker compose down
 docker compose down -v
 ```
 
+### Python AI 本地存储
+
+Python AI 服务的 `storage/` 目录通过 Docker Compose 从宿主机挂载到容器：
+
+```text
+ai_interviewer/storage -> /app/storage
+```
+
+其中 `storage/database/interviews.db` 是本地 SQLite 面试会话库，属于运行时数据，不进入 Git 版本管理，也不会被打进 Python 镜像。容器重建、`docker compose down` 和 `docker compose down -v` 都不会自动删除这个宿主机文件；需要清理或备份时，请直接管理 `ai_interviewer/storage/database/`。
+
 ## 10. 补充说明
 
 - 后端与编排详情请查看：`ai_interview_backend/README.md`

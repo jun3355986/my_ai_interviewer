@@ -18,6 +18,8 @@
 test-results/
 logs/
 *.log
+ai_interviewer/storage/database/*.db
+ai_interviewer/storage/database/*.db-*
 tests/reports/allure-results/*
 tests/reports/allure-report/*
 tests/reports/playwright/*
