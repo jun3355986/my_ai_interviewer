@@ -8,7 +8,7 @@ import org.mybatis.spring.annotation.MapperScan;
 /**
  * 评估服务启动类
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.aiinterviewer.evaluation", "com.aiinterviewer.common"})
 @EnableDiscoveryClient
 @MapperScan(basePackages = {
         "com.aiinterviewer.evaluation.mapper",

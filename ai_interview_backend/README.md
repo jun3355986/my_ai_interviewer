@@ -16,7 +16,7 @@ Flutter前端 → Spring Cloud Alibaba后端 → Python FastAPI后端(AI服务)
   - Nacos (注册中心 & 配置中心)
   - Gateway (API网关)
   - Sentinel (流量控制)
-  - RocketMQ (消息队列)
+- RocketMQ (消息队列，可选；通知 HTTP API 不依赖它)
 - **PostgreSQL 16** (数据库)
 - **Redis 7** (缓存)
 - **MinIO** (对象存储)
@@ -63,10 +63,10 @@ docker compose up -d --build
 默认会启动：
 - 基础设施：`nacos`、`postgres`、`redis`、`minio`
 - AI 服务：`python-ai` (`:8000`)
-- Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`
+- Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`、`notification`
 - 前端：`frontend` (`:8088`)、`admin-web` (`:8090`)
 
-`notification` 服务依赖 RocketMQ，默认不启动。
+`notification` 的 HTTP API 默认启动；RocketMQ 消费器默认关闭。如需启用消息消费，请提供可用 RocketMQ，并设置 `NOTIFICATION_ROCKETMQ_ENABLED=true`。
 
 前端容器内置 Nginx 反向代理，`/api/*` 会转发到 `gateway:9000`，三端联调入口统一走 Gateway。
 `FRONTEND_GATEWAY_BASE_URL` 可在 `.env` 中配置，默认 `/`（最适合当前容器联调）。
@@ -194,7 +194,7 @@ config/      - 配置类
   ├──────┼──────────────┼──────┼──────────────────────────────────────┤
   │ 6    │ Evaluation   │ 9005 │ 评估服务（依赖 Interview）           │
   ├──────┼──────────────┼──────┼──────────────────────────────────────┤
-  │ 7    │ Notification │ 9006 │ 通知服务（依赖 User，需要 RocketMQ） │
+  │ 7    │ Notification │ 9006 │ 通知服务（HTTP API 默认启动，RocketMQ 消费可选） │
   └──────┴──────────────┴──────┴──────────────────────────────────────┘
   依赖关系图
 

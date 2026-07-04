@@ -157,6 +157,8 @@ services:
         condition: service_healthy
       evaluation:
         condition: service_started
+      notification:
+        condition: service_healthy
     networks:
       - ai-interviewer-net
     restart: unless-stopped
@@ -382,13 +384,11 @@ services:
       retries: 10
       start_period: 30s
 
-  # Notification 服务依赖 RocketMQ。当前 Compose 未内置 RocketMQ（ARM 机器兼容性问题）。
-  # 如需启用，请先提供可用 RocketMQ，再启动 notification profile：
-  # docker compose --profile notification up -d notification
+  # Notification HTTP API 默认启动；RocketMQ 消费器默认关闭。
+  # 如需启用消息消费，请提供可用 RocketMQ 并设置 NOTIFICATION_ROCKETMQ_ENABLED=true。
   notification:
     image: ai-interviewer-backend-app:local
     container_name: ai-interviewer-notification
-    profiles: ["notification"]
     build:
       context: .
       dockerfile: docker/java-services.Dockerfile
@@ -396,15 +396,34 @@ services:
       - "9006:9006"
     environment:
       APP_MODULE: ai-interviewer-notification
-      ROCKETMQ_NAMESRV_ADDR: ${ROCKETMQ_NAMESRV_ADDR:-localhost:9876}
+      NACOS_SERVER_ADDR: nacos:8848
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ai_interviewer
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ROCKETMQ_NAMESRV_ADDR: ${ROCKETMQ_NAMESRV_ADDR:-rocketmq-namesrv:9876}
+      NOTIFICATION_ROCKETMQ_ENABLED: ${NOTIFICATION_ROCKETMQ_ENABLED:-false}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       JAVA_OPTS: ${JAVA_OPTS:--XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=75}
     depends_on:
       nacos:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - ai-interviewer-net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9006/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # ============================================
   # Flutter Web 前端

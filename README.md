@@ -91,14 +91,10 @@ docker compose up -d --build python-ai frontend admin-web
 启动内容包括：
 - 基础设施：`nacos`、`postgres`、`redis`、`minio`
 - AI 服务：`python-ai`
-- Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`、`admin`
+- Java 服务：`gateway`、`user`、`resume`、`interview`、`job`、`evaluation`、`notification`、`admin`
 - 前端：`frontend`、`admin-web`
 
-> `notification` 依赖 RocketMQ，默认不启动。如需启用：
->
-> ```bash
-> docker compose --profile notification up -d notification
-> ```
+> `notification` 的 HTTP API 默认启动，用于站内信查询等接口；RocketMQ 消费器默认关闭。如需启用消息消费，请提供可用 RocketMQ，并设置 `NOTIFICATION_ROCKETMQ_ENABLED=true`。
 
 ## 6. 访问入口
 
@@ -132,7 +128,7 @@ docker compose up -d --build python-ai frontend admin-web
 | interview | 9003 | 9003 | 面试服务（依赖 Python AI） |
 | job | 9004 | 9004 | 职位服务 |
 | evaluation | 9005 | 9005 | 评估服务 |
-| notification（可选） | 9006 | 9006 | 通知服务（需 RocketMQ） |
+| notification | 9006 | 9006 | 通知服务（HTTP API 默认启动，RocketMQ 消费可选） |
 | admin | 9010 | 9010 | 后台管理服务，网关前缀 `/admin/**` |
 | python-ai | 8000 | 8000 | FastAPI AI 服务 |
 | postgres | 5433 | 5432 | PostgreSQL |

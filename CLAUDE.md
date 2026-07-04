@@ -177,7 +177,6 @@ The root `tests/` directory is the unified test asset center for this project.
 - Prefer root wrapper commands in `tests/scripts/` for repeatable local and CI execution.
 
 <!-- setting_my_dev:start -->
-禁止使用openspec/opsx 相关skills
 
 每次收到任务时，先判断规模，后续所有工具选择都基于此判断：
 
@@ -192,4 +191,11 @@ The root `tests/` directory is the unified test asset center for this project.
 
 #### 🟢 小变更 [S]
 非指定，不要使用 superpowers TDD
+
+#### 项目级 Skill 调用
+- `/grill-me`、`/grill-with-docs`、`/brainstorming`、`/writing-plans` 仅在用户明确点名时使用；不要自动触发，也不要通过 `using-superpowers` 代管。
+- 项目级 `.codex/skills` 和 `.claude/skills` 不引入 `using-superpowers`；需要时再手动引入。
+- gstack 不在用户级安装。项目需要 gstack 能力时，只把对应 gstack skill 从 `/Users/junjielong/job_work_env/gstack/<skill>` 按需软链接到项目 `.codex/skills` / `.claude/skills`，并且仅在用户明确点名时使用。
+- 不要让 gstack `ship` 默认接管公司项目发布；commit / push / Jenkins / dev 部署 / live smoke 按项目 AGENTS、CLAUDE 和运维文档执行。
+- 旧 gstack `/checkpoint` 已弃用；若项目按需引入 gstack，上下文保存/恢复使用 `context-save` / `context-restore`。
 <!-- setting_my_dev:end -->

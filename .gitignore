@@ -5,11 +5,8 @@
 .idea/
 .vscode/
 
-# Local agent/tooling state
-.claude/
+# Local generated tooling state
 .codegraph/
-.codex/
-.comet/
 .my-dev-setup-backups/
 .sisyphus/
 .tools/
@@ -20,6 +17,7 @@ logs/
 *.log
 ai_interviewer/storage/database/*.db
 ai_interviewer/storage/database/*.db-*
+ai_interviewer/storage/vector_db/
 tests/reports/allure-results/*
 tests/reports/allure-report/*
 tests/reports/playwright/*

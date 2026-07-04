@@ -56,50 +56,6 @@ enabled = true
 path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/writing-skills/SKILL.md"
 enabled = true
 
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/office-hours/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/plan-ceo-review/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/review/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/cso/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/document-release/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/learn/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/qa/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/qa-only/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/browse/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/open-gstack-browser/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/Users/junjielong/workspace/my_ai_interviewer/.codex/skills/setup-browser-cookies/SKILL.md"
-enabled = true
-
 # END setting_my_dev skills
 
 [mcp_servers.chrome-devtools]

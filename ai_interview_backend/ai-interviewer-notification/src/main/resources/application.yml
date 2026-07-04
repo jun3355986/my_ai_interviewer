@@ -5,8 +5,56 @@ server:
 spring:
   application:
     name: ai-interviewer-notification
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   config:
     import: optional:nacos:ai-interviewer-notification.yaml
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+
+    stream:
+      rocketmq:
+        binder:
+          namesrv-addr: ${ROCKETMQ_NAMESRV_ADDR:localhost:9876}
+      bindings:
+        interview-completed:
+          destination: interview-completed
+        report-ready:
+          destination: report-ready
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:ai_interviewer}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 10
+      idle-timeout: 30000
+      pool-name: NotificationHikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
 
   # 邮件配置
   mail:
@@ -21,17 +69,23 @@ spring:
           starttls:
             enable: true
 
-  # RocketMQ配置
-  cloud:
-    stream:
-      rocketmq:
-        binder:
-          namesrv-addr: ${ROCKETMQ_NAMESRV_ADDR:localhost:9876}
-      bindings:
-        interview-completed:
-          destination: interview-completed
-        report-ready:
-          destination: report-ready
+notification:
+  rocketmq:
+    enabled: ${NOTIFICATION_ROCKETMQ_ENABLED:false}
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.aiinterviewer.notification.entity,com.aiinterviewer.user.entity
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deletedAt
+      logic-delete-value: now()
+      logic-not-delete-value: 'null'
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 logging:
   level:
@@ -42,6 +96,9 @@ management:
     web:
       exposure:
         include: health,info
+  health:
+    mail:
+      enabled: ${MAIL_HEALTH_ENABLED:false}
 
 # OpenAPI配置
 springdoc:

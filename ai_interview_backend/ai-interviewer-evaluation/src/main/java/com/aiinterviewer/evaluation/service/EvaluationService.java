@@ -98,7 +98,7 @@ public class EvaluationService {
     public EvaluationDTO getReport(String sessionId, Long userId) {
         Evaluation evaluation = evaluationMapper.selectBySessionId(sessionId);
         if (evaluation == null) {
-            throw new BusinessException(ErrorCode.EVALUATION_NOT_FOUND, "评估报告不存在");
+            return null;
         }
         if (!evaluation.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED, "无权限查看此报告");

@@ -53,6 +53,9 @@ public class EvaluationController {
             HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
         EvaluationDTO report = evaluationService.getReport(sessionId, userId);
+        if (report == null) {
+            return Result.success("评估报告尚未生成", null);
+        }
         return Result.success(report);
     }
 
