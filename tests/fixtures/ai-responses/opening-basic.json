@@ -1,0 +1,29 @@
+{
+  "events": [
+    {
+      "event": "status",
+      "data": {
+        "stage": "opening"
+      }
+    },
+    {
+      "event": "chunk",
+      "data": {
+        "content": "您好，欢迎参加本次面试。请准备好后回复，我们将从自我介绍开始。"
+      }
+    },
+    {
+      "event": "result",
+      "data": {
+        "next_stage": "opening"
+      }
+    },
+    {
+      "event": "done",
+      "data": {
+        "stage": "opening",
+        "is_interview_complete": false
+      }
+    }
+  ]
+}

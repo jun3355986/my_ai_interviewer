@@ -102,6 +102,104 @@ SSE tests are opt-in because they can call the real LLM provider:
 RUN_LIVE_API_TESTS=1 RUN_SSE_API_TESTS=1 python3 -m pytest tests/api/pytest/test_interview_api.py
 ```
 
+## Interview Replay And Stub AI
+
+Use the replay layer when a long interview bug needs to be reproduced quickly without spending real LLM quota.
+
+### Files
+
+| File | Purpose |
+|---|---|
+| `tests/scripts/interview_replay.py` | Importable replay library for JSONL trace loading, SSE parsing, validation, and report writing. |
+| `tests/scripts/replay-interview.py` | Python CLI entrypoint. |
+| `tests/scripts/replay-interview.sh` | Root wrapper that loads `tests/config/local.env` through the shared script helpers. |
+| `tests/stubs/python-ai/app.py` | FastAPI SSE stub for Python AI `/interview/chat` and `/interview/resume`. |
+| `tests/scripts/start-ai-stub.sh` | Starts the stub on `127.0.0.1:18000` by default. |
+| `tests/fixtures/interview-traces/` | JSONL replay traces. |
+| `tests/fixtures/ai-responses/` | Reusable deterministic AI response fixtures. |
+| `tests/reports/replay/` | Replay result JSON output. |
+
+### Unit Check
+
+```bash
+cd ai_interviewer
+uv run python -m pytest ../tests/api/pytest/test_interview_replay_tooling.py -q
+```
+
+Java interview service boundary check:
+
+```bash
+cd ai_interview_backend
+env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH \
+mvn -pl ai-interviewer-interview test-compile \
+  org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test \
+  -Dtest=SSEProxyServiceStubReplayTest
+```
+
+### Start Stub AI
+
+```bash
+bash tests/scripts/start-ai-stub.sh
+```
+
+The Java interview service must point to the stub for quota-free replay:
+
+```bash
+python.ai.base-url=http://127.0.0.1:18000
+```
+
+The code also accepts the legacy-compatible key:
+
+```bash
+python-ai.base-url=http://127.0.0.1:18000
+```
+
+### Replay A Trace
+
+With gateway auth:
+
+```bash
+bash tests/scripts/replay-interview.sh tests/fixtures/interview-traces/golden-opening-to-project-qna.jsonl
+```
+
+With a pre-issued token:
+
+```bash
+REPLAY_ACCESS_TOKEN=<token> \
+bash tests/scripts/replay-interview.sh tests/fixtures/interview-traces/golden-opening-to-project-qna.jsonl
+```
+
+Stub-only tooling self-check, useful before wiring Java to the stub:
+
+```bash
+bash tests/scripts/start-ai-stub.sh
+
+bash tests/scripts/replay-interview.sh \
+  tests/fixtures/interview-traces/golden-opening-to-project-qna.jsonl \
+  --gateway-base-url http://127.0.0.1:18000 \
+  --chat-path /interview/chat \
+  --no-login
+```
+
+Without auth, for direct local service debugging:
+
+```bash
+bash tests/scripts/replay-interview.sh \
+  tests/fixtures/interview-traces/golden-opening-to-project-qna.jsonl \
+  --gateway-base-url http://127.0.0.1:9003 \
+  --chat-path /interviews/chat \
+  --no-login
+```
+
+Each trace step is one JSON object per line. Use `sessionRef:"previous"` to reuse the latest SSE `session_id` from the prior step.
+
+```json
+{"step":1,"action":"chat","sessionId":null,"message":"我准备好了，请开始面试。","expectEvents":["status","chunk","result","done"],"expectStage":"opening"}
+{"step":2,"action":"chat","sessionRef":"previous","message":"好的，请开始。","expectEvents":["status","question","chunk","result","done"],"expectStage":"self_introduction"}
+```
+
+When fixing a bug, save the reproducer as `tests/fixtures/interview-traces/regression-<bug-name>.jsonl` and add it to `tests/docs/test-cases.md` in the same change.
+
 ### AI Observability Cross-Service Smoke
 
 The AI observability API smoke is deliberately opt-in because it starts a real interview chat through the Java interview service, can call the Python LLM path, and then checks the admin observability API.

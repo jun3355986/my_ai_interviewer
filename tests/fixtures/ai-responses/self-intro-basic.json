@@ -1,0 +1,34 @@
+{
+  "events": [
+    {
+      "event": "status",
+      "data": {
+        "stage": "opening"
+      }
+    },
+    {
+      "event": "question",
+      "data": {
+        "question": {
+          "id": "stub-self-intro-001",
+          "type": "self_introduction",
+          "text": "请用 2 分钟介绍一下你的后端项目经验。"
+        },
+        "next_stage": "self_introduction"
+      }
+    },
+    {
+      "event": "result",
+      "data": {
+        "next_stage": "self_introduction"
+      }
+    },
+    {
+      "event": "done",
+      "data": {
+        "stage": "self_introduction",
+        "is_interview_complete": false
+      }
+    }
+  ]
+}
