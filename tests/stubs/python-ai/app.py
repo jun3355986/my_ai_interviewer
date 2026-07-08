@@ -12,6 +12,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 app = FastAPI(title="AI Interviewer Python AI Stub")
 
 SESSIONS: dict[str, str] = {}
+JAVA_SESSION_IDS: dict[str, str] = {}
 
 
 class ChatRequest(BaseModel):
@@ -55,74 +56,97 @@ def session_id_for(req: ChatRequest) -> str:
     return f"stub-{uuid.uuid4()}"
 
 
-def opening_events(session_id: str) -> list[tuple[str, dict[str, Any]]]:
-    text = "您好，欢迎参加本次面试。请准备好后回复，我们将从自我介绍开始。"
+def with_session_context(data: dict[str, Any], session_id: str, java_session_id: str | None) -> dict[str, Any]:
+    enriched = dict(data)
+    enriched.setdefault("session_id", session_id)
+    if java_session_id:
+        enriched.setdefault("java_session_id", java_session_id)
+    return enriched
+
+
+def add_session_context(
+    events: list[tuple[str, dict[str, Any]]],
+    session_id: str,
+    java_session_id: str | None,
+) -> list[tuple[str, dict[str, Any]]]:
     return [
+        (event, with_session_context(data, session_id, java_session_id))
+        for event, data in events
+    ]
+
+
+def opening_events(session_id: str, java_session_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
+    text = "您好，欢迎参加本次面试。请准备好后回复，我们将从自我介绍开始。"
+    return add_session_context([
         ("status", {"session_id": session_id, "stage": "opening"}),
         ("chunk", {"content": text}),
         ("result", {"next_stage": "opening", "next_question": text}),
         ("done", {"stage": "opening", "is_interview_complete": False}),
-    ]
+    ], session_id, java_session_id)
 
 
-def self_intro_events(session_id: str) -> list[tuple[str, dict[str, Any]]]:
+def self_intro_events(session_id: str, java_session_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
     question = {
         "id": "stub-self-intro-001",
         "type": "self_introduction",
         "text": "请用 2 分钟介绍一下你的后端项目经验。",
     }
     text = question["text"]
-    return [
+    return add_session_context([
         ("status", {"session_id": session_id, "stage": "opening"}),
         ("question", {"question": question, "next_stage": "self_introduction"}),
         ("chunk", {"content": text}),
         ("result", {"next_stage": "self_introduction", "question": question, "next_question": text}),
         ("done", {"stage": "self_introduction", "is_interview_complete": False}),
-    ]
+    ], session_id, java_session_id)
 
 
-def project_question_events(session_id: str) -> list[tuple[str, dict[str, Any]]]:
+def project_question_events(session_id: str, java_session_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
     question = {
         "id": "stub-project-001",
         "type": "project_qna",
         "text": "你在项目中如何设计 Redis 缓存和数据库一致性策略？",
     }
     text = question["text"]
-    return [
+    return add_session_context([
         ("status", {"session_id": session_id, "stage": "self_introduction"}),
         ("score", {"score": 80, "feedback": "回答结构清晰，可继续追问项目细节。"}),
         ("question", {"question": question, "next_stage": "project_qna"}),
         ("chunk", {"content": text}),
         ("result", {"next_stage": "project_qna", "question": question, "next_question": text}),
         ("done", {"stage": "project_qna", "is_interview_complete": False}),
-    ]
+    ], session_id, java_session_id)
 
 
-def technical_question_events(session_id: str) -> list[tuple[str, dict[str, Any]]]:
+def technical_question_events(session_id: str, java_session_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
     question = {
         "id": "stub-technical-001",
         "type": "technical_qna",
         "text": "请说明 JVM 垃圾回收中可达性分析的基本过程。",
     }
     text = question["text"]
-    return [
+    return add_session_context([
         ("status", {"session_id": session_id, "stage": "project_qna"}),
         ("score", {"score": 82, "feedback": "项目回答覆盖了关键权衡。"}),
         ("question", {"question": question, "next_stage": "technical_qna"}),
         ("chunk", {"content": text}),
         ("result", {"next_stage": "technical_qna", "question": question, "next_question": text}),
         ("done", {"stage": "technical_qna", "is_interview_complete": False}),
-    ]
+    ], session_id, java_session_id)
 
 
-def next_events(session_id: str, stage: str) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
+def next_events(
+    session_id: str,
+    stage: str,
+    java_session_id: str | None = None,
+) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
     if stage == "opening":
-        return "self_introduction", self_intro_events(session_id)
+        return "self_introduction", self_intro_events(session_id, java_session_id)
     if stage == "self_introduction":
-        return "project_qna", project_question_events(session_id)
+        return "project_qna", project_question_events(session_id, java_session_id)
     if stage == "project_qna":
-        return "technical_qna", technical_question_events(session_id)
-    return "technical_qna", technical_question_events(session_id)
+        return "technical_qna", technical_question_events(session_id, java_session_id)
+    return "technical_qna", technical_question_events(session_id, java_session_id)
 
 
 def stream_events(events: list[tuple[str, dict[str, Any]]]):
@@ -141,12 +165,15 @@ def streaming_headers() -> dict[str, str]:
 @app.post("/interview/chat")
 def chat(req: ChatRequest):
     sid = session_id_for(req)
+    if req.java_session_id:
+        JAVA_SESSION_IDS[sid] = req.java_session_id
+    java_session_id = req.java_session_id or JAVA_SESSION_IDS.get(sid)
     if req.session_id is None:
         SESSIONS[sid] = "opening"
-        events = opening_events(sid)
+        events = opening_events(sid, java_session_id)
     else:
         current_stage = SESSIONS.get(sid, "opening")
-        next_stage, events = next_events(sid, current_stage)
+        next_stage, events = next_events(sid, current_stage, java_session_id)
         SESSIONS[sid] = next_stage
     return StreamingResponse(stream_events(events), media_type="text/event-stream", headers=streaming_headers())
 
@@ -154,10 +181,12 @@ def chat(req: ChatRequest):
 @app.post("/interview/resume")
 def resume(req: ResumeRequest):
     stage = SESSIONS.get(req.session_id, "opening")
-    events = [
+    if req.java_session_id:
+        JAVA_SESSION_IDS[req.session_id] = req.java_session_id
+    events = add_session_context([
         ("status", {"session_id": req.session_id, "stage": stage}),
         ("chunk", {"content": f"已恢复到 {stage} 阶段。"}),
         ("result", {"next_stage": stage}),
         ("done", {"stage": stage, "is_interview_complete": stage == "concluded"}),
-    ]
+    ], req.session_id, req.java_session_id or JAVA_SESSION_IDS.get(req.session_id))
     return StreamingResponse(stream_events(events), media_type="text/event-stream", headers=streaming_headers())

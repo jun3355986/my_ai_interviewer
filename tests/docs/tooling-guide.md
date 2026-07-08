@@ -198,6 +198,16 @@ Each trace step is one JSON object per line. Use `sessionRef:"previous"` to reus
 {"step":2,"action":"chat","sessionRef":"previous","message":"好的，请开始。","expectEvents":["status","question","chunk","result","done"],"expectStage":"self_introduction"}
 ```
 
+Replay reports are written to `tests/reports/replay/`. When any step fails, the CLI also prints a session timeline for the failed step so the Java service and Python AI stub can be correlated without opening service logs first. Each timeline entry includes:
+
+| Field | Meaning |
+|---|---|
+| `javaSessionId` | Java interview session ID propagated to Python as `java_session_id`. |
+| `pythonSessionId` | Python AI SSE `session_id`, reused by later trace steps through `sessionRef:"previous"`. |
+| `stage` | Stage observed on the SSE event from `stage` or `next_stage`. |
+| `event` | SSE event name, such as `status`, `question`, `score`, `result`, or `done`. |
+| `durationMs` | HTTP/SSE request duration for that replay step. |
+
 When fixing a bug, save the reproducer as `tests/fixtures/interview-traces/regression-<bug-name>.jsonl` and add it to `tests/docs/test-cases.md` in the same change.
 
 ### AI Observability Cross-Service Smoke

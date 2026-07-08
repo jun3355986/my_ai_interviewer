@@ -178,12 +178,21 @@ def validate_step_result(step: TraceStep, events: list[SseEvent]) -> list[str]:
     return errors
 
 
-def extract_session_id(events: list[SseEvent]) -> str | None:
+def _first_event_value(events: list[SseEvent], keys: tuple[str, ...]) -> str | None:
     for event in events:
-        value = event.data.get("session_id") or event.data.get("sessionId")
-        if value:
-            return str(value)
+        for key in keys:
+            value = event.data.get(key)
+            if value:
+                return str(value)
     return None
+
+
+def extract_session_id(events: list[SseEvent]) -> str | None:
+    return _first_event_value(events, ("session_id", "sessionId", "python_session_id", "pythonSessionId"))
+
+
+def extract_java_session_id(events: list[SseEvent]) -> str | None:
+    return _first_event_value(events, ("java_session_id", "javaSessionId"))
 
 
 def extract_stage(events: list[SseEvent]) -> str | None:
@@ -192,6 +201,58 @@ def extract_stage(events: list[SseEvent]) -> str | None:
         if value:
             return str(value)
     return None
+
+
+def event_stage(event: SseEvent) -> str | None:
+    value = event.data.get("stage") or event.data.get("next_stage")
+    return str(value) if value else None
+
+
+def build_session_timeline(step: TraceStep, events: list[SseEvent], duration_ms: int) -> list[dict[str, Any]]:
+    timeline: list[dict[str, Any]] = []
+    for index, event in enumerate(events, start=1):
+        timeline.append(
+            {
+                "step": step.step,
+                "index": index,
+                "event": event.name,
+                "durationMs": duration_ms,
+                "javaSessionId": extract_java_session_id([event]),
+                "pythonSessionId": extract_session_id([event]),
+                "stage": event_stage(event),
+            }
+        )
+    return timeline
+
+
+def _display(value: Any) -> str:
+    return str(value) if value not in (None, "") else "<missing>"
+
+
+def format_failure_timeline(report: dict[str, Any]) -> str:
+    lines: list[str] = []
+    for step in report.get("steps", []):
+        if not step.get("errors"):
+            continue
+        if not lines:
+            lines.append("Session timeline for failed replay steps:")
+        errors = "; ".join(str(error) for error in step.get("errors", []))
+        lines.append(
+            f"  step={step.get('step')} http={step.get('status')} "
+            f"durationMs={_display(step.get('durationMs'))} "
+            f"javaSessionId={_display(step.get('javaSessionId'))} "
+            f"pythonSessionId={_display(step.get('pythonSessionId'))} "
+            f"stage={_display(step.get('stage'))} errors={errors}"
+        )
+        for item in step.get("timeline", []):
+            lines.append(
+                f"    event={_display(item.get('event'))} "
+                f"durationMs={_display(item.get('durationMs'))} "
+                f"javaSessionId={_display(item.get('javaSessionId'))} "
+                f"pythonSessionId={_display(item.get('pythonSessionId'))} "
+                f"stage={_display(item.get('stage'))}"
+            )
+    return "\n".join(lines)
 
 
 def _json_request(url: str, payload: dict[str, Any], headers: dict[str, str], timeout: int) -> tuple[int, str, str]:
@@ -276,6 +337,9 @@ def replay_trace(
             errors.append(f"expected text/event-stream content type but got {content_type or '<missing>'}")
         errors.extend(validate_step_result(step, events))
         next_session_id = extract_session_id(events)
+        python_session_id = next_session_id or session_id
+        java_session_id = extract_java_session_id(events)
+        timeline = build_session_timeline(step, events, duration_ms)
         if next_session_id:
             previous_session_id = next_session_id
         failed = failed or bool(errors)
@@ -288,8 +352,12 @@ def replay_trace(
                 "durationMs": duration_ms,
                 "contentType": content_type,
                 "events": [event.name for event in events],
+                "requestedSessionId": session_id,
                 "sessionId": previous_session_id,
+                "javaSessionId": java_session_id,
+                "pythonSessionId": python_session_id,
                 "stage": extract_stage(events),
+                "timeline": timeline,
                 "errors": errors,
                 "rawPreview": body[:1000],
             }
@@ -344,6 +412,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             for error in step["errors"]:
                 print(f"  - {error}")
+        failure_timeline = format_failure_timeline(report)
+        if failure_timeline:
+            print(failure_timeline)
         return 0 if report["ok"] else 1
     except ReplayError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)

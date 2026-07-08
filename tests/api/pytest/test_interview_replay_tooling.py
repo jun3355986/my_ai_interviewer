@@ -95,6 +95,60 @@ def test_validate_step_result_reports_missing_event_and_stage():
     assert "expected stage technical_qna but got project_qna" in errors
 
 
+def test_replay_trace_failure_report_includes_session_timeline(monkeypatch):
+    replay = load_replay_module()
+    body = "\n".join(
+        [
+            "event: status",
+            'data: {"session_id":"py-1","java_session_id":"java-1","stage":"opening"}',
+            "",
+            "event: done",
+            'data: {"session_id":"py-1","java_session_id":"java-1","stage":"opening"}',
+            "",
+        ]
+    )
+
+    def fake_json_request(_url, _payload, _headers, _timeout):
+        return 200, "text/event-stream;charset=UTF-8", body
+
+    monkeypatch.setattr(replay, "_json_request", fake_json_request)
+
+    report = replay.replay_trace(
+        [
+            replay.TraceStep(
+                step=1,
+                action="chat",
+                message="start",
+                expect_events=["status", "question", "done"],
+                expect_stage="self_introduction",
+            )
+        ],
+        "http://127.0.0.1:9000",
+        "/api/v1/interviews/chat",
+        token="token",
+        timeout=5,
+    )
+
+    step = report["steps"][0]
+    timeline = step["timeline"]
+
+    assert report["ok"] is False
+    assert step["javaSessionId"] == "java-1"
+    assert step["pythonSessionId"] == "py-1"
+    assert timeline[0]["javaSessionId"] == "java-1"
+    assert timeline[0]["pythonSessionId"] == "py-1"
+    assert timeline[0]["stage"] == "opening"
+    assert timeline[0]["event"] == "status"
+    assert isinstance(timeline[0]["durationMs"], int)
+
+    formatted = replay.format_failure_timeline(report)
+    assert "javaSessionId=java-1" in formatted
+    assert "pythonSessionId=py-1" in formatted
+    assert "stage=opening" in formatted
+    assert "event=status" in formatted
+    assert "durationMs=" in formatted
+
+
 def test_python_ai_stub_chat_returns_project_sse_events():
     from fastapi.testclient import TestClient
 
@@ -114,6 +168,7 @@ def test_python_ai_stub_chat_returns_project_sse_events():
     events = load_replay_module().parse_sse_events(response.text)
     assert [event.name for event in events] == ["status", "chunk", "result", "done"]
     assert events[0].data["session_id"] == "stub-java-1"
+    assert events[0].data["java_session_id"] == "java-1"
     assert events[-1].data["stage"] == "opening"
 
     followup = TestClient(stub.app).post(

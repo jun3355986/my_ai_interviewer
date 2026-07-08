@@ -129,11 +129,10 @@ ai_interviewer/storage/vector_db/
 
 - Docker Compose 挂载 `ai_interviewer/storage`，容器重建不会丢失宿主机 Chroma 与 SQLite 状态。
 - Python 镜像 `.dockerignore` 排除了 `storage/vector_db`，不会把本地向量库打进镜像。
+- `scripts/manage-vector-db.sh` 提供 ChromaDB 运行态目录的初始化、状态检查、备份、恢复、清理和重建入口。
 
 缺口：
 
-- Git 仍跟踪向量库运行态文件。
-- 没有向量库备份、恢复、重建脚本。
 - 没有从 PostgreSQL `t_question_bank` 或题库源文件重建 ChromaDB 的标准命令。
 - 模型 embedding 维度或 provider 变化时，没有声明如何清理、重建、校验向量库。
 
@@ -141,7 +140,7 @@ ai_interviewer/storage/vector_db/
 
 - Git 不跟踪 ChromaDB 二进制目录。
 - 题库主数据以 PostgreSQL/Admin 题库或可审查 seed 文件为准。
-- 提供 `scripts/rebuild-vector-db.sh` 或等价命令：清空 Chroma 目录，读取已启用题库，调用 Python sync 接口重建。
+- 通过 `scripts/manage-vector-db.sh rebuild --yes` 清空 Chroma 目录，再读取已启用题库并调用 Python sync 接口重建。
 - 每次 embedding 模型、维度或切分策略变化，必须执行向量库重建并记录兼容性说明。
 
 ### Redis

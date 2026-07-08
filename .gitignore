@@ -14,7 +14,9 @@
 # Runtime and test artifacts
 test-results/
 logs/
+backups/
 *.log
+*.pid
 ai_interviewer/storage/database/*.db
 ai_interviewer/storage/database/*.db-*
 ai_interviewer/storage/vector_db/
@@ -22,12 +24,14 @@ tests/reports/allure-results/*
 tests/reports/allure-report/*
 tests/reports/playwright/*
 tests/reports/k6/*
+tests/reports/replay/*
 tests/reports/smoke/*
 tests/performance/results/*
 !tests/reports/allure-results/.gitkeep
 !tests/reports/allure-report/.gitkeep
 !tests/reports/playwright/.gitkeep
 !tests/reports/k6/.gitkeep
+!tests/reports/replay/.gitkeep
 !tests/reports/smoke/.gitkeep
 !tests/performance/results/.gitkeep
 

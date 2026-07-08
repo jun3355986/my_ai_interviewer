@@ -181,7 +181,18 @@ Python AI 服务的 `storage/` 目录通过 Docker Compose 从宿主机挂载到
 ai_interviewer/storage -> /app/storage
 ```
 
-其中 `storage/database/interviews.db` 是本地 SQLite 面试会话库，属于运行时数据，不进入 Git 版本管理，也不会被打进 Python 镜像。容器重建、`docker compose down` 和 `docker compose down -v` 都不会自动删除这个宿主机文件；需要清理或备份时，请直接管理 `ai_interviewer/storage/database/`。
+其中 `storage/database/interviews.db` 是本地 SQLite 面试会话库，`storage/vector_db/` 是 ChromaDB 向量库持久化目录。它们都属于运行时数据，不进入 Git 版本管理，也不会被打进 Python 镜像。容器重建、`docker compose down` 和 `docker compose down -v` 都不会自动删除这些宿主机文件。
+
+ChromaDB 向量库由运维脚本管理：
+
+```bash
+scripts/manage-vector-db.sh init
+scripts/manage-vector-db.sh status
+scripts/manage-vector-db.sh backup
+scripts/manage-vector-db.sh rebuild --yes
+```
+
+`rebuild` 会先备份再清空 `ai_interviewer/storage/vector_db/`，随后需要启动服务并触发 Admin 题库同步流程重新写入 ChromaDB。
 
 ## 10. 补充说明
 
