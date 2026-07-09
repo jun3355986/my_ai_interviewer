@@ -24,3 +24,20 @@ This plan introduces LangSmith for observability and evaluation, LangGraph for s
 ## Runtime Data Boundary
 
 Runtime databases, checkpoint files, manual raw reports, and operational dumps are deployment-managed state and must not be committed. The repository may contain configuration templates, scripts, documentation, and reviewed redacted fixtures.
+
+## Implementation Status
+
+Implemented in the Python AI service:
+
+1. Shared agent runtime configuration and propagated `agent_run_id`.
+2. Opt-in LangSmith tracing around project observability traces, with raw payload metadata excluded by default.
+3. Opt-in Manual Flow Recorder writing candidate replay JSONL and companion reports under `tests/reports/manual-traces/`.
+4. LangSmith evaluation skeleton that converts Replay Traces into dataset examples and runs deterministic replay-report evaluators.
+5. Opt-in LangGraph Single-Turn Agent Run thin wrapper that records runtime-managed SQLite checkpoints keyed by Agent Run ID.
+
+Primary code locations:
+
+- `ai_interviewer/services/agent_runtime/`
+- `ai_interviewer/services/observability/context.py`
+- `tests/scripts/langsmith_eval.py`
+- `ai_interviewer/tests/test_agent_runtime.py`

@@ -2,6 +2,9 @@
 
 This context defines the language for the AI interviewer's monitoring, replay, and agent execution model.
 
+Implementation milestones are defined in
+[`docs/langsmith-langgraph-integration-plan.md`](docs/langsmith-langgraph-integration-plan.md).
+
 ## Language
 
 **Interview Session**:

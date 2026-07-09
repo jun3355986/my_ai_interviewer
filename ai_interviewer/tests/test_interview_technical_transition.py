@@ -81,10 +81,11 @@ class InterviewTechnicalTransitionTest(unittest.TestCase):
             {"Java基础": 1},
         )
 
-        self.assertEqual("请说明 HashMap 的底层实现原理。", result["question"])
+        self.assertEqual("请说明 HashMap 的底层实现原理。", result["question"]["text"])
+        self.assertEqual("请说明 HashMap 的底层实现原理。", result["next_question"])
         self.assertEqual(2, result["remaining_questions"])
         self.assertEqual(1, self.fake_interviewer.technical_question_select_count)
-        self.assertEqual(1, len([msg for msg in session.history if msg.get("role") == "ai" and msg.get("content") == result["question"]]))
+        self.assertEqual(1, len([msg for msg in session.history if msg.get("role") == "ai" and msg.get("content") == result["next_question"]]))
 
 
 if __name__ == "__main__":

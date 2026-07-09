@@ -301,15 +301,21 @@ def build_chat_payload(step: TraceStep, session_id: str | None) -> dict[str, Any
     }
 
 
+def build_resume_payload(session_id: str | None) -> dict[str, Any]:
+    return {"session_id": session_id, "sessionId": session_id}
+
+
 def replay_trace(
     steps: list[TraceStep],
     gateway_base_url: str,
     chat_path: str,
+    resume_path: str,
     token: str | None,
     timeout: int,
 ) -> dict[str, Any]:
     normalized_path = chat_path if chat_path.startswith("/") else f"/{chat_path}"
-    endpoint = f"{gateway_base_url.rstrip('/')}{normalized_path}"
+    normalized_resume_path = resume_path if resume_path.startswith("/") else f"/{resume_path}"
+    chat_endpoint = f"{gateway_base_url.rstrip('/')}{normalized_path}"
     headers = {
         "Accept": "text/event-stream",
         "Content-Type": "application/json",
@@ -322,10 +328,18 @@ def replay_trace(
     failed = False
 
     for step in steps:
-        if step.action != "chat":
+        if step.action not in {"chat", "resume"}:
             raise ReplayError(f"step {step.step}: unsupported action: {step.action}")
         session_id = previous_session_id if step.session_ref == "previous" else step.session_id
-        payload = build_chat_payload(step, session_id)
+        if step.action == "resume":
+            if not session_id:
+                raise ReplayError(f"step {step.step}: resume action requires sessionId or sessionRef")
+            path = normalized_resume_path.replace("{sessionId}", session_id)
+            endpoint = f"{gateway_base_url.rstrip('/')}{path}"
+            payload = {} if "{sessionId}" in normalized_resume_path else build_resume_payload(session_id)
+        else:
+            endpoint = chat_endpoint
+            payload = build_chat_payload(step, session_id)
         started = time.monotonic()
         status, content_type, body = _json_request(endpoint, payload, headers, timeout)
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -368,6 +382,7 @@ def replay_trace(
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "gatewayBaseUrl": gateway_base_url,
         "chatPath": normalized_path,
+        "resumePath": normalized_resume_path,
         "steps": results,
     }
 
@@ -385,6 +400,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("trace", type=Path, help="Path to a JSONL trace file")
     parser.add_argument("--gateway-base-url", default=os.getenv("GATEWAY_BASE_URL", "http://localhost:9000"))
     parser.add_argument("--chat-path", default=os.getenv("REPLAY_CHAT_PATH", "/api/v1/interviews/chat"))
+    parser.add_argument("--resume-path", default=os.getenv("REPLAY_RESUME_PATH", "/api/v1/interviews/{sessionId}/resume"))
     parser.add_argument("--username", default=os.getenv("SMOKE_USERNAME", "admin"))
     parser.add_argument("--password", default=os.getenv("SMOKE_PASSWORD", "admin123"))
     parser.add_argument("--access-token", default=os.getenv("REPLAY_ACCESS_TOKEN"))
@@ -401,7 +417,7 @@ def main(argv: list[str] | None = None) -> int:
         token = args.access_token
         if token is None and not args.no_login:
             token = login(args.gateway_base_url, args.username, args.password, args.timeout)
-        report = replay_trace(steps, args.gateway_base_url, args.chat_path, token, args.timeout)
+        report = replay_trace(steps, args.gateway_base_url, args.chat_path, args.resume_path, token, args.timeout)
         report_path = write_report(report, args.report_dir, args.trace)
         print(f"Replay report: {report_path}")
         for step in report["steps"]:

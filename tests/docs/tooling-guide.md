@@ -198,6 +198,8 @@ Each trace step is one JSON object per line. Use `sessionRef:"previous"` to reus
 {"step":2,"action":"chat","sessionRef":"previous","message":"好的，请开始。","expectEvents":["status","question","chunk","result","done"],"expectStage":"self_introduction"}
 ```
 
+Resume replay steps use `action:"resume"` and require `sessionId` or `sessionRef`. The default resume endpoint template is `/api/v1/interviews/{sessionId}/resume`; override it with `--resume-path` or `REPLAY_RESUME_PATH`.
+
 Replay reports are written to `tests/reports/replay/`. When any step fails, the CLI also prints a session timeline for the failed step so the Java service and Python AI stub can be correlated without opening service logs first. Each timeline entry includes:
 
 | Field | Meaning |
@@ -257,6 +259,41 @@ AI observability runtime variables:
 | `AI_OBSERVABILITY_WRITE_TIMEOUT_MS` | `300` | Best-effort write timeout for observability persistence. |
 | `AI_OBSERVABILITY_STORE_RAW_PAYLOAD` | `true` | Controls whether raw prompt and response text are stored for admin audit reads. |
 | `AI_OBSERVABILITY_MAX_RAW_CHARS` | `200000` | Maximum raw prompt/response characters retained per LLM call. |
+
+### LangSmith, Manual Recorder, And LangGraph Agent Runtime
+
+The LangSmith/LangGraph layer is opt-in and does not replace the project PostgreSQL observability store. The default local behavior is no-op unless the variables below are enabled.
+
+Focused unit check:
+
+```bash
+cd ai_interviewer
+uv run pytest tests/test_agent_runtime.py -q
+```
+
+Prepare LangSmith evaluation examples from an existing Replay Trace:
+
+```bash
+tests/scripts/langsmith_eval.py tests/fixtures/interview-traces/golden-opening-to-project-qna.jsonl
+```
+
+Add `--report tests/reports/replay/<report>.json` to run deterministic evaluators against a replay report. Set `LANGSMITH_EVALUATION_SYNC=true` only when you intentionally want to create/update examples in LangSmith.
+
+Agent runtime variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LANGSMITH_TRACING` | `false` | Enables LangSmith tracing for Python `/interview/chat` and `/interview/resume` observability traces. |
+| `LANGSMITH_PROJECT` | `ai-interviewer` | LangSmith project name for traces. |
+| `LANGSMITH_CAPTURE_RAW_PAYLOADS` | `false` | Allows raw payload metadata to be sent to LangSmith when explicitly enabled for local/dev debugging. |
+| `LANGSMITH_DATASET_NAME` | `ai-interviewer-replay-traces` | Dataset name used by `tests/scripts/langsmith_eval.py`. |
+| `LANGSMITH_EVALUATION_SYNC` | unset/false | When truthy, the evaluation script writes examples to LangSmith; otherwise it only prepares local examples. |
+| `MANUAL_FLOW_RECORDER_ENABLED` | `false` | Enables local/dev API/SSE manual flow recording. |
+| `MANUAL_FLOW_RECORDER_OUTPUT_DIR` | `tests/reports/manual-traces` | Runtime output directory for candidate replay JSONL and companion report JSON. |
+| `MANUAL_FLOW_RECORDER_CAPTURE_RAW_PAYLOADS` | `false` | Controls whether manual recorder output includes raw messages, resumes, job requirements, and candidate names. |
+| `MANUAL_FLOW_RECORDER_MAX_RAW_CHARS` | `20000` | Maximum raw string length retained by the manual recorder when raw capture is enabled. |
+| `LANGGRAPH_AGENT_RUN_ENABLED` | `false` | Enables the LangGraph Single-Turn Agent Run thin wrapper and checkpoint writes. |
+| `LANGGRAPH_CHECKPOINT_DB_PATH` | `ai_interviewer/storage/agent_checkpoints.sqlite3` | Runtime-managed SQLite checkpoint store path. Do not commit generated checkpoint databases. |
 
 Live smoke variables:
 

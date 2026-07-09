@@ -25,6 +25,7 @@ class UnifiedChatRequest(BaseModel):
     job_requirements: Optional[str] = Field(default=None, description="职位要求")
     candidate_name: Optional[str] = Field(default=None, description="候选人姓名")
     request_id: Optional[str] = Field(default=None, description="上游请求ID")
+    agent_run_id: Optional[str] = Field(default=None, description="单轮Agent Run ID")
     java_session_id: Optional[str] = Field(default=None, description="Java面试会话ID")
     user_id: Optional[int] = Field(default=None, description="用户ID")
     username: Optional[str] = Field(default=None, description="用户名")
@@ -35,6 +36,7 @@ class UnifiedChatRequest(BaseModel):
 class ResumeStreamRequest(BaseModel):
     session_id: str = Field(..., description="会话ID")
     request_id: Optional[str] = Field(default=None, description="上游请求ID")
+    agent_run_id: Optional[str] = Field(default=None, description="单轮Agent Run ID")
     java_session_id: Optional[str] = Field(default=None, description="Java面试会话ID")
     user_id: Optional[int] = Field(default=None, description="用户ID")
     username: Optional[str] = Field(default=None, description="用户名")

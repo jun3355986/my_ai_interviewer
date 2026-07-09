@@ -29,6 +29,12 @@ public class PythonChatRequest implements Serializable {
     private String requestId;
 
     /**
+     * 单轮Python Agent Run ID，用作第一阶段LangGraph thread_id
+     */
+    @JsonProperty("agent_run_id")
+    private String agentRunId;
+
+    /**
      * Java面试会话ID
      */
     @JsonProperty("java_session_id")

@@ -36,6 +36,7 @@ from api.sse import (
 )
 from services.interview_service import interview_service
 from services.interview_session import InterviewStage, session_manager
+from services.agent_runtime.manual_recorder import ManualFlowRecorder
 from services.observability.context import observability_trace
 from services.question_bank import QuestionBank
 from services.resume_parser import ResumeParser
@@ -86,11 +87,28 @@ def _question_text_from_payload(value: dict | None) -> str | None:
     return text if isinstance(text, str) and text else None
 
 
+def _request_payload(model) -> dict[str, object]:
+    dump = getattr(model, "model_dump", None)
+    if callable(dump):
+        return dump()
+    return dict(getattr(model, "__dict__", {}))
+
+
+def _record_sse(recorder: ManualFlowRecorder | None, chunk: str) -> str:
+    if recorder is not None:
+        recorder.observe_sse_chunk(chunk)
+    return chunk
+
+
 @router.post("/chat")
 def chat_stream(req: UnifiedChatRequest):
     """统一流式对话接口（SSE）"""
 
     def event_generator():
+        recorder = ManualFlowRecorder.for_request(
+            entrypoint=req.entrypoint or "interview_chat",
+            request_payload=_request_payload(req),
+        )
         prepared_session = None
         prepared_error = None
         generated_session_id = None
@@ -115,6 +133,7 @@ def chat_stream(req: UnifiedChatRequest):
         )
         with observability_trace(
             request_id=req.request_id,
+            agent_run_id=req.agent_run_id,
             user_id=req.user_id,
             username=req.username,
             session_id=req.java_session_id or trace_python_session_id,
@@ -131,18 +150,24 @@ def chat_stream(req: UnifiedChatRequest):
                     session = interview_service.get_session(req.session_id)
                     if not session:
                         trace.mark_error("SESSION_NOT_FOUND", f"会话不存在: {req.session_id}")
-                        yield format_sse(
-                            EVENT_ERROR,
-                            {"code": "SESSION_NOT_FOUND", "message": f"会话不存在: {req.session_id}"},
+                        yield _record_sse(
+                            recorder,
+                            format_sse(
+                                EVENT_ERROR,
+                                {"code": "SESSION_NOT_FOUND", "message": f"会话不存在: {req.session_id}"},
+                            ),
                         )
                         return
                 else:
                     session = prepared_session
 
                 current_stage = session.stage
-                yield format_sse(
-                    EVENT_STATUS,
-                    {"session_id": session.session_id, "stage": current_stage.value},
+                yield _record_sse(
+                    recorder,
+                    format_sse(
+                        EVENT_STATUS,
+                        {"session_id": session.session_id, "stage": current_stage.value},
+                    ),
                 )
 
                 score = None
@@ -208,41 +233,62 @@ def chat_stream(req: UnifiedChatRequest):
                     final_message = "当前面试已结束。"
 
                 if score is not None:
-                    yield format_sse(EVENT_SCORE, {"score": int(score), "feedback": feedback or ""})
+                    yield _record_sse(
+                        recorder,
+                        format_sse(EVENT_SCORE, {"score": int(score), "feedback": feedback or ""}),
+                    )
 
                 if question_payload:
-                    yield format_sse(
-                        EVENT_QUESTION,
-                        {
-                            "question": question_payload,
-                            "next_stage": str(next_stage),
-                        },
+                    yield _record_sse(
+                        recorder,
+                        format_sse(
+                            EVENT_QUESTION,
+                            {
+                                "question": question_payload,
+                                "next_stage": str(next_stage),
+                            },
+                        ),
                     )
 
                 if final_message:
                     for piece in stream_text_chunks(str(final_message)):
-                        yield format_sse(EVENT_CHUNK, {"content": piece})
+                        yield _record_sse(
+                            recorder,
+                            format_sse(EVENT_CHUNK, {"content": piece}),
+                        )
 
                 result_payload: dict[str, object] = {"next_stage": str(next_stage)}
                 if question_payload:
                     result_payload["question"] = question_payload
                 if final_message:
                     result_payload["next_question"] = str(final_message)
-                yield format_sse(EVENT_RESULT, result_payload)
+                yield _record_sse(recorder, format_sse(EVENT_RESULT, result_payload))
 
-                yield format_sse(
-                    EVENT_DONE,
-                    {
-                        "stage": next_stage,
-                        "is_interview_complete": next_stage == InterviewStage.CONCLUDED.value,
-                    },
+                yield _record_sse(
+                    recorder,
+                    format_sse(
+                        EVENT_DONE,
+                        {
+                            "stage": next_stage,
+                            "is_interview_complete": next_stage == InterviewStage.CONCLUDED.value,
+                        },
+                    ),
                 )
             except ValueError as exc:
                 trace.mark_error("BAD_REQUEST", str(exc))
-                yield format_sse(EVENT_ERROR, {"code": "BAD_REQUEST", "message": str(exc)})
+                yield _record_sse(
+                    recorder,
+                    format_sse(EVENT_ERROR, {"code": "BAD_REQUEST", "message": str(exc)}),
+                )
             except Exception as exc:
                 trace.mark_error("INTERNAL_ERROR", str(exc))
-                yield format_sse(EVENT_ERROR, {"code": "INTERNAL_ERROR", "message": str(exc)})
+                yield _record_sse(
+                    recorder,
+                    format_sse(EVENT_ERROR, {"code": "INTERNAL_ERROR", "message": str(exc)}),
+                )
+            finally:
+                if recorder is not None:
+                    recorder.finish()
 
     return StreamingResponse(
         event_generator(),
@@ -256,8 +302,13 @@ def resume_stream(req: ResumeStreamRequest):
     """恢复会话状态（SSE）"""
 
     def event_generator():
+        recorder = ManualFlowRecorder.for_request(
+            entrypoint=req.entrypoint or "interview_resume",
+            request_payload=_request_payload(req),
+        )
         with observability_trace(
             request_id=req.request_id,
+            agent_run_id=req.agent_run_id,
             user_id=req.user_id,
             username=req.username,
             session_id=req.java_session_id or req.session_id,
@@ -270,49 +321,70 @@ def resume_stream(req: ResumeStreamRequest):
                 session = interview_service.get_session(req.session_id)
                 if not session:
                     trace.mark_error("SESSION_NOT_FOUND", f"会话不存在: {req.session_id}")
-                    yield format_sse(
-                        EVENT_ERROR,
-                        {"code": "SESSION_NOT_FOUND", "message": f"会话不存在: {req.session_id}"},
+                    yield _record_sse(
+                        recorder,
+                        format_sse(
+                            EVENT_ERROR,
+                            {"code": "SESSION_NOT_FOUND", "message": f"会话不存在: {req.session_id}"},
+                        ),
                     )
                     return
 
                 stage = session.stage.value
-                yield format_sse(EVENT_STATUS, {"session_id": session.session_id, "stage": stage})
+                yield _record_sse(
+                    recorder,
+                    format_sse(EVENT_STATUS, {"session_id": session.session_id, "stage": stage}),
+                )
 
                 last_message = _last_ai_message(session)
                 if last_message:
                     question_payload = _structured_question_payload(last_message.get("question"))
                     last_question = last_message.get("content") or _question_text_from_payload(question_payload)
                     if question_payload:
-                        yield format_sse(
-                            EVENT_QUESTION,
-                            {
-                                "question": question_payload,
-                                "next_stage": stage,
-                            },
+                        yield _record_sse(
+                            recorder,
+                            format_sse(
+                                EVENT_QUESTION,
+                                {
+                                    "question": question_payload,
+                                    "next_stage": stage,
+                                },
+                            ),
                         )
                     if last_question:
                         for piece in stream_text_chunks(str(last_question)):
-                            yield format_sse(EVENT_CHUNK, {"content": piece})
+                            yield _record_sse(
+                                recorder,
+                                format_sse(EVENT_CHUNK, {"content": piece}),
+                            )
                     result_payload: dict[str, object] = {"next_stage": stage}
                     if last_question:
                         result_payload["next_question"] = str(last_question)
                     if question_payload:
                         result_payload["question"] = question_payload
-                    yield format_sse(EVENT_RESULT, result_payload)
+                    yield _record_sse(recorder, format_sse(EVENT_RESULT, result_payload))
                 else:
-                    yield format_sse(EVENT_RESULT, {"next_stage": stage})
+                    yield _record_sse(recorder, format_sse(EVENT_RESULT, {"next_stage": stage}))
 
-                yield format_sse(
-                    EVENT_DONE,
-                    {
-                        "stage": stage,
-                        "is_interview_complete": stage == InterviewStage.CONCLUDED.value,
-                    },
+                yield _record_sse(
+                    recorder,
+                    format_sse(
+                        EVENT_DONE,
+                        {
+                            "stage": stage,
+                            "is_interview_complete": stage == InterviewStage.CONCLUDED.value,
+                        },
+                    ),
                 )
             except Exception as exc:
                 trace.mark_error("RESUME_ERROR", str(exc))
-                yield format_sse(EVENT_ERROR, {"code": "RESUME_ERROR", "message": str(exc)})
+                yield _record_sse(
+                    recorder,
+                    format_sse(EVENT_ERROR, {"code": "RESUME_ERROR", "message": str(exc)}),
+                )
+            finally:
+                if recorder is not None:
+                    recorder.finish()
 
     return StreamingResponse(
         event_generator(),

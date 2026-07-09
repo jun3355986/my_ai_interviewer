@@ -84,6 +84,7 @@ def test_first_turn_chat_trace_uses_generated_python_session_before_opening_llm(
     assert "欢迎参加面试。" in "".join(chunks)
     assert opening_call_contexts[0]["python_session_id"] == created_session_ids[0]
     assert opening_call_contexts[0]["session_id"] == created_session_ids[0]
+    assert opening_call_contexts[0]["agent_run_id"] is None
 
 
 def test_resume_stream_creates_trace_with_resume_correlation_and_preserves_events(
@@ -123,6 +124,7 @@ def test_resume_stream_creates_trace_with_resume_correlation_and_preserves_event
     assert trace_contexts == [
         {
             "request_id": "req-003",
+            "agent_run_id": None,
             "user_id": 42,
             "username": "alice",
             "session_id": "java-session-003",

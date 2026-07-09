@@ -290,6 +290,7 @@ public class SSEProxyService {
         return PythonChatRequest.builder()
                 .sessionId(session.getPythonSessionId())
                 .requestId(IdUtil.fastSimpleUUID())
+                .agentRunId(IdUtil.fastSimpleUUID())
                 .javaSessionId(session.getId())
                 .userId(userId)
                 .username(username)

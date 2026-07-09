@@ -125,6 +125,7 @@ def test_replay_trace_failure_report_includes_session_timeline(monkeypatch):
         ],
         "http://127.0.0.1:9000",
         "/api/v1/interviews/chat",
+        "/api/v1/interviews/{sessionId}/resume",
         token="token",
         timeout=5,
     )
@@ -147,6 +148,47 @@ def test_replay_trace_failure_report_includes_session_timeline(monkeypatch):
     assert "stage=opening" in formatted
     assert "event=status" in formatted
     assert "durationMs=" in formatted
+
+
+def test_replay_trace_supports_resume_action_with_session_path(monkeypatch):
+    replay = load_replay_module()
+    body = "\n".join(
+        [
+            "event: status",
+            'data: {"session_id":"py-1","stage":"self_introduction"}',
+            "",
+            "event: done",
+            'data: {"stage":"self_introduction"}',
+            "",
+        ]
+    )
+    calls = []
+
+    def fake_json_request(url, payload, _headers, _timeout):
+        calls.append((url, payload))
+        return 200, "text/event-stream;charset=UTF-8", body
+
+    monkeypatch.setattr(replay, "_json_request", fake_json_request)
+
+    report = replay.replay_trace(
+        [
+            replay.TraceStep(
+                step=1,
+                action="resume",
+                session_id="java-1",
+                expect_events=["status", "done"],
+                expect_stage="self_introduction",
+            )
+        ],
+        "http://127.0.0.1:9000",
+        "/api/v1/interviews/chat",
+        "/api/v1/interviews/{sessionId}/resume",
+        token=None,
+        timeout=5,
+    )
+
+    assert report["ok"] is True
+    assert calls == [("http://127.0.0.1:9000/api/v1/interviews/java-1/resume", {})]
 
 
 def test_python_ai_stub_chat_returns_project_sse_events():
