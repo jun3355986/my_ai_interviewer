@@ -28,6 +28,17 @@ class FakeQuestionBank:
     pass
 
 
+class FakeRepository:
+    def __init__(self):
+        self.finished = []
+
+    def create_trace(self, **kwargs):
+        return "trace-streaming-context"
+
+    def finish_trace(self, **kwargs):
+        self.finished.append(kwargs)
+
+
 def test_first_turn_chat_trace_uses_generated_python_session_before_opening_llm(
     monkeypatch,
 ):
@@ -138,3 +149,30 @@ def test_resume_stream_creates_trace_with_resume_correlation_and_preserves_event
     assert joined.index("event: chunk") < joined.index("event: result")
     assert joined.index("event: result") < joined.index("event: done")
     assert "请做一个简短自我介绍。" in joined
+
+
+def test_resume_stream_real_observability_trace_survives_threadpool_context_reset(
+    monkeypatch,
+):
+    import services.observability.context as context_module
+    import api.router as router_module
+
+    repository = FakeRepository()
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setattr(context_module, "get_observability_repository", lambda: repository)
+    monkeypatch.setattr(router_module.interview_service, "get_session", lambda session_id: None)
+
+    response = router_module.resume_stream(
+        ResumeStreamRequest(
+            session_id="missing-session",
+            request_id="req-streaming-context",
+            java_session_id="java-streaming-context",
+            agent_run_id="agent-streaming-context",
+        )
+    )
+
+    chunks = asyncio.run(_consume_streaming_response(response))
+    joined = "".join(chunks)
+
+    assert "event: error" in joined
+    assert repository.finished[0]["status"] == "ERROR"

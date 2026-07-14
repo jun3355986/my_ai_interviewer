@@ -118,4 +118,7 @@ def observability_trace(
             ended_at=ended_at,
             duration_ms=_duration_ms(started_at, ended_at),
         )
-        _current_trace.reset(token)
+        try:
+            _current_trace.reset(token)
+        except ValueError:
+            _current_trace.set(None)
