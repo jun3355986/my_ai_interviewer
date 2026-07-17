@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+typedef SessionExpiredCallback = Future<void> Function();
+
 class ApiClient {
   static const String gatewayBaseUrl = String.fromEnvironment(
     'GATEWAY_BASE_URL',
@@ -35,11 +37,10 @@ class ApiClient {
     return '$_gatewayPrefix$normalized';
   }
 
-  late Dio dio;
-
-  ApiClient() {
-    dio = Dio();
-    dio.interceptors.add(
+  ApiClient({Dio? dio, Dio Function()? createRefreshDio, this.onSessionExpired})
+    : dio = dio ?? Dio(),
+      _createRefreshDio = createRefreshDio ?? Dio.new {
+    this.dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final prefs = await SharedPreferences.getInstance();
@@ -50,58 +51,118 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException e, handler) async {
-          if (e.response?.statusCode == 401) {
-            if (e.requestOptions.extra['__retried'] == true) {
+          if (e.response?.statusCode != 401 ||
+              _isPublicAuthRequest(e.requestOptions)) {
+            return handler.next(e);
+          }
+
+          if (e.requestOptions.extra['__retried'] == true) {
+            await _expireSession();
+            return handler.next(e);
+          }
+
+          final prefs = await SharedPreferences.getInstance();
+          final refreshToken = prefs.getString('refreshToken');
+          if (refreshToken == null || refreshToken.isEmpty) {
+            await _expireSession();
+            return handler.next(e);
+          }
+
+          try {
+            final refreshUrl =
+                '${_resolveBaseUrl(userBaseUrl)}${authPath('/auth/refresh')}';
+            final response = await _createRefreshDio().post(
+              refreshUrl,
+              data: {'refreshToken': refreshToken},
+            );
+            final refreshedTokens = _readRefreshedTokens(response);
+
+            if (refreshedTokens == null) {
+              await _expireSession();
               return handler.next(e);
             }
 
-            // Implement refresh token logic
-            final prefs = await SharedPreferences.getInstance();
-            final refreshToken = prefs.getString('refreshToken');
-            
-            if (refreshToken != null) {
-              try {
-                // Create a new Dio instance to avoid interceptor loops
-                final refreshDio = Dio();
-                // Use the same base URL as the failing request, or force gateway/auth URL
-                // Here we use userBaseUrl because auth is there
-                final refreshUrl = '${_resolveBaseUrl(userBaseUrl)}${authPath('/auth/refresh')}';
-                
-                final response = await refreshDio.post(
-                  refreshUrl,
-                  data: {'refreshToken': refreshToken},
-                );
-
-                if (response.statusCode == 200 && response.data['code'] == 200) {
-                  final newAccessToken = response.data['data']['accessToken'];
-                  final newRefreshToken = response.data['data']['refreshToken']; // If backend rotates it
-
-                  await prefs.setString('accessToken', newAccessToken);
-                  if (newRefreshToken != null) {
-                    await prefs.setString('refreshToken', newRefreshToken);
-                  }
-
-                  // Retry original request with new token
-                  final options = e.requestOptions;
-                  options.headers['Authorization'] = 'Bearer $newAccessToken';
-                  options.extra['__retried'] = true;
-                  
-                  // Use dio.fetch to respect the original baseUrl in options and avoid race conditions
-                  final cloneReq = await dio.fetch(options);
-                  
-                  return handler.resolve(cloneReq);
-                }
-              } catch (refreshError) {
-                // Refresh failed, maybe logout
-                // For now just pass the error through
-              }
+            await prefs.setString('accessToken', refreshedTokens.accessToken);
+            if (refreshedTokens.refreshToken != null) {
+              await prefs.setString(
+                'refreshToken',
+                refreshedTokens.refreshToken!,
+              );
             }
+
+            final options = e.requestOptions;
+            options.headers['Authorization'] =
+                'Bearer ${refreshedTokens.accessToken}';
+            options.extra['__retried'] = true;
+
+            final retriedResponse = await this.dio.fetch(options);
+            return handler.resolve(retriedResponse);
+          } catch (_) {
+            await _expireSession();
+            return handler.next(e);
           }
-          return handler.next(e);
         },
       ),
     );
-    dio.interceptors.add(LogInterceptor(responseBody: true, requestBody: true));
+    this.dio.interceptors.add(
+      LogInterceptor(responseBody: true, requestBody: true),
+    );
+  }
+
+  final Dio dio;
+  final Dio Function() _createRefreshDio;
+  SessionExpiredCallback? onSessionExpired;
+  Future<void>? _sessionExpiryInProgress;
+
+  bool _isPublicAuthRequest(RequestOptions options) {
+    return switch (options.uri.path) {
+      '/api/v1/auth/login' ||
+      '/api/v1/auth/register' ||
+      '/api/v1/auth/refresh' => true,
+      _ => false,
+    };
+  }
+
+  _RefreshedTokens? _readRefreshedTokens(Response response) {
+    if (response.statusCode != 200 || response.data is! Map) {
+      return null;
+    }
+
+    final payload = response.data as Map;
+    if (payload['code'] != 200 || payload['data'] is! Map) {
+      return null;
+    }
+
+    final data = payload['data'] as Map;
+    final accessToken = data['accessToken']?.toString();
+    if (accessToken == null || accessToken.isEmpty) {
+      return null;
+    }
+
+    final refreshToken = data['refreshToken']?.toString();
+    return _RefreshedTokens(accessToken, refreshToken);
+  }
+
+  Future<void> _expireSession() {
+    final activeExpiry = _sessionExpiryInProgress;
+    if (activeExpiry != null) {
+      return activeExpiry;
+    }
+
+    final expiry = _clearTokensAndNotifySessionExpired();
+    _sessionExpiryInProgress = expiry;
+    return expiry.whenComplete(() {
+      if (identical(_sessionExpiryInProgress, expiry)) {
+        _sessionExpiryInProgress = null;
+      }
+    });
+  }
+
+  Future<void> _clearTokensAndNotifySessionExpired() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('accessToken');
+    await prefs.remove('refreshToken');
+    await onSessionExpired?.call();
   }
 
   String _resolveBaseUrl(String baseUrl) {
@@ -114,7 +175,9 @@ class ApiClient {
     }
 
     if (trimmed.startsWith('/')) {
-      final normalizedPath = trimmed == '/' ? '' : trimmed.replaceAll(RegExp(r'/+$'), '');
+      final normalizedPath = trimmed == '/'
+          ? ''
+          : trimmed.replaceAll(RegExp(r'/+$'), '');
       return '${Uri.base.origin}$normalizedPath';
     }
 
@@ -126,4 +189,11 @@ class ApiClient {
     dio.options.baseUrl = _resolveBaseUrl(baseUrl);
     return dio;
   }
+}
+
+class _RefreshedTokens {
+  const _RefreshedTokens(this.accessToken, this.refreshToken);
+
+  final String accessToken;
+  final String? refreshToken;
 }

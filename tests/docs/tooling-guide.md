@@ -13,6 +13,22 @@ When a development task or bug fix requires tests:
 
 Use project-native locations for isolated unit tests and the root `tests/` tree for cross-project or release-quality tests.
 
+## Flutter Unit Tests
+
+Flutter client unit and widget tests live under `ai_interviewer_front/test`.
+
+```bash
+cd ai_interviewer_front
+flutter test
+```
+
+Run the session-expiry regression independently with:
+
+```bash
+cd ai_interviewer_front
+flutter test test/api_client_session_expiry_test.dart
+```
+
 ## Python AI Unit Tests
 
 Python AI unit tests live under `ai_interviewer/tests` and use pytest through uv.

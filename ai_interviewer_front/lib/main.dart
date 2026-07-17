@@ -17,6 +17,8 @@ import 'services/resume_service.dart';
 import 'services/interview_service.dart';
 import 'package:provider/provider.dart';
 
+final appNavigatorKey = GlobalKey<NavigatorState>();
+
 void main() {
   final apiClient = ApiClient();
   final authApi = AuthApi(apiClient);
@@ -29,6 +31,13 @@ void main() {
   final jobService = JobService(jobApi);
   final resumeService = ResumeService(resumeApi);
   final interviewService = InterviewService(interviewApi);
+
+  apiClient.onSessionExpired = () async {
+    final navigator = appNavigatorKey.currentState;
+    if (navigator != null) {
+      navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+    }
+  };
 
   runApp(
     MultiProvider(
@@ -49,6 +58,7 @@ class AIInterviewerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'AI 面试官助手',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
