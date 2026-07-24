@@ -17,6 +17,7 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 class TurnAttemptControllerTest {
@@ -35,6 +36,21 @@ class TurnAttemptControllerTest {
                             && annotation.required()))
                     .as(method.getName() + " must require X-User-Id")
                     .hasSize(1);
+        }
+    }
+
+    @Test
+    void everyPathVariableHasAnExplicitRuntimeName() {
+        for (Method method : TurnAttemptController.class.getDeclaredMethods()) {
+            for (var parameter : method.getParameters()) {
+                PathVariable annotation = parameter.getAnnotation(PathVariable.class);
+                if (annotation == null) {
+                    continue;
+                }
+                assertThat(annotation.value())
+                        .as(method.getName() + " path variable must not depend on -parameters")
+                        .isNotBlank();
+            }
         }
     }
 

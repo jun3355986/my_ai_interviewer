@@ -32,7 +32,7 @@ public class TurnAttemptController {
 
     @PostMapping("/branches/{branchId}/turn-attempts")
     public Result<TurnAttemptDTO> create(
-            @PathVariable String branchId,
+            @PathVariable("branchId") String branchId,
             @RequestHeader("X-User-Id") Long userId,
             @RequestHeader(value = "X-User-Name", required = false) String username,
             @Valid @RequestBody CreateTurnAttemptRequest request) {
@@ -41,7 +41,7 @@ public class TurnAttemptController {
 
     @PostMapping("/branches/{focusedBranchId}/fork-attempts")
     public Result<ForkAttemptDTO> createFork(
-            @PathVariable String focusedBranchId,
+            @PathVariable("focusedBranchId") String focusedBranchId,
             @RequestHeader("X-User-Id") Long userId,
             @RequestHeader(value = "X-User-Name", required = false) String username,
             @Valid @RequestBody CreateForkAttemptRequest request) {
@@ -54,14 +54,14 @@ public class TurnAttemptController {
 
     @GetMapping("/turn-attempts/{turnId}")
     public Result<TurnAttemptDTO> get(
-            @PathVariable String turnId,
+            @PathVariable("turnId") String turnId,
             @RequestHeader("X-User-Id") Long userId) {
         return Result.success(turnAttemptService.get(turnId, userId));
     }
 
     @GetMapping(value = "/turn-attempts/{turnId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<TurnAttemptEventDTO>> events(
-            @PathVariable String turnId,
+            @PathVariable("turnId") String turnId,
             @RequestHeader("X-User-Id") Long userId) {
         return turnAttemptService.events(turnId, userId)
                 .map(event -> ServerSentEvent.<TurnAttemptEventDTO>builder()
@@ -73,7 +73,7 @@ public class TurnAttemptController {
 
     @PostMapping("/turn-attempts/{turnId}/retry")
     public Result<TurnAttemptDTO> retry(
-            @PathVariable String turnId,
+            @PathVariable("turnId") String turnId,
             @RequestHeader("X-User-Id") Long userId,
             @RequestHeader(value = "X-User-Name", required = false) String username,
             @Valid @RequestBody RetryTurnAttemptRequest request) {
@@ -82,14 +82,14 @@ public class TurnAttemptController {
 
     @PostMapping("/turn-attempts/{turnId}/cancel")
     public Result<TurnAttemptDTO> cancel(
-            @PathVariable String turnId,
+            @PathVariable("turnId") String turnId,
             @RequestHeader("X-User-Id") Long userId) {
         return Result.success(turnAttemptService.cancel(turnId, userId));
     }
 
     @PostMapping("/turn-attempts/{turnId}/discard")
     public Result<TurnAttemptDTO> discard(
-            @PathVariable String turnId,
+            @PathVariable("turnId") String turnId,
             @RequestHeader("X-User-Id") Long userId) {
         return Result.success(turnAttemptService.discard(turnId, userId));
     }
