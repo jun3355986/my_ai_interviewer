@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 
 class InterviewHistoryControllerTest {
 
@@ -39,6 +40,21 @@ class InterviewHistoryControllerTest {
                             && annotation.required()))
                     .as(methodName + " must not fall back to user 1")
                     .hasSize(1);
+        }
+    }
+
+    @Test
+    void everyInterviewQueryParameterHasAnExplicitRuntimeName() {
+        for (Method method : InterviewController.class.getDeclaredMethods()) {
+            for (var parameter : method.getParameters()) {
+                RequestParam annotation = parameter.getAnnotation(RequestParam.class);
+                if (annotation == null) {
+                    continue;
+                }
+                assertThat(annotation.value())
+                        .as(method.getName() + " request parameter must not depend on -parameters")
+                        .isNotBlank();
+            }
         }
     }
 

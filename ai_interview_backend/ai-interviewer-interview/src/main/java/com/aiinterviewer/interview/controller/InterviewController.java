@@ -97,8 +97,8 @@ public class InterviewController {
     @Operation(summary = "获取面试列表", description = "分页获取用户的面试历史")
     public Result<PageResult<SessionDTO>> listInterviews(
             @RequestHeader("X-User-Id") Long userId,
-            @RequestParam(defaultValue = "1") Long current,
-            @RequestParam(defaultValue = "10") Long size) {
+            @RequestParam(value = "current", defaultValue = "1") Long current,
+            @RequestParam(value = "size", defaultValue = "10") Long size) {
 
         return Result.success(interviewService.listSessions(userId, current, size));
     }
@@ -121,11 +121,11 @@ public class InterviewController {
     @Operation(summary = "获取面试历史", description = "按面试谱系分页，包含分支数量、最佳成绩与当前可恢复分支")
     public Result<PageResult<LineageSummaryDTO>> listLineages(
             @RequestHeader("X-User-Id") Long userId,
-            @RequestParam(defaultValue = "1") Long current,
-            @RequestParam(defaultValue = "10") Long size,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "time") String sortBy,
-            @RequestParam(defaultValue = "all") String status) {
+            @RequestParam(value = "current", defaultValue = "1") Long current,
+            @RequestParam(value = "size", defaultValue = "10") Long size,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "sortBy", defaultValue = "time") String sortBy,
+            @RequestParam(value = "status", defaultValue = "all") String status) {
 
         return Result.success(interviewHistoryService.listLineages(
                 userId,
