@@ -2,6 +2,7 @@ package com.aiinterviewer.interview.mapper;
 
 import com.aiinterviewer.interview.entity.InterviewMessage;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -17,8 +18,11 @@ public interface InterviewMessageMapper extends BaseMapper<InterviewMessage> {
     /**
      * 查询会话的消息历史
      */
-    @Select("SELECT * FROM t_interview_message WHERE session_id = #{sessionId} ORDER BY sequence ASC")
-    List<InterviewMessage> selectBySessionId(@Param("sessionId") String sessionId);
+    default List<InterviewMessage> selectBySessionId(String sessionId) {
+        return selectList(Wrappers.<InterviewMessage>lambdaQuery()
+                .eq(InterviewMessage::getSessionId, sessionId)
+                .orderByAsc(InterviewMessage::getSequence));
+    }
 
     /**
      * 获取会话的最大消息序号

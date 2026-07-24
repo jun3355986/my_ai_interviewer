@@ -366,6 +366,35 @@ class LineageCompositionIntegrationTest {
         }
     }
 
+    @Test
+    void interviewMessageMapperReadsForkStateMetadataFromJsonb() throws Exception {
+        jdbc.update("""
+                INSERT INTO t_interview_message(
+                    session_id, role, content, stage, sequence, turn_id,
+                    message_type, expects_response, delivery_status, metadata, created_at
+                ) VALUES (
+                    'root-fresh', 'ai', 'forkable-question', 'project_qna', 99, NULL,
+                    'ai_question', TRUE, 'completed',
+                    ('{"_postTurnStateV1":{"schemaVersion":1,"currentStage":"project_qna",'
+                    || '"branchStatus":1,"projectQuestionsCount":1,"targetProjectQuestions":3,'
+                    || '"currentFollowupCount":0,"projectQuestionsPool":[],"technicalQuestionsPool":[]}}')::jsonb,
+                    CURRENT_TIMESTAMP
+                )
+                """);
+
+        try (SqlSession session = openSqlSession()) {
+            InterviewMessageMapper messageMapper = session.getMapper(InterviewMessageMapper.class);
+
+            assertThat(messageMapper.selectBySessionId("root-fresh"))
+                    .filteredOn(message -> "forkable-question".equals(message.getContent()))
+                    .singleElement()
+                    .extracting(message -> message.getMetadata())
+                    .isNotNull()
+                    .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                    .containsKey("_postTurnStateV1");
+        }
+    }
+
     private SqlSession openSqlSession() throws Exception {
         MybatisSqlSessionFactoryBean factoryBean = new MybatisSqlSessionFactoryBean();
         factoryBean.setDataSource(dataSource);
