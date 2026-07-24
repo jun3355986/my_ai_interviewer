@@ -143,6 +143,14 @@ class AdminSchemaMigrationTest {
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                     """);
+            statement.execute(
+                    """
+                    CREATE TABLE t_job (
+                        id BIGSERIAL PRIMARY KEY,
+                        title VARCHAR(100) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """);
         }
 
         Flyway.configure()
@@ -160,6 +168,12 @@ class AdminSchemaMigrationTest {
                     .isTrue();
             assertThat(tableExists(connection, "t_admin_menu"))
                     .as("admin-owned V1 tables should still be created after baseline version 0")
+                    .isTrue();
+            assertThat(columnExists(connection, "t_job", "published_at"))
+                    .as("admin migration should add published_at to the existing job table")
+                    .isTrue();
+            assertThat(columnExists(connection, "t_job", "deadline"))
+                    .as("admin migration should add deadline to the existing job table")
                     .isTrue();
         }
     }

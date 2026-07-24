@@ -124,6 +124,8 @@ CREATE TABLE IF NOT EXISTS t_job (
     skills JSONB,                       -- 技能标签 ["Java", "Spring"]
     status SMALLINT DEFAULT 1,          -- 1:招聘中 0:已关闭
     created_by BIGINT REFERENCES t_user(id),
+    published_at TIMESTAMP,             -- 发布时间
+    deadline TIMESTAMP,                 -- 截止时间
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP
