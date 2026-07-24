@@ -3,6 +3,8 @@ import '../api/user_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 
+import 'pending_start_store.dart';
+
 class AuthService {
   final AuthApi _authApi;
   final UserApi _userApi;
@@ -18,7 +20,9 @@ class AuthService {
       final success = payload?['success'] == true;
       final data = payload?['data'];
 
-      if (response.statusCode == 200 && (parsedCode == 200 || success) && data is Map<String, dynamic>) {
+      if (response.statusCode == 200 &&
+          (parsedCode == 200 || success) &&
+          data is Map<String, dynamic>) {
         final loginData = LoginResponse.fromJson(data);
         if (loginData.accessToken.isEmpty || loginData.refreshToken.isEmpty) {
           return null;
@@ -60,6 +64,7 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('accessToken');
       await prefs.remove('refreshToken');
+      await const SharedPreferencesPendingStartStore().clearAll();
     }
   }
 
@@ -76,6 +81,7 @@ class AuthService {
   }
 
   Future<void> _saveTokens(String access, String refresh) async {
+    await const SharedPreferencesPendingStartStore().clearAll();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('accessToken', access);
     await prefs.setString('refreshToken', refresh);

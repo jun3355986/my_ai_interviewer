@@ -2,6 +2,13 @@
 -- AI面试官 PostgreSQL 数据库初始化脚本
 -- ============================================
 
+-- This file intentionally creates the pre-Lineage baseline schema. On a fresh
+-- Compose database, Interview Service Flyway migrations V1+ then bring the
+-- interview domain to the current version and record it in the dedicated
+-- flyway_interview_schema_history table. Do not copy versioned Lineage/Turn
+-- Attempt DDL into this bootstrap file or Flyway would attempt to create the
+-- same objects again after baselining the non-empty shared schema at version 0.
+
 -- 创建数据库(如果不存在)
 -- CREATE DATABASE ai_interviewer;
 

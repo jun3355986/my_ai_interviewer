@@ -8,6 +8,7 @@ import com.aiinterviewer.interview.dto.ChatRequest;
 import com.aiinterviewer.interview.dto.PythonChatRequest;
 import com.aiinterviewer.interview.entity.InterviewSession;
 import com.aiinterviewer.interview.mapper.InterviewMessageMapper;
+import com.aiinterviewer.interview.mapper.InterviewLineageMapper;
 import com.aiinterviewer.interview.mapper.InterviewSessionMapper;
 import com.aiinterviewer.interview.mapper.ScoreRecordMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -60,8 +61,12 @@ class InterviewUsernamePropagationTest {
                 mock(WebClient.class),
                 new ObjectMapper(),
                 mock(InterviewSessionMapper.class),
+                mock(InterviewLineageMapper.class),
                 mock(InterviewMessageMapper.class),
-                mock(ScoreRecordMapper.class));
+                mock(ScoreRecordMapper.class),
+                new CompatibilitySessionWriteGuard(
+                        mock(InterviewSessionMapper.class),
+                        mock(InterviewLineageMapper.class)));
 
         Method buildPythonRequest = SSEProxyService.class.getDeclaredMethod(
                 "buildPythonRequest",
@@ -98,8 +103,12 @@ class InterviewUsernamePropagationTest {
                 mock(WebClient.class),
                 objectMapper,
                 mock(InterviewSessionMapper.class),
+                mock(InterviewLineageMapper.class),
                 mock(InterviewMessageMapper.class),
-                mock(ScoreRecordMapper.class));
+                mock(ScoreRecordMapper.class),
+                new CompatibilitySessionWriteGuard(
+                        mock(InterviewSessionMapper.class),
+                        mock(InterviewLineageMapper.class)));
 
         Method buildPythonResumeRequest = SSEProxyService.class.getDeclaredMethod(
                 "buildPythonResumeRequest",

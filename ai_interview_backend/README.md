@@ -29,9 +29,9 @@ Flutter前端 → Spring Cloud Alibaba后端 → Python FastAPI后端(AI服务)
 | ai-interviewer-gateway | 9000 | API网关 |
 | ai-interviewer-user | 9001 | 用户服务 |
 | ai-interviewer-resume | 9002 | 简历服务 |
-| ai-interviewer-interview | 9003 | 面试服务 |
+| ai-interviewer-interview | 9003（容器内） | 面试服务，仅经 Gateway 访问 |
 | ai-interviewer-job | 9004 | 职位服务 |
-| ai-interviewer-evaluation | 9005 | 评估服务 |
+| ai-interviewer-evaluation | 9005（容器内） | 评估服务，仅经 Gateway 访问 |
 | ai-interviewer-notification | 9006 | 通知服务 |
 | ai-interviewer-common | - | 公共模块 |
 | ai-interviewer-api | - | API定义 |

@@ -64,6 +64,21 @@ public class ScoreRecord implements Serializable {
     private Boolean isFollowup;
 
     /**
+     * Durable turn attempt linkage.
+     */
+    private String turnId;
+
+    /**
+     * Canonical AI prompt answered by this score.
+     */
+    private Long questionMessageId;
+
+    /**
+     * Canonical candidate answer created by this turn.
+     */
+    private Long answerMessageId;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createdAt;

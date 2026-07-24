@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-/// AI 面试官助手 - 历史详情页面
-/// 基于 Figma 设计实现
+import 'models/interview_history.dart';
+import 'services/interview_service.dart';
+
 class HistoryDetailPage extends StatefulWidget {
   const HistoryDetailPage({super.key});
 
@@ -10,671 +12,696 @@ class HistoryDetailPage extends StatefulWidget {
 }
 
 class _HistoryDetailPageState extends State<HistoryDetailPage> {
-  final TextEditingController _searchController = TextEditingController();
+  InterviewLineageSummary? _summary;
+  bool _initialized = false;
+  final TextEditingController _tailController = TextEditingController();
+  final TextEditingController _forkController = TextEditingController();
+  final TextEditingController _recoveryController = TextEditingController();
+  int? _forkTriggerId;
+  String? _recoveryTurnId;
 
-  // 是否展开各区域
-  bool _isDialogExpanded = false;
-
-  // 模拟详情数据
-  final InterviewDetail _detail = InterviewDetail(
-    position: '前端开发工程师',
-    date: '2024-12-10',
-    time: '14:30',
-    duration: '25分钟',
-    dialogCount: 6,
-    totalScore: 88,
-    rating: '表现优秀',
-    stageScores: [
-      StageScore(name: '自我介绍', score: 8.5, maxScore: 10),
-      StageScore(name: '项目经验', score: 8, maxScore: 10),
-      StageScore(name: '技术问答', score: 9, maxScore: 10),
-    ],
-    strengths: [
-      '回答清晰有条理，逻辑性强',
-      '技术理解深入，能够举一反三',
-      '沟通表达能力优秀，善于使用具体案例',
-    ],
-    improvements: [
-      '可以更多地展示团队协作经验',
-      '建议补充更多实际项目中的量化成果',
-    ],
-  );
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    final arguments = ModalRoute.of(context)?.settings.arguments;
+    if (arguments is InterviewLineageSummary) {
+      _summary = arguments;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<InterviewService>().loadReplay(
+          arguments.lineageId,
+          branchId: arguments.focusedBranchId,
+        );
+      });
+    }
+  }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _tailController.dispose();
+    _forkController.dispose();
+    _recoveryController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final narrow = MediaQuery.sizeOf(context).width < 900;
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 顶部导航栏
-            _buildTopBar(context),
-
-            // 主体内容
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 搜索框
-                    _buildSearchBar(),
-                    const SizedBox(height: 20),
-
-                    // 总评分卡片
-                    _buildScoreCard(),
-                    const SizedBox(height: 24),
-
-                    // 各环节得分
-                    _buildStageScores(),
-                    const SizedBox(height: 24),
-
-                    // 优点
-                    _buildStrengthsSection(),
-                    const SizedBox(height: 16),
-
-                    // 待改进
-                    _buildImprovementsSection(),
-                    const SizedBox(height: 16),
-
-                    // 完整对话记录
-                    _buildDialogSection(),
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-            ),
-
-            // 底部按钮
-            _buildBottomButtons(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 顶部导航栏
-  Widget _buildTopBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: Color(0xFFE5E7EB),
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          // 返回按钮
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios_new,
-                size: 16,
-                color: Color(0xFF1E2939),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // 标题
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _detail.position,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E2939),
-                  ),
-                ),
-                Text(
-                  '${_detail.date} ${_detail.time}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF6A7282),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 搜索框
-  Widget _buildSearchBar() {
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: TextField(
-        controller: _searchController,
-        decoration: const InputDecoration(
-          hintText: '搜索面试记录',
-          hintStyle: TextStyle(
-            fontSize: 16,
-            color: Color(0xFF99A1AF),
-          ),
-          prefixIcon: Icon(
-            Icons.search,
-            size: 20,
-            color: Color(0xFF99A1AF),
-          ),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 总评分卡片
-  Widget _buildScoreCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          // 分数圆圈
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: const Color(0xFF00C950),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  _detail.totalScore.toString(),
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // 评分信息
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '总评分',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF6A7282),
-                  ),
-                ),
-                Text(
-                  _detail.rating,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF00C950),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // 日期、时长、对话数
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _buildInfoItem(Icons.calendar_today, '日期', _detail.date),
-              const SizedBox(height: 8),
-              _buildInfoItem(Icons.access_time, '时长', _detail.duration),
-              const SizedBox(height: 8),
-              _buildInfoItem(Icons.chat_bubble_outline, '对话', '${_detail.dialogCount}条'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 信息项
-  Widget _buildInfoItem(IconData icon, String label, String value) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          size: 14,
-          color: const Color(0xFF99A1AF),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '$label ',
-          style: const TextStyle(
-            fontSize: 12,
-            color: Color(0xFF99A1AF),
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Color(0xFF4A5565),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 各环节得分
-  Widget _buildStageScores() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '各环节得分',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1E2939),
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...List.generate(_detail.stageScores.length, (index) {
-            final stage = _detail.stageScores[index];
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: index < _detail.stageScores.length - 1 ? 16 : 0,
-              ),
-              child: _buildStageScoreItem(stage),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  /// 环节得分项
-  Widget _buildStageScoreItem(StageScore stage) {
-    final progress = stage.score / stage.maxScore;
-    Color progressColor;
-    if (progress >= 0.8) {
-      progressColor = const Color(0xFF00C950);
-    } else if (progress >= 0.6) {
-      progressColor = const Color(0xFF2B7FFF);
-    } else {
-      progressColor = const Color(0xFFF0B100);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
+            const Text('面试回放', style: TextStyle(fontSize: 17)),
             Text(
-              stage.name,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF4A5565),
-              ),
-            ),
-            Text(
-              '${stage.score.toStringAsFixed(1)}/${stage.maxScore.toInt()}',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: progressColor,
-              ),
+              _summary?.displayTitle ?? '面试记录',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Container(
-          height: 8,
-          decoration: BoxDecoration(
-            color: const Color(0xFFE5E7EB),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: progress,
-            child: Container(
-              decoration: BoxDecoration(
-                color: progressColor,
-                borderRadius: BorderRadius.circular(4),
-              ),
+        actions: [
+          if (narrow)
+            IconButton(
+              key: const Key('open-branch-tree'),
+              tooltip: '打开分支树',
+              onPressed: _showBranchSheet,
+              icon: const Icon(Icons.account_tree_outlined),
             ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 优点区域
-  Widget _buildStrengthsSection() {
-    return _buildListSection(
-      icon: Icons.check_circle,
-      iconColor: const Color(0xFF00C950),
-      iconBgColor: const Color(0xFFE8F8ED),
-      title: '优点',
-      items: _detail.strengths,
-    );
-  }
-
-  /// 待改进区域
-  Widget _buildImprovementsSection() {
-    return _buildListSection(
-      icon: Icons.error,
-      iconColor: const Color(0xFFF0B100),
-      iconBgColor: const Color(0xFFFFF8E6),
-      title: '待改进',
-      items: _detail.improvements,
-    );
-  }
-
-  /// 列表区域
-  Widget _buildListSection({
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBgColor,
-    required String title,
-    required List<String> items,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-          width: 1,
-        ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      body: Consumer<InterviewService>(
+        builder: (context, service, _) {
+          if (_summary == null) {
+            return const Center(child: Text('缺少面试回放参数'));
+          }
+          if (service.isLoadingReplay && service.currentTranscript == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (service.replayError != null &&
+              service.currentTranscript == null) {
+            return _errorState(service);
+          }
+          if (service.currentTranscript == null) {
+            return const Center(child: Text('该分支暂无回放数据'));
+          }
+          if (narrow) {
+            return _buildTranscript(service);
+          }
+          return Row(
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: iconBgColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  icon,
-                  size: 18,
-                  color: iconColor,
-                ),
+              SizedBox(
+                key: const Key('branch-tree-panel'),
+                width: 320,
+                child: _buildTree(service, inSheet: false),
               ),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E2939),
-                ),
-              ),
+              const VerticalDivider(width: 1),
+              Expanded(child: _buildTranscript(service)),
             ],
-          ),
-          const SizedBox(height: 12),
-          ...items.map((item) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    margin: const EdgeInsets.only(top: 7),
-                    decoration: BoxDecoration(
-                      color: iconColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      item,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF4A5565),
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
+          );
+        },
       ),
     );
   }
 
-  /// 完整对话记录区域
-  Widget _buildDialogSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          // 标题栏
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _isDialogExpanded = !_isDialogExpanded;
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '完整对话记录',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E2939),
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _isDialogExpanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: const Color(0xFF99A1AF),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 对话内容
-          if (_isDialogExpanded)
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: const Column(
-                children: [
-                  // 这里可以添加对话记录
-                  Text(
-                    '对话记录内容...',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF6A7282),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// 底部按钮
-  Widget _buildBottomButtons(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
+  Widget _errorState(InterviewService service) {
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 再练一次
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/upload');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2B7FFF),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                '再练一次',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          Text(service.replayError ?? '加载失败'),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: service.refreshReplay,
+            child: const Text('重新加载'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTree(InterviewService service, {required bool inSheet}) {
+    final nodes = service.tree?.nodes ?? const <LineageTreeNode>[];
+    final depths = _branchDepths(nodes);
+    return Material(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+            child: Text(
+              inSheet ? '选择面试分支' : '分支树',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
           ),
-          const SizedBox(height: 12),
-
-          // 分享面试结果
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton(
-              onPressed: () {
-                // TODO: 分享功能
+          Expanded(
+            child: ListView.builder(
+              cacheExtent: 5000,
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 20),
+              itemCount: nodes.length,
+              itemBuilder: (context, index) {
+                final node = nodes[index];
+                final selected =
+                    service.currentTranscript?.branchId == node.branchId;
+                return Padding(
+                  key: Key('branch-depth-${node.branchId}'),
+                  padding: EdgeInsets.only(
+                    left: (depths[node.branchId] ?? 0) * 18.0,
+                    bottom: 8,
+                  ),
+                  child: InkWell(
+                    key: Key('branch-node-${node.branchId}'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () async {
+                      if (inSheet) Navigator.pop(context);
+                      await service.selectBranch(node.branchId);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? const Color(0xFFEFF6FF)
+                            : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: selected
+                              ? const Color(0xFF3B82F6)
+                              : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  node.branchLabel,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              _statusBadge(node.status),
+                            ],
+                          ),
+                          const SizedBox(height: 7),
+                          LinearProgressIndicator(
+                            value: node.progress.clamp(0, 100) / 100,
+                            minHeight: 5,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            '${node.stage ?? '未知阶段'} · ${node.progress}% · '
+                            '自有 ${node.ownedAssessmentCount} / 继承 ${node.inheritedAssessmentCount}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                          if (node.completedScore != null)
+                            Text(
+                              '评分 ${node.completedScore}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF15803D),
+                              ),
+                            ),
+                          if (node.latestBusinessActivityAt != null)
+                            Text(
+                              '最新活动 ${_compactDateTime(node.latestBusinessActivityAt!)}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF475569),
+                              ),
+                            ),
+                          if (node.evaluationSummary?.trim().isNotEmpty == true)
+                            Text(
+                              '评估：${node.evaluationSummary!.trim()}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF475569),
+                              ),
+                            ),
+                          if (node.recoverableTurnStatus != null)
+                            Text(
+                              '恢复状态：${node.recoverableTurnStatus}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFFB45309),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
               },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF6A7282),
-                side: const BorderSide(
-                  color: Color(0xFFE5E7EB),
-                  width: 1.5,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                '分享面试结果',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
             ),
           ),
         ],
       ),
     );
   }
-}
 
-/// 面试详情模型
-class InterviewDetail {
-  final String position;
-  final String date;
-  final String time;
-  final String duration;
-  final int dialogCount;
-  final int totalScore;
-  final String rating;
-  final List<StageScore> stageScores;
-  final List<String> strengths;
-  final List<String> improvements;
+  Widget _buildTranscript(InterviewService service) {
+    final transcript = service.currentTranscript!;
+    _syncControllers(service);
+    return Container(
+      key: const Key('replay-transcript'),
+      color: const Color(0xFFF8FAFC),
+      child: ListView(
+        cacheExtent: 5000,
+        padding: const EdgeInsets.all(18),
+        children: [
+          _overview(transcript),
+          if (service.conflictMessage != null) _conflictCard(service),
+          if (service.replayError != null) _inlineError(service),
+          ...transcript.messages.map(
+            (message) => _messageCard(service, transcript, message),
+          ),
+          if (service.hasForkDraftForCurrentBranch) _forkDraftCard(service),
+          if (service.branchDraft != null &&
+              !service.hasForkDraftForCurrentBranch)
+            _otherBranchDraftNotice(service),
+          if (service.isProcessing) _processingCard(service),
+          if (service.recoveryAttempt != null) _recoveryCard(service),
+          if (service.canReplyAtTail) _tailComposer(service),
+          if (transcript.status == 2 && !service.hasForkDraftForCurrentBranch)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(child: Text('该分支已完成，历史内容为只读。')),
+            ),
+        ],
+      ),
+    );
+  }
 
-  InterviewDetail({
-    required this.position,
-    required this.date,
-    required this.time,
-    required this.duration,
-    required this.dialogCount,
-    required this.totalScore,
-    required this.rating,
-    required this.stageScores,
-    required this.strengths,
-    required this.improvements,
-  });
-}
+  Widget _overview(BranchTranscript transcript) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transcript.branchLabel ?? '原始分支',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '${transcript.stage ?? '未知阶段'} · 版本 ${transcript.branchVersion}',
+                    style: const TextStyle(color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+            _statusBadge(transcript.status),
+          ],
+        ),
+      ),
+    );
+  }
 
-/// 环节得分模型
-class StageScore {
-  final String name;
-  final double score;
-  final double maxScore;
+  Widget _messageCard(
+    InterviewService service,
+    BranchTranscript transcript,
+    BranchMessage message,
+  ) {
+    final isForkPoint = message.id == transcript.forkPointMessageId;
+    final ai = message.isAI;
+    return Align(
+      alignment: ai ? Alignment.centerLeft : Alignment.centerRight,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 720),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: ai ? Colors.white : const Color(0xFF2563EB),
+          borderRadius: BorderRadius.circular(14),
+          border: isForkPoint
+              ? Border.all(color: const Color(0xFFF59E0B), width: 2)
+              : Border.all(
+                  color: ai ? const Color(0xFFE2E8F0) : Colors.transparent,
+                ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 6,
+              children: [
+                if (message.inherited) _tag('继承前缀', const Color(0xFF7C3AED)),
+                if (isForkPoint) _tag('Fork Point', const Color(0xFFD97706)),
+                if (!message.inherited) _tag('当前分支增量', const Color(0xFF0284C7)),
+              ],
+            ),
+            const SizedBox(height: 7),
+            Text(
+              message.content,
+              style: TextStyle(
+                height: 1.45,
+                color: ai ? const Color(0xFF0F172A) : Colors.white,
+              ),
+            ),
+            if (message.media.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              ...message.media.map(
+                (media) => Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          media.url,
+                          width: 420,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => Container(
+                            width: 260,
+                            height: 100,
+                            alignment: Alignment.center,
+                            color: const Color(0xFFF1F5F9),
+                            child: const Text('图片加载失败'),
+                          ),
+                        ),
+                      ),
+                      if (media.caption?.isNotEmpty == true) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          media.caption!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: ai
+                                ? const Color(0xFF64748B)
+                                : Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (message.forkable) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: ai ? const Color(0xFF2563EB) : Colors.white,
+                  padding: EdgeInsets.zero,
+                ),
+                onPressed: () => service.prepareFork(message),
+                icon: const Icon(Icons.call_split, size: 16),
+                label: const Text('从此处分支'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 
-  StageScore({
-    required this.name,
-    required this.score,
-    required this.maxScore,
-  });
+  Widget _forkDraftCard(InterviewService service) {
+    return Card(
+      color: const Color(0xFFFFFBEB),
+      margin: const EdgeInsets.only(top: 6, bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '新分支草稿（尚未创建）',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('fork-draft-field'),
+              controller: _forkController,
+              minLines: 2,
+              maxLines: 5,
+              onChanged: service.updateForkDraft,
+              decoration: const InputDecoration(
+                hintText: '输入新分支的候选人回答',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: service.clearForkDraft,
+                  child: const Text('取消'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  key: const Key('submit-fork'),
+                  onPressed: service.isProcessing ? null : service.submitFork,
+                  child: const Text('创建分支并提交'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _otherBranchDraftNotice(InterviewService service) {
+    final draft = service.branchDraft!;
+    return Card(
+      key: const Key('fork-draft-other-branch'),
+      color: const Color(0xFFFFFBEB),
+      margin: const EdgeInsets.only(top: 6, bottom: 14),
+      child: ListTile(
+        leading: const Icon(Icons.edit_note, color: Color(0xFFD97706)),
+        title: const Text('另一分支有未提交的草稿'),
+        subtitle: Text('草稿属于分支 ${draft.focusedBranchId}；切回该分支可继续编辑。'),
+        trailing: TextButton(
+          onPressed: service.clearForkDraft,
+          child: const Text('丢弃草稿'),
+        ),
+      ),
+    );
+  }
+
+  Widget _tailComposer(InterviewService service) {
+    return Card(
+      key: const Key('tail-composer'),
+      margin: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: const Key('tail-composer-field'),
+                controller: _tailController,
+                minLines: 1,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: '回答当前分支最后一个问题',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.icon(
+              key: const Key('submit-tail'),
+              onPressed: () async {
+                final answer = _tailController.text;
+                await service.submitTail(answer);
+                if (!service.hasTailDraftForCurrentBranch) {
+                  _tailController.clear();
+                }
+              },
+              icon: const Icon(Icons.send),
+              label: const Text('提交'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _processingCard(InterviewService service) {
+    return Card(
+      key: const Key('processing-card'),
+      color: const Color(0xFFEFF6FF),
+      margin: const EdgeInsets.only(top: 8, bottom: 12),
+      child: ListTile(
+        leading: const SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+        title: const Text('本轮正在后台生成'),
+        subtitle: const Text('离开页面不会取消处理；返回后会自动重新连接。'),
+        trailing: TextButton(
+          onPressed: service.cancelActiveAttempt,
+          child: const Text('取消本轮'),
+        ),
+      ),
+    );
+  }
+
+  Widget _recoveryCard(InterviewService service) {
+    final recovery = service.recoveryAttempt!;
+    return Card(
+      key: const Key('turn-recovery-card'),
+      color: const Color(0xFFFFF7ED),
+      margin: const EdgeInsets.only(top: 8, bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '本轮需要恢复：${recovery.status}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            if (recovery.errorCode != null) Text('错误代码：${recovery.errorCode}'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _recoveryController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton(
+                  onPressed: () =>
+                      service.retryRecovery(_recoveryController.text),
+                  child: const Text('重试本轮'),
+                ),
+                OutlinedButton(
+                  onPressed: service.discardRecovery,
+                  child: const Text('丢弃本轮'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _conflictCard(InterviewService service) {
+    return Card(
+      color: const Color(0xFFFFF7ED),
+      child: ListTile(
+        leading: const Icon(Icons.sync_problem, color: Color(0xFFD97706)),
+        title: Text(service.conflictMessage!),
+        trailing: TextButton(
+          onPressed: service.refreshReplay,
+          child: const Text('刷新'),
+        ),
+      ),
+    );
+  }
+
+  Widget _inlineError(InterviewService service) {
+    return Card(
+      color: const Color(0xFFFEF2F2),
+      child: ListTile(
+        leading: const Icon(Icons.error_outline, color: Color(0xFFDC2626)),
+        title: Text(service.replayError!),
+      ),
+    );
+  }
+
+  Widget _tag(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(text, style: TextStyle(fontSize: 10, color: color)),
+    );
+  }
+
+  Widget _statusBadge(int status) {
+    final (label, color) = switch (status) {
+      1 => ('进行中', const Color(0xFF2563EB)),
+      2 => ('已完成', const Color(0xFF16A34A)),
+      _ => ('已结束', const Color(0xFF64748B)),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 11, color: color)),
+    );
+  }
+
+  Map<String, int> _branchDepths(List<LineageTreeNode> nodes) {
+    const maxDepth = 12;
+    final byId = {for (final node in nodes) node.branchId: node};
+    return {
+      for (final node in nodes)
+        node.branchId: _branchDepth(node, byId, maxDepth),
+    };
+  }
+
+  int _branchDepth(
+    LineageTreeNode node,
+    Map<String, LineageTreeNode> byId,
+    int maxDepth,
+  ) {
+    var depth = 0;
+    var current = node;
+    final visited = <String>{node.branchId};
+    while (depth < maxDepth) {
+      final parentId = current.parentBranchId;
+      if (parentId == null || !visited.add(parentId)) break;
+      final parent = byId[parentId];
+      if (parent == null) break;
+      depth++;
+      current = parent;
+    }
+    return depth;
+  }
+
+  String _compactDateTime(DateTime value) {
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${value.year}-${two(value.month)}-${two(value.day)} '
+        '${two(value.hour)}:${two(value.minute)}';
+  }
+
+  void _syncControllers(InterviewService service) {
+    final draft = service.branchDraft;
+    if (draft != null && _forkTriggerId != draft.triggerMessageId) {
+      _forkTriggerId = draft.triggerMessageId;
+      _forkController.text = draft.answer;
+    } else if (draft == null && _forkTriggerId != null) {
+      _forkTriggerId = null;
+      _forkController.clear();
+    }
+    final recovery = service.recoveryAttempt;
+    if (recovery != null && _recoveryTurnId != recovery.turnId) {
+      _recoveryTurnId = recovery.turnId;
+      _recoveryController.text = recovery.candidateAnswer;
+    } else if (recovery == null && _recoveryTurnId != null) {
+      _recoveryTurnId = null;
+      _recoveryController.clear();
+    }
+    if (service.hasTailDraftForCurrentBranch && _tailController.text.isEmpty) {
+      _tailController.text = service.tailDraft;
+    }
+  }
+
+  void _showBranchSheet() {
+    final service = context.read<InterviewService>();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.75,
+        child: _buildTree(service, inSheet: true),
+      ),
+    );
+  }
 }

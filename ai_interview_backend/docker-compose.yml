@@ -247,8 +247,8 @@ services:
     build:
       context: .
       dockerfile: docker/java-services.Dockerfile
-    ports:
-      - "9003:9003"
+    expose:
+      - "9003"
     environment:
       APP_MODULE: ai-interviewer-interview
       NACOS_SERVER_ADDR: nacos:8848
@@ -312,8 +312,8 @@ services:
     build:
       context: .
       dockerfile: docker/java-services.Dockerfile
-    ports:
-      - "9005:9005"
+    expose:
+      - "9005"
     environment:
       APP_MODULE: ai-interviewer-evaluation
       NACOS_SERVER_ADDR: nacos:8848

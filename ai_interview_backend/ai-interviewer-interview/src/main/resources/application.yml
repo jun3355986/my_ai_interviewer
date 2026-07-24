@@ -24,6 +24,16 @@ spring:
       max-lifetime: 1800000
       connection-timeout: 30000
 
+  # Interview domain migrations use a dedicated history table because Admin owns flyway_schema_history.
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    table: flyway_interview_schema_history
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
+    clean-disabled: true
+
   # Redis配置
   data:
     redis:
@@ -78,6 +88,16 @@ python:
       connect: 5000      # 连接超时 5秒
       read: 600000       # 读取超时 10分钟 (SSE需要长时间)
       write: 30000       # 写入超时 30秒
+
+interview:
+  turn-attempt:
+    stale-after: ${TURN_ATTEMPT_STALE_AFTER:PT15M}
+    recovery-initial-delay: ${TURN_ATTEMPT_RECOVERY_INITIAL_DELAY:PT0S}
+    recovery-interval: ${TURN_ATTEMPT_RECOVERY_INTERVAL:PT1M}
+    executor:
+      core-size: ${TURN_ATTEMPT_EXECUTOR_CORE_SIZE:2}
+      max-size: ${TURN_ATTEMPT_EXECUTOR_MAX_SIZE:4}
+      queue-capacity: ${TURN_ATTEMPT_EXECUTOR_QUEUE_CAPACITY:100}
 
 # 日志配置
 logging:

@@ -81,7 +81,12 @@ class InterviewSession:
 class SessionManager:
     """会话管理器（支持内存缓存和数据库持久化）"""
     
-    def __init__(self):
+    def __init__(self, database=None):
+        if database is None:
+            from services.database import get_default_database
+
+            database = get_default_database()
+        self.database = database
         self.sessions: Dict[str, InterviewSession] = {}
     
     def create_session(
@@ -127,12 +132,12 @@ class SessionManager:
             会话对象，如果数据库中没有则返回None
         """
         try:
-            from services.database import get_db_session, InterviewRecord, init_db
+            from services.database import InterviewRecord
             
             # 确保数据库表已创建
-            init_db()
+            self.database.init_db()
             
-            db = get_db_session()
+            db = self.database.session()
             try:
                 record = db.query(InterviewRecord).filter(InterviewRecord.id == session_id).first()
                 

@@ -5,6 +5,11 @@ server:
 spring:
   application:
     name: ai-interviewer-evaluation
+  # Interview migrations are owned exclusively by Interview Service's
+  # flyway_interview_schema_history table. Evaluation must never auto-run them
+  # against the shared Admin-owned flyway_schema_history table.
+  flyway:
+    enabled: false
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   config:

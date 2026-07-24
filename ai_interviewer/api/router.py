@@ -36,6 +36,14 @@ from api.sse import (
 )
 from services.interview_service import interview_service
 from services.interview_session import InterviewStage, session_manager
+from services.branch_reconstruction import SnapshotContractError
+from services.database import get_default_database
+from services.durable_turn import (
+    DurableTurnProcessingError,
+    DurableTurnProcessor,
+    TurnIdempotencyConflict,
+    TurnProcessingInProgress,
+)
 from services.agent_runtime.manual_recorder import ManualFlowRecorder
 from services.observability.context import observability_trace
 from services.question_bank import QuestionBank
@@ -46,6 +54,19 @@ router = APIRouter(prefix="/interview", tags=["interview"])
 interviewer = Interviewer()
 question_bank = QuestionBank()
 resume_parser = ResumeParser()
+_durable_turn_processor = None
+
+
+def _get_durable_turn_processor() -> DurableTurnProcessor:
+    global _durable_turn_processor
+    if _durable_turn_processor is None:
+        database = get_default_database()
+        _durable_turn_processor = DurableTurnProcessor(
+            database=database,
+            session_manager=session_manager,
+            interviewer=interview_service.interviewer,
+        )
+    return _durable_turn_processor
 
 
 # 保留原有的简单对话接口（向后兼容）
@@ -112,8 +133,13 @@ def chat_stream(req: UnifiedChatRequest):
         prepared_session = None
         prepared_error = None
         generated_session_id = None
+        is_durable_turn = (
+            req.entrypoint == "turn_attempt"
+            or req.turn_id is not None
+            or req.branch_snapshot is not None
+        )
 
-        if req.session_id is None:
+        if not is_durable_turn and req.session_id is None:
             generated_session_id = str(uuid.uuid4())
             try:
                 prepared_session = session_manager.create_session(
@@ -128,7 +154,12 @@ def chat_stream(req: UnifiedChatRequest):
                 prepared_error = exc
 
         trace_python_session_id = (
-            req.session_id
+            (
+                req.branch_snapshot.get("branch_id")
+                if isinstance(req.branch_snapshot, dict)
+                else None
+            )
+            or req.session_id
             or (prepared_session.session_id if prepared_session else generated_session_id)
         )
         with observability_trace(
@@ -145,6 +176,88 @@ def chat_stream(req: UnifiedChatRequest):
             try:
                 if prepared_error is not None:
                     raise prepared_error
+
+                if is_durable_turn:
+                    if not req.turn_id or not isinstance(req.branch_snapshot, dict):
+                        raise SnapshotContractError(
+                            "INVALID_BRANCH_SNAPSHOT",
+                            "Durable turn requires turn_id and branch_snapshot",
+                        )
+                    durable_result = _get_durable_turn_processor().process(
+                        turn_id=req.turn_id,
+                        snapshot_payload=req.branch_snapshot,
+                        candidate_answer=req.message,
+                    )
+                    turn_metadata = {"turn_id": req.turn_id}
+                    yield _record_sse(
+                        recorder,
+                        format_sse(
+                            EVENT_STATUS,
+                            {
+                                "session_id": durable_result.python_session_id,
+                                "stage": durable_result.next_stage,
+                                **turn_metadata,
+                            },
+                        ),
+                    )
+                    if durable_result.score is not None:
+                        yield _record_sse(
+                            recorder,
+                            format_sse(
+                                EVENT_SCORE,
+                                {
+                                    "score": durable_result.score,
+                                    "feedback": durable_result.feedback or "",
+                                    **turn_metadata,
+                                },
+                            ),
+                        )
+                    if durable_result.question:
+                        yield _record_sse(
+                            recorder,
+                            format_sse(
+                                EVENT_QUESTION,
+                                {
+                                    "question": durable_result.question,
+                                    "next_stage": durable_result.next_stage,
+                                    **turn_metadata,
+                                },
+                            ),
+                        )
+                    if durable_result.final_message:
+                        for piece in stream_text_chunks(durable_result.final_message):
+                            yield _record_sse(
+                                recorder,
+                                format_sse(
+                                    EVENT_CHUNK,
+                                    {"content": piece, **turn_metadata},
+                                ),
+                            )
+                    result_payload = {
+                        "next_stage": durable_result.next_stage,
+                        "post_turn_state": durable_result.post_turn_state.model_dump(mode="json"),
+                        **turn_metadata,
+                    }
+                    if durable_result.next_question:
+                        result_payload["next_question"] = durable_result.next_question
+                    if durable_result.question:
+                        result_payload["question"] = durable_result.question
+                    yield _record_sse(
+                        recorder,
+                        format_sse(EVENT_RESULT, result_payload),
+                    )
+                    yield _record_sse(
+                        recorder,
+                        format_sse(
+                            EVENT_DONE,
+                            {
+                                "stage": durable_result.next_stage,
+                                "is_interview_complete": durable_result.interview_complete,
+                                **turn_metadata,
+                            },
+                        ),
+                    )
+                    return
 
                 if req.session_id:
                     session = interview_service.get_session(req.session_id)
@@ -274,13 +387,69 @@ def chat_stream(req: UnifiedChatRequest):
                         },
                     ),
                 )
+            except SnapshotContractError as exc:
+                trace.mark_error(exc.code, "Durable branch snapshot was rejected")
+                yield _record_sse(
+                    recorder,
+                    format_sse(
+                        EVENT_ERROR,
+                        {"code": exc.code, "message": "分支快照无效或版本不受支持"},
+                    ),
+                )
+            except TurnIdempotencyConflict:
+                trace.mark_error("TURN_IDEMPOTENCY_CONFLICT", "Durable turn payload conflict")
+                yield _record_sse(
+                    recorder,
+                    format_sse(
+                        EVENT_ERROR,
+                        {"code": "TURN_IDEMPOTENCY_CONFLICT", "message": "Turn ID 已用于不同请求"},
+                    ),
+                )
+            except TurnProcessingInProgress:
+                trace.mark_error("TURN_PROCESSING_IN_PROGRESS", "Durable turn is already processing")
+                yield _record_sse(
+                    recorder,
+                    format_sse(
+                        EVENT_ERROR,
+                        {"code": "TURN_PROCESSING_IN_PROGRESS", "message": "Turn 正在处理中"},
+                    ),
+                )
+            except DurableTurnProcessingError:
+                trace.mark_error("TURN_PROCESSING_FAILED", "Durable turn processing failed")
+                yield _record_sse(
+                    recorder,
+                    format_sse(
+                        EVENT_ERROR,
+                        {"code": "TURN_PROCESSING_FAILED", "message": "Turn 处理失败，可安全重试"},
+                    ),
+                )
             except ValueError as exc:
+                if is_durable_turn:
+                    trace.mark_error("TURN_PROCESSING_FAILED", "Durable turn processing failed")
+                    yield _record_sse(
+                        recorder,
+                        format_sse(
+                            EVENT_ERROR,
+                            {"code": "TURN_PROCESSING_FAILED", "message": "Turn 处理失败，可安全重试"},
+                        ),
+                    )
+                    return
                 trace.mark_error("BAD_REQUEST", str(exc))
                 yield _record_sse(
                     recorder,
                     format_sse(EVENT_ERROR, {"code": "BAD_REQUEST", "message": str(exc)}),
                 )
             except Exception as exc:
+                if is_durable_turn:
+                    trace.mark_error("TURN_PROCESSING_FAILED", "Durable turn processing failed")
+                    yield _record_sse(
+                        recorder,
+                        format_sse(
+                            EVENT_ERROR,
+                            {"code": "TURN_PROCESSING_FAILED", "message": "Turn 处理失败，可安全重试"},
+                        ),
+                    )
+                    return
                 trace.mark_error("INTERNAL_ERROR", str(exc))
                 yield _record_sse(
                     recorder,

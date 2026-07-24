@@ -12,6 +12,8 @@ public class ScoreDTO {
 
     private Long id;
     private String sessionId;
+    private String owningBranchId;
+    private Boolean inherited;
     private Integer questionIndex;
     private String questionType;
     private String question;

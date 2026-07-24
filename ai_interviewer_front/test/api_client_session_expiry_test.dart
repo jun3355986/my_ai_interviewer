@@ -7,12 +7,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ai_interviewer_front/api/api_client.dart';
+import 'package:ai_interviewer_front/services/pending_start_store.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({
       'accessToken': 'expired-access-token',
       'refreshToken': 'expired-refresh-token',
+      SharedPreferencesPendingStartStore.storageKey:
+          '{"turnId":"account-a-start","resumeId":null,"jobId":10}',
     });
   });
 
@@ -37,6 +40,10 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('accessToken'), isNull);
       expect(prefs.getString('refreshToken'), isNull);
+      expect(
+        prefs.getString(SharedPreferencesPendingStartStore.storageKey),
+        isNull,
+      );
       expect(sessionExpiredCalls, 1);
     },
   );

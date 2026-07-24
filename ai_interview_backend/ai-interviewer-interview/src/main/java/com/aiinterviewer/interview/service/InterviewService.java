@@ -5,7 +5,9 @@ import com.aiinterviewer.common.model.ErrorCode;
 import com.aiinterviewer.common.model.PageResult;
 import com.aiinterviewer.interview.dto.SessionDTO;
 import com.aiinterviewer.interview.entity.InterviewMessage;
+import com.aiinterviewer.interview.entity.InterviewLineage;
 import com.aiinterviewer.interview.entity.InterviewSession;
+import com.aiinterviewer.interview.mapper.InterviewLineageMapper;
 import com.aiinterviewer.interview.mapper.InterviewMessageMapper;
 import com.aiinterviewer.interview.mapper.InterviewSessionMapper;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -29,6 +32,8 @@ public class InterviewService {
 
     private final InterviewSessionMapper sessionMapper;
     private final InterviewMessageMapper messageMapper;
+    private final InterviewLineageMapper lineageMapper;
+    private final CompatibilitySessionWriteGuard writeGuard;
 
     /**
      * 阶段显示名称映射
@@ -78,9 +83,7 @@ public class InterviewService {
         if (session == null) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
-        if (!session.getUserId().equals(userId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED, "无权访问该会话");
-        }
+        requireCurrentOwnership(session, userId);
         return convertToDTO(session);
     }
 
@@ -93,17 +96,18 @@ public class InterviewService {
         if (session == null) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
-        if (!session.getUserId().equals(userId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED, "无权访问该会话");
-        }
-        if (session.getStatus() != 1) {
-            throw new BusinessException(ErrorCode.SESSION_COMPLETED, "会话已结束，无法取消");
-        }
-
-        session.setStatus(3); // 已取消
-        session.setFinishedAt(LocalDateTime.now());
-        session.setUpdatedAt(LocalDateTime.now());
-        sessionMapper.updateById(session);
+        writeGuard.executeOwnedActive(
+                session.getId(),
+                session.getLineageId(),
+                userId,
+                locked -> {
+                    InterviewSession current = locked.session();
+                    current.setStatus(3); // 已取消
+                    current.setFinishedAt(LocalDateTime.now());
+                    current.setUpdatedAt(LocalDateTime.now());
+                    sessionMapper.updateById(current);
+                    return null;
+                });
 
         log.info("Session {} cancelled by user {}", sessionId, userId);
     }
@@ -116,10 +120,17 @@ public class InterviewService {
         if (session == null) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
-        if (!session.getUserId().equals(userId)) {
+        requireCurrentOwnership(session, userId);
+        return messageMapper.selectBySessionId(session.getId());
+    }
+
+    private void requireCurrentOwnership(InterviewSession session, Long userId) {
+        InterviewLineage lineage = lineageMapper.selectById(session.getLineageId());
+        if (!Objects.equals(session.getUserId(), userId)
+                || lineage == null
+                || !Objects.equals(lineage.getUserId(), userId)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED, "无权访问该会话");
         }
-        return messageMapper.selectBySessionId(session.getId());
     }
 
     private InterviewSession findSessionByAnyId(String sessionId) {

@@ -12,7 +12,7 @@ from services.interview_session import (
     QuestionAnswer,
     session_manager,
 )
-from services.database import InterviewRecord, get_db_session, init_db
+from services.database import get_default_database
 from api.interviewer import Interviewer
 from services.resume_parser import ResumeParser
 
@@ -31,12 +31,29 @@ class InterviewService:
         "请说明Java线程池的核心参数及其作用？",
         "请说明Redis缓存穿透的常见解决方案？",
     ]
+
+    def __getattr__(self, name):
+        if name == "session_manager":
+            return session_manager
+        raise AttributeError(name)
     
-    def __init__(self):
-        self.interviewer = Interviewer()
+    def __init__(
+        self,
+        *,
+        interviewer=None,
+        session_manager_instance=None,
+        database=None,
+        persist_sessions: bool = True,
+    ):
+        self.interviewer = interviewer or Interviewer()
         self.resume_parser = ResumeParser()
-        # 初始化数据库
-        init_db()
+        self.session_manager = session_manager_instance or session_manager
+        self.database = database or getattr(self.session_manager, "database", None)
+        if self.database is None:
+            self.database = get_default_database()
+        self.persist_sessions = persist_sessions
+        if persist_sessions:
+            self.database.init_db()
 
     def _coerce_question_item(self, value) -> QuestionItem:
         return QuestionItem.from_legacy(value)
@@ -96,7 +113,7 @@ class InterviewService:
             面试会话
         """
         session_id = str(uuid.uuid4())
-        session = session_manager.create_session(
+        session = self.session_manager.create_session(
             session_id=session_id,
             resume_content=resume_content,
             job_requirements=job_requirements,
@@ -120,7 +137,7 @@ class InterviewService:
         Returns:
             包含问题和下一步动作的字典
         """
-        session = session_manager.get_session(session_id)
+        session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
         
@@ -151,7 +168,7 @@ class InterviewService:
         Returns:
             包含第一个项目问题和下一步动作的字典
         """
-        session = session_manager.get_session(session_id)
+        session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
         
@@ -214,7 +231,7 @@ class InterviewService:
         Returns:
             包含评分、反馈、下一个问题或阶段转换的字典
         """
-        session = session_manager.get_session(session_id)
+        session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
         
@@ -330,7 +347,7 @@ class InterviewService:
         Returns:
             包含第一个技术问题和阶段信息的字典
         """
-        session = session_manager.get_session(session_id)
+        session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
         
@@ -412,7 +429,7 @@ class InterviewService:
         Returns:
             包含评分、反馈、下一个问题的字典
         """
-        session = session_manager.get_session(session_id)
+        session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
         
@@ -485,7 +502,7 @@ class InterviewService:
         Returns:
             包含最终评分和反馈的字典
         """
-        session = session_manager.get_session(session_id)
+        session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
         
@@ -507,100 +524,28 @@ class InterviewService:
     
     def get_session(self, session_id: str) -> Optional[InterviewSession]:
         """获取会话"""
-        return session_manager.get_session(session_id)
+        return self.session_manager.get_session(session_id)
     
     def _save_session(self, session: InterviewSession):
         """保存会话到数据库"""
-        # 确保数据库表已创建
-        init_db()
-        
-        db = get_db_session()
-        try:
-            record = db.query(InterviewRecord).filter(InterviewRecord.id == session.session_id).first()
-            
-            if record:
-                # 更新
-                record.candidate_name = session.candidate_name
-                record.resume_content = session.resume_content
-                record.job_requirements = session.job_requirements
-                record.stage = session.stage.value
-                record.history = session.history
-                record.project_qa_list = [
-                    {
-                        "question": qa.question,
-                        "answer": qa.answer,
-                        "score": qa.score,
-                        "feedback": qa.feedback,
-                        "timestamp": qa.timestamp.isoformat(),
-                    }
-                    for qa in session.project_qa_list
-                ]
-                record.technical_qa_list = [
-                    {
-                        "question": qa.question,
-                        "answer": qa.answer,
-                        "score": qa.score,
-                        "feedback": qa.feedback,
-                        "timestamp": qa.timestamp.isoformat(),
-                    }
-                    for qa in session.technical_qa_list
-                ]
-                record.project_questions_count = session.project_questions_count
-                record.target_project_questions = session.target_project_questions
-                record.project_questions_pool = getattr(session, 'project_questions_pool', [])
-                record.technical_questions_pool = getattr(session, 'technical_questions_pool', [])
-                record.final_score = session.final_score
-                record.final_feedback = session.final_feedback
-                record.current_question_followup_count = session.current_question_followup_count
-                record.updated_at = session.updated_at
-            else:
-                # 创建
-                record = InterviewRecord(
-                    id=session.session_id,
-                    candidate_name=session.candidate_name,
-                    resume_content=session.resume_content,
-                    job_requirements=session.job_requirements,
-                    stage=session.stage.value,
-                    history=session.history,
-                    project_qa_list=[
-                        {
-                            "question": qa.question,
-                            "answer": qa.answer,
-                            "score": qa.score,
-                            "feedback": qa.feedback,
-                            "timestamp": qa.timestamp.isoformat(),
-                        }
-                        for qa in session.project_qa_list
-                    ],
-                    technical_qa_list=[
-                        {
-                            "question": qa.question,
-                            "answer": qa.answer,
-                            "score": qa.score,
-                            "feedback": qa.feedback,
-                            "timestamp": qa.timestamp.isoformat(),
-                        }
-                        for qa in session.technical_qa_list
-                    ],
-                    project_questions_count=session.project_questions_count,
-                    target_project_questions=session.target_project_questions,
-                    project_questions_pool=getattr(session, 'project_questions_pool', []),
-                    technical_questions_pool=getattr(session, 'technical_questions_pool', []),
-                    final_score=session.final_score,
-                    final_feedback=session.final_feedback,
-                    current_question_followup_count=session.current_question_followup_count,
-                    created_at=session.created_at,
-                    updated_at=session.updated_at,
-                )
-                db.add(record)
-            
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            print(f"保存会话失败: {e}")
-        finally:
-            db.close()
+        if self.persist_sessions:
+            self.database.save_session(session)
 
 
-# 全局服务实例
-interview_service = InterviewService()
+class _LazyInterviewService:
+    """Avoid model/provider initialization until a legacy route actually uses it."""
+
+    def __init__(self):
+        self._instance = None
+
+    def _get(self) -> InterviewService:
+        if self._instance is None:
+            self._instance = InterviewService()
+        return self._instance
+
+    def __getattr__(self, name):
+        return getattr(self._get(), name)
+
+
+# Backward-compatible global service handle, initialized on first real use.
+interview_service = _LazyInterviewService()

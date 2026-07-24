@@ -125,9 +125,9 @@ docker compose up -d --build python-ai frontend admin-web
 | gateway | 9000 | 9000 | 统一 API 网关 |
 | user | 9001 | 9001 | 用户服务 |
 | resume | 9002 | 9002 | 简历服务（依赖 MinIO、Python AI） |
-| interview | 9003 | 9003 | 面试服务（依赖 Python AI） |
+| interview | —（仅容器网络） | 9003 | 面试服务（依赖 Python AI，仅经 Gateway 访问） |
 | job | 9004 | 9004 | 职位服务 |
-| evaluation | 9005 | 9005 | 评估服务 |
+| evaluation | —（仅容器网络） | 9005 | 评估服务（仅经 Gateway 访问） |
 | notification | 9006 | 9006 | 通知服务（HTTP API 默认启动，RocketMQ 消费可选） |
 | admin | 9010 | 9010 | 后台管理服务，网关前缀 `/admin/**` |
 | python-ai | 8000 | 8000 | FastAPI AI 服务 |

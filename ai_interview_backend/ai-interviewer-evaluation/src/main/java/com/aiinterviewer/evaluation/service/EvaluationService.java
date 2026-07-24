@@ -7,8 +7,10 @@ import com.aiinterviewer.evaluation.dto.ScoreDTO;
 import com.aiinterviewer.evaluation.dto.StatisticsDTO;
 import com.aiinterviewer.evaluation.entity.Evaluation;
 import com.aiinterviewer.evaluation.mapper.EvaluationMapper;
+import com.aiinterviewer.interview.dto.ComposedAssessmentDTO;
 import com.aiinterviewer.interview.entity.ScoreRecord;
-import com.aiinterviewer.interview.mapper.ScoreRecordMapper;
+import com.aiinterviewer.interview.service.ComposedAssessmentService;
+import com.aiinterviewer.interview.service.EvaluationBranchGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,8 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * 评估服务
@@ -30,25 +34,31 @@ import java.util.List;
 public class EvaluationService {
 
     private final EvaluationMapper evaluationMapper;
-    private final ScoreRecordMapper scoreRecordMapper;
+    private final ComposedAssessmentService composedAssessmentService;
+    private final EvaluationBranchGuard evaluationBranchGuard;
 
     /**
      * 生成评估报告
      */
     @Transactional
     public EvaluationDTO generateReport(String sessionId, Long userId, Long jobId) {
+        evaluationBranchGuard.lockCompletedOwnedBranch(sessionId, userId);
         // 检查是否已存在评估
         Evaluation existing = evaluationMapper.selectBySessionId(sessionId);
         if (existing != null) {
+            if (!Objects.equals(existing.getUserId(), userId)) {
+                throw new BusinessException(ErrorCode.ACCESS_DENIED, "无权限查看此报告");
+            }
             return toDTO(existing);
         }
 
         // 获取评分记录
-        List<ScoreRecord> scores = scoreRecordMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ScoreRecord>()
-                        .eq(ScoreRecord::getSessionId, sessionId)
-                        .orderByAsc(ScoreRecord::getQuestionIndex)
-        );
+        List<ComposedAssessmentDTO> composedScores = composedAssessmentService.compose(
+                sessionId,
+                userId);
+        List<ScoreRecord> scores = composedScores.stream()
+                .map(this::toScoreRecord)
+                .toList();
 
         if (scores.isEmpty()) {
             throw new BusinessException(ErrorCode.EVALUATION_NOT_READY, "暂无评分数据");
@@ -96,6 +106,7 @@ public class EvaluationService {
      * 获取评估报告
      */
     public EvaluationDTO getReport(String sessionId, Long userId) {
+        composedAssessmentService.verifyOwnership(sessionId, userId);
         Evaluation evaluation = evaluationMapper.selectBySessionId(sessionId);
         if (evaluation == null) {
             return null;
@@ -118,7 +129,7 @@ public class EvaluationService {
      * 获取评分详情
      */
     public List<ScoreDTO> getScores(String sessionId, Long userId) {
-        // 验证权限
+        composedAssessmentService.verifyOwnership(sessionId, userId);
         Evaluation evaluation = evaluationMapper.selectBySessionId(sessionId);
         if (evaluation == null) {
             throw new BusinessException(ErrorCode.EVALUATION_NOT_FOUND, "评估报告不存在");
@@ -127,13 +138,9 @@ public class EvaluationService {
             throw new BusinessException(ErrorCode.ACCESS_DENIED, "无权限查看");
         }
 
-        List<ScoreRecord> scores = scoreRecordMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ScoreRecord>()
-                        .eq(ScoreRecord::getSessionId, sessionId)
-                        .orderByAsc(ScoreRecord::getQuestionIndex)
-        );
-
-        return scores.stream().map(this::toScoreDTO).toList();
+        return composedAssessmentService.compose(sessionId, userId).stream()
+                .map(score -> toScoreDTO(sessionId, score))
+                .toList();
     }
 
     /**
@@ -194,16 +201,30 @@ public class EvaluationService {
 
     private int calculateTechnicalScore(List<ScoreRecord> scores) {
         return (int) scores.stream()
-                .filter(s -> "technical".equals(s.getQuestionType()) && s.getScore() != null)
+                .filter(s -> isQuestionType(s, "technical") && s.getScore() != null)
                 .mapToInt(ScoreRecord::getScore)
                 .average()
                 .orElse(0);
     }
 
     private int calculateCommunicationScore(List<ScoreRecord> scores) {
-        // 基于所有回答的完整性和流畅度估算
-        long answeredCount = scores.stream().filter(s -> s.getAnswer() != null && s.getAnswer().length() > 20).count();
-        return answeredCount > 0 ? 75 + (int) (Math.random() * 20) : 60;
+        List<String> answers = scores.stream()
+                .map(ScoreRecord::getAnswer)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(answer -> !answer.isEmpty())
+                .toList();
+        if (answers.isEmpty()) {
+            return 60;
+        }
+
+        double averageCompleteness = answers.stream()
+                .mapToInt(answer -> Math.min(answer.codePointCount(0, answer.length()), 40))
+                .average()
+                .orElse(0);
+        int completenessPoints = (int) Math.round((averageCompleteness / 40.0) * 20.0);
+        int qualityPoints = (int) Math.round(calculateOverallScore(scores) * 0.15);
+        return Math.max(60, Math.min(95, 60 + completenessPoints + qualityPoints));
     }
 
     private int calculateLogicScore(List<ScoreRecord> scores) {
@@ -214,7 +235,7 @@ public class EvaluationService {
     private int calculateExperienceScore(List<ScoreRecord> scores) {
         // 基于项目问题得分估算
         return (int) scores.stream()
-                .filter(s -> "project".equals(s.getQuestionType()) && s.getScore() != null)
+                .filter(s -> isQuestionType(s, "project") && s.getScore() != null)
                 .mapToInt(ScoreRecord::getScore)
                 .average()
                 .orElse(0);
@@ -237,8 +258,8 @@ public class EvaluationService {
 
     private String generateStrengths(List<ScoreRecord> scores) {
         List<String> strengths = new ArrayList<>();
-        long technicalCount = scores.stream().filter(s -> "technical".equals(s.getQuestionType()) && s.getScore() != null && s.getScore() >= 80).count();
-        long projectCount = scores.stream().filter(s -> "project".equals(s.getQuestionType()) && s.getScore() != null && s.getScore() >= 80).count();
+        long technicalCount = scores.stream().filter(s -> isQuestionType(s, "technical") && s.getScore() != null && s.getScore() >= 80).count();
+        long projectCount = scores.stream().filter(s -> isQuestionType(s, "project") && s.getScore() != null && s.getScore() >= 80).count();
 
         if (technicalCount > 0) {
             strengths.add("扎实的" + (projectCount > 0 ? "技术基础和项目经验" : "技术基础"));
@@ -247,6 +268,15 @@ public class EvaluationService {
             strengths.add("丰富的项目实战经验");
         }
         return strengths.isEmpty() ? "具备基本的岗位能力" : String.join("，", strengths);
+    }
+
+    private boolean isQuestionType(ScoreRecord score, String canonicalType) {
+        if (score.getQuestionType() == null) {
+            return false;
+        }
+        String normalized = score.getQuestionType().trim().toLowerCase(Locale.ROOT);
+        return canonicalType.equals(normalized)
+                || (canonicalType + "_qna").equals(normalized);
     }
 
     private String generateWeaknesses(List<ScoreRecord> scores) {
@@ -309,10 +339,12 @@ public class EvaluationService {
         };
     }
 
-    private ScoreDTO toScoreDTO(ScoreRecord record) {
+    private ScoreDTO toScoreDTO(String requestedSessionId, ComposedAssessmentDTO record) {
         ScoreDTO dto = new ScoreDTO();
         dto.setId(record.getId());
-        dto.setSessionId(record.getSessionId());
+        dto.setSessionId(requestedSessionId);
+        dto.setOwningBranchId(record.getOwningBranchId());
+        dto.setInherited(record.getInherited());
         dto.setQuestionIndex(record.getQuestionIndex());
         dto.setQuestionType(record.getQuestionType());
         dto.setQuestion(record.getQuestion());
@@ -322,5 +354,20 @@ public class EvaluationService {
         dto.setIsFollowup(record.getIsFollowup());
         dto.setCreatedAt(record.getCreatedAt());
         return dto;
+    }
+
+    private ScoreRecord toScoreRecord(ComposedAssessmentDTO source) {
+        ScoreRecord record = new ScoreRecord();
+        record.setId(source.getId());
+        record.setSessionId(source.getOwningBranchId());
+        record.setQuestionIndex(source.getQuestionIndex());
+        record.setQuestionType(source.getQuestionType());
+        record.setQuestion(source.getQuestion());
+        record.setAnswer(source.getAnswer());
+        record.setScore(source.getScore());
+        record.setFeedback(source.getFeedback());
+        record.setIsFollowup(source.getIsFollowup());
+        record.setCreatedAt(source.getCreatedAt());
+        return record;
     }
 }

@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiinterviewer.interview.mapper.InterviewLineageMapper">
+
+    <resultMap id="lineageSummaryMap"
+               type="com.aiinterviewer.interview.projection.LineageSummaryRow">
+        <result property="lineageId" column="lineage_id"/>
+        <result property="rootSessionId" column="root_session_id"/>
+        <result property="candidateName" column="candidate_name"/>
+        <result property="resumeId" column="resume_id"/>
+        <result property="jobId" column="job_id"/>
+        <result property="jobTitle" column="job_title"/>
+        <result property="branchCount" column="branch_count"/>
+        <result property="activeBranchCount" column="active_branch_count"/>
+        <result property="completedBranchCount" column="completed_branch_count"/>
+        <result property="bestCompletedScore" column="best_completed_score"/>
+        <result property="latestActivityAt" column="latest_activity_at"/>
+        <result property="focusedBranchId" column="focused_branch_id"/>
+        <result property="focusedBranchStage" column="focused_branch_stage"/>
+        <result property="focusedBranchStatus" column="focused_branch_status"/>
+        <result property="projectQuestionsCount" column="project_questions_count"/>
+        <result property="targetProjectQuestions" column="target_project_questions"/>
+    </resultMap>
+
+    <sql id="lineageKeywordFilter">
+        <if test="keyword != null and keyword != ''">
+            AND (
+                root_session.candidate_name ILIKE CONCAT('%', #{keyword}, '%')
+                OR job.title ILIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+    </sql>
+
+    <sql id="focusedStatusFilter">
+        <choose>
+            <when test="status == 'active'">
+                AND focused_branch.focused_branch_status = 1
+            </when>
+            <when test="status == 'completed'">
+                AND focused_branch.focused_branch_status = 2
+            </when>
+            <when test="status == 'ended'">
+                AND focused_branch.focused_branch_status NOT IN (1, 2)
+            </when>
+        </choose>
+    </sql>
+
+    <select id="selectSummaryPage" resultMap="lineageSummaryMap">
+        WITH RECURSIVE owned_lineages AS (
+            SELECT *
+            FROM t_interview_lineage
+            WHERE user_id = #{userId}
+              AND archived = FALSE
+        ),
+        composed_path AS (
+            SELECT
+                root.id AS branch_id,
+                root.lineage_id,
+                ARRAY(
+                    SELECT message.id
+                    FROM t_interview_message message
+                    WHERE message.session_id = root.id
+                      AND message.delivery_status = 'completed'
+                    ORDER BY message.sequence, message.id
+                )::BIGINT[] AS message_ids
+            FROM owned_lineages lineage
+            JOIN t_interview_session root
+              ON root.id = lineage.root_session_id
+             AND root.user_id = #{userId}
+
+            UNION ALL
+
+            SELECT
+                child.id,
+                child.lineage_id,
+                parent.message_ids[
+                    1:array_position(parent.message_ids, child.fork_point_message_id)
+                ] || ARRAY(
+                    SELECT message.id
+                    FROM t_interview_message message
+                    WHERE message.session_id = child.id
+                      AND message.delivery_status = 'completed'
+                    ORDER BY message.sequence, message.id
+                )::BIGINT[]
+            FROM composed_path parent
+            JOIN t_interview_session child
+              ON child.parent_session_id = parent.branch_id
+             AND child.lineage_id = parent.lineage_id
+             AND child.user_id = #{userId}
+            WHERE array_position(parent.message_ids, child.fork_point_message_id)
+                  IS NOT NULL
+        ),
+        branch_stats AS (
+            SELECT
+                session.lineage_id,
+                COUNT(*) AS branch_count,
+                COUNT(*) FILTER (WHERE session.status = 1) AS active_branch_count,
+                COUNT(*) FILTER (WHERE session.status = 2) AS completed_branch_count,
+                MAX(COALESCE(
+                    session.last_business_activity_at,
+                    session.updated_at,
+                    session.created_at
+                )) AS latest_activity_at
+            FROM t_interview_session session
+            JOIN owned_lineages lineage
+              ON lineage.id = session.lineage_id
+            WHERE session.user_id = #{userId}
+            GROUP BY session.lineage_id
+        ),
+        composed_score_average AS (
+            SELECT
+                path.branch_id AS session_id,
+                ROUND(AVG(score.score))::INT AS average_score
+            FROM composed_path path
+            JOIN t_score_record score
+              ON (
+                    (
+                        score.question_message_id IS NOT NULL
+                        AND score.answer_message_id IS NOT NULL
+                        AND score.question_message_id = ANY(path.message_ids)
+                        AND score.answer_message_id = ANY(path.message_ids)
+                    )
+                    OR (
+                        score.question_message_id IS NULL
+                        AND score.answer_message_id IS NULL
+                        AND (
+                            score.session_id = path.branch_id
+                            OR (
+                                EXISTS (
+                                    SELECT 1
+                                    FROM t_interview_message question
+                                    JOIN t_interview_message answer
+                                      ON answer.session_id = question.session_id
+                                     AND answer.sequence = question.sequence + 1
+                                    WHERE question.session_id = score.session_id
+                                      AND question.role = 'ai'
+                                      AND answer.role = 'human'
+                                      AND question.delivery_status = 'completed'
+                                      AND answer.delivery_status = 'completed'
+                                      AND question.content = score.question
+                                      AND answer.content = score.answer
+                                      AND question.id = ANY(path.message_ids)
+                                      AND answer.id = ANY(path.message_ids)
+                                )
+                                AND NOT EXISTS (
+                                    SELECT 1
+                                    FROM t_interview_message question
+                                    JOIN t_interview_message answer
+                                      ON answer.session_id = question.session_id
+                                     AND answer.sequence = question.sequence + 1
+                                    WHERE question.session_id = score.session_id
+                                      AND question.role = 'ai'
+                                      AND answer.role = 'human'
+                                      AND question.delivery_status = 'completed'
+                                      AND answer.delivery_status = 'completed'
+                                      AND question.content = score.question
+                                      AND answer.content = score.answer
+                                      AND NOT (
+                                          question.id = ANY(path.message_ids)
+                                          AND answer.id = ANY(path.message_ids)
+                                      )
+                                )
+                            )
+                        )
+                    )
+                 )
+            WHERE score.score IS NOT NULL
+            GROUP BY path.branch_id
+        ),
+        best_score AS (
+            SELECT
+                session.lineage_id,
+                MAX(COALESCE(evaluation.overall_score, score_average.average_score))
+                    AS best_completed_score
+            FROM t_interview_session session
+            JOIN owned_lineages lineage
+                ON lineage.id = session.lineage_id
+            LEFT JOIN t_evaluation evaluation
+                ON evaluation.session_id = session.id
+               AND evaluation.user_id = #{userId}
+               AND evaluation.user_id = session.user_id
+            LEFT JOIN composed_score_average score_average
+                ON score_average.session_id = session.id
+            WHERE session.status = 2
+              AND session.user_id = #{userId}
+            GROUP BY session.lineage_id
+        ),
+        focused_branch AS (
+            SELECT DISTINCT ON (session.lineage_id)
+                session.lineage_id,
+                session.id AS focused_branch_id,
+                session.stage AS focused_branch_stage,
+                session.status AS focused_branch_status,
+                session.project_questions_count,
+                session.target_project_questions
+            FROM t_interview_session session
+            JOIN owned_lineages lineage
+              ON lineage.id = session.lineage_id
+            WHERE session.user_id = #{userId}
+            ORDER BY
+                session.lineage_id,
+                CASE session.status
+                    WHEN 1 THEN 0
+                    WHEN 2 THEN 1
+                    ELSE 2
+                END,
+                COALESCE(
+                    session.last_business_activity_at,
+                    session.updated_at,
+                    session.created_at
+                ) DESC,
+                session.id DESC
+        )
+        SELECT
+            lineage.id AS lineage_id,
+            lineage.root_session_id,
+            root_session.candidate_name,
+            root_session.resume_id,
+            root_session.job_id,
+            job.title AS job_title,
+            branch_stats.branch_count,
+            branch_stats.active_branch_count,
+            branch_stats.completed_branch_count,
+            best_score.best_completed_score,
+            GREATEST(
+                lineage.last_business_activity_at,
+                branch_stats.latest_activity_at
+            ) AS latest_activity_at,
+            focused_branch.focused_branch_id,
+            focused_branch.focused_branch_stage,
+            focused_branch.focused_branch_status,
+            focused_branch.project_questions_count,
+            focused_branch.target_project_questions
+        FROM owned_lineages lineage
+        JOIN t_interview_session root_session
+            ON root_session.id = lineage.root_session_id
+           AND root_session.user_id = #{userId}
+        JOIN branch_stats
+            ON branch_stats.lineage_id = lineage.id
+        JOIN focused_branch
+            ON focused_branch.lineage_id = lineage.id
+        LEFT JOIN best_score
+            ON best_score.lineage_id = lineage.id
+        LEFT JOIN t_job job
+            ON job.id = root_session.job_id
+        WHERE 1 = 1
+        <include refid="lineageKeywordFilter"/>
+        <include refid="focusedStatusFilter"/>
+        <choose>
+            <when test="sortBy == 'score'">
+                ORDER BY
+                    best_score.best_completed_score DESC NULLS LAST,
+                    GREATEST(
+                        lineage.last_business_activity_at,
+                        branch_stats.latest_activity_at
+                    ) DESC,
+                    lineage.id DESC
+            </when>
+            <otherwise>
+                ORDER BY
+                    GREATEST(
+                        lineage.last_business_activity_at,
+                        branch_stats.latest_activity_at
+                    ) DESC,
+                    lineage.id DESC
+            </otherwise>
+        </choose>
+        LIMIT #{limit}
+        OFFSET #{offset}
+    </select>
+
+    <select id="countSummaries" resultType="java.lang.Long">
+        WITH owned_lineages AS (
+            SELECT *
+            FROM t_interview_lineage
+            WHERE user_id = #{userId}
+              AND archived = FALSE
+        ),
+        focused_branch AS (
+            SELECT DISTINCT ON (session.lineage_id)
+                session.lineage_id,
+                session.status AS focused_branch_status
+            FROM t_interview_session session
+            JOIN owned_lineages lineage
+              ON lineage.id = session.lineage_id
+            WHERE session.user_id = #{userId}
+            ORDER BY
+                session.lineage_id,
+                CASE session.status
+                    WHEN 1 THEN 0
+                    WHEN 2 THEN 1
+                    ELSE 2
+                END,
+                COALESCE(
+                    session.last_business_activity_at,
+                    session.updated_at,
+                    session.created_at
+                ) DESC,
+                session.id DESC
+        )
+        SELECT COUNT(*)
+        FROM owned_lineages lineage
+        JOIN t_interview_session root_session
+            ON root_session.id = lineage.root_session_id
+           AND root_session.user_id = #{userId}
+        JOIN focused_branch
+            ON focused_branch.lineage_id = lineage.id
+        LEFT JOIN t_job job
+            ON job.id = root_session.job_id
+        WHERE 1 = 1
+        <include refid="lineageKeywordFilter"/>
+        <include refid="focusedStatusFilter"/>
+    </select>
+
+</mapper>

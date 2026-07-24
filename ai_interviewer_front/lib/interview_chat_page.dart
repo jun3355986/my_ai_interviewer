@@ -15,7 +15,9 @@ class InterviewChatPage extends StatefulWidget {
 
 class _InterviewChatPageState extends State<InterviewChatPage> {
   final TextEditingController _messageController = TextEditingController();
+  final TextEditingController _recoveryController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  String? _recoveryTurnId;
 
   // 面试阶段
   final List<String> _stages = ['开场', '自我介绍', '项目经验', '技术问答', '总结'];
@@ -24,8 +26,18 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
   final int _elapsedSeconds = 2; // 已进行的秒数
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<InterviewService>().attachToActiveAttempt();
+    });
+  }
+
+  @override
   void dispose() {
     _messageController.dispose();
+    _recoveryController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -57,9 +69,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
             _buildProgressIndicator(interviewService),
 
             // 对话区域
-            Expanded(
-              child: _buildChatArea(interviewService),
-            ),
+            Expanded(child: _buildChatArea(interviewService)),
 
             // 输入区域
             _buildInputArea(interviewService),
@@ -76,10 +86,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(
-          bottom: BorderSide(
-            color: Color(0xFFE5E7EB),
-            width: 0.5,
-          ),
+          bottom: BorderSide(color: Color(0xFFE5E7EB), width: 0.5),
         ),
       ),
       child: Row(
@@ -133,25 +140,19 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
             children: [
               Text(
                 '已进行 ${_formatTime(_elapsedSeconds)}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF6A7282),
-                ),
+                style: const TextStyle(fontSize: 12, color: Color(0xFF6A7282)),
               ),
               const Text(
                 '问题',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF6A7282),
-                ),
+                style: TextStyle(fontSize: 12, color: Color(0xFF6A7282)),
               ),
             ],
           ),
           const SizedBox(width: 12),
 
-          // 结束面试按钮
+          // 退出按钮只离开页面并保留进度；完成状态必须来自持久化面试流程。
           TextButton(
-            onPressed: () => _endInterview(context),
+            onPressed: () => _showExitDialog(context),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               backgroundColor: const Color(0xFFFFE8E8),
@@ -160,7 +161,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
               ),
             ),
             child: const Text(
-              '结束面试',
+              '退出面试',
               style: TextStyle(
                 fontSize: 13,
                 color: Color(0xFFEF4444),
@@ -200,8 +201,8 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
                           color: isCompleted
                               ? const Color(0xFF00C950)
                               : isCurrent
-                                  ? const Color(0xFF2B7FFF)
-                                  : const Color(0xFFE5E7EB),
+                              ? const Color(0xFF2B7FFF)
+                              : const Color(0xFFE5E7EB),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -259,14 +260,108 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
 
   /// 对话区域
   Widget _buildChatArea(InterviewService service) {
-    return ListView.builder(
+    _syncRecoveryController(service);
+    return ListView(
       controller: _scrollController,
       padding: const EdgeInsets.all(16),
-      itemCount: service.messages.length,
-      itemBuilder: (context, index) {
-        final message = service.messages[index];
-        return _buildMessageBubble(message);
-      },
+      children: [
+        ...service.messages.map(_buildMessageBubble),
+        if (service.isProcessing) _buildProcessingCard(service),
+        if (service.recoveryAttempt != null) _buildRecoveryCard(service),
+        if (service.messages.isEmpty &&
+            !service.isProcessing &&
+            service.recoveryAttempt == null)
+          if (service.replayError != null)
+            _buildReplayErrorCard(service)
+          else
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(child: Text('正在加载持久化面试记录...')),
+            ),
+      ],
+    );
+  }
+
+  Widget _buildReplayErrorCard(InterviewService service) {
+    return Card(
+      key: const Key('chat-replay-error'),
+      color: const Color(0xFFFFF7ED),
+      child: ListTile(
+        leading: const Icon(Icons.sync_problem, color: Color(0xFFB45309)),
+        title: const Text('持久化面试记录加载失败'),
+        subtitle: Text(service.replayError ?? '请稍后重试'),
+        trailing: TextButton(
+          key: const Key('chat-replay-retry'),
+          onPressed: service.refreshReplay,
+          child: const Text('重新加载'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProcessingCard(InterviewService service) {
+    return Card(
+      key: const Key('chat-processing-card'),
+      color: const Color(0xFFEFF6FF),
+      child: ListTile(
+        leading: const SizedBox.square(
+          dimension: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+        title: const Text('本轮正在后台生成'),
+        subtitle: const Text('可立即退出；后台处理不会因离开页面取消。'),
+        trailing: TextButton(
+          onPressed: service.cancelActiveAttempt,
+          child: const Text('取消本轮'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecoveryCard(InterviewService service) {
+    final recovery = service.recoveryAttempt!;
+    return Card(
+      key: const Key('chat-recovery-card'),
+      color: const Color(0xFFFFF7ED),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '本轮需要恢复：${recovery.status}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            if (recovery.errorCode != null) Text('错误代码：${recovery.errorCode}'),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('chat-recovery-field'),
+              controller: _recoveryController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: '重试内容',
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton(
+                  onPressed: () =>
+                      service.retryRecovery(_recoveryController.text),
+                  child: const Text('重试本轮'),
+                ),
+                OutlinedButton(
+                  onPressed: service.discardRecovery,
+                  child: const Text('丢弃本轮'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -275,8 +370,9 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
-        mainAxisAlignment:
-            message.isAI ? MainAxisAlignment.start : MainAxisAlignment.end,
+        mainAxisAlignment: message.isAI
+            ? MainAxisAlignment.start
+            : MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (message.isAI) ...[
@@ -288,11 +384,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
                 color: const Color(0xFF2B7FFF),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
-                Icons.smart_toy,
-                size: 20,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.smart_toy, size: 20, color: Colors.white),
             ),
             const SizedBox(width: 12),
           ],
@@ -300,13 +392,16 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
           // 消息内容
           Flexible(
             child: Column(
-              crossAxisAlignment:
-                  message.isAI ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+              crossAxisAlignment: message.isAI
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.end,
               children: [
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: message.isAI ? Colors.white : const Color(0xFF2B7FFF),
+                    color: message.isAI
+                        ? Colors.white
+                        : const Color(0xFF2B7FFF),
                     borderRadius: BorderRadius.circular(16).copyWith(
                       topLeft: message.isAI ? const Radius.circular(4) : null,
                       topRight: !message.isAI ? const Radius.circular(4) : null,
@@ -326,13 +421,17 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
                         message.content,
                         style: TextStyle(
                           fontSize: 15,
-                          color: message.isAI ? const Color(0xFF1E2939) : Colors.white,
+                          color: message.isAI
+                              ? const Color(0xFF1E2939)
+                              : Colors.white,
                           height: 1.5,
                         ),
                       ),
                       if (message.media.isNotEmpty) ...[
                         const SizedBox(height: 12),
-                        ...message.media.map((media) => _buildMediaCard(context, media)),
+                        ...message.media.map(
+                          (media) => _buildMediaCard(context, media),
+                        ),
                       ],
                     ],
                   ),
@@ -389,7 +488,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
                 fit: BoxFit.cover,
                 height: 180,
                 width: double.infinity,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, _, _) => Container(
                   height: 120,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -425,7 +524,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
           child: Image.network(
             media.url,
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Padding(
+            errorBuilder: (_, _, _) => const Padding(
               padding: EdgeInsets.all(32),
               child: Text('图片加载失败，请稍后重试'),
             ),
@@ -437,6 +536,34 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
 
   /// 输入区域
   Widget _buildInputArea(InterviewService service) {
+    if (service.isCurrentBranchCompleted) {
+      return _buildReadOnlyNotice(
+        icon: Icons.lock_outline,
+        text: '该面试分支已结束，仅支持回放历史对话。',
+      );
+    }
+    if (service.isProcessing) {
+      return _buildReadOnlyNotice(
+        icon: Icons.hourglass_top,
+        text: '本轮正在后台生成，等待持久化结果后才能继续。',
+      );
+    }
+    if (service.recoveryAttempt != null) {
+      return _buildReadOnlyNotice(
+        icon: Icons.warning_amber_rounded,
+        text: '请先重试或丢弃失败的本轮。',
+      );
+    }
+    if (!service.canReplyAtTail) {
+      return _buildReadOnlyNotice(
+        icon: Icons.hourglass_top,
+        text: service.currentTranscript == null
+            ? service.replayError == null
+                  ? '正在加载持久化面试记录，暂时不能提交。'
+                  : '持久化面试记录加载失败，请先重新加载。'
+            : '当前没有等待回答的问题，请返回回放页刷新状态。',
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -459,11 +586,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
               color: const Color(0xFFF3F4F6),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.mic,
-              size: 22,
-              color: Color(0xFF6A7282),
-            ),
+            child: const Icon(Icons.mic, size: 22, color: Color(0xFF6A7282)),
           ),
           const SizedBox(width: 12),
 
@@ -476,6 +599,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: TextField(
+                key: const Key('chat-message-field'),
                 controller: _messageController,
                 enabled: !service.isStreaming,
                 decoration: InputDecoration(
@@ -498,6 +622,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
 
           // 发送按钮
           GestureDetector(
+            key: const Key('chat-send'),
             onTap: () => _sendMessage(service),
             child: Container(
               width: 44,
@@ -519,11 +644,38 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.send,
-                size: 20,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.send, size: 20, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyNotice({required IconData icon, required String text}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF6A7282)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Color(0xFF6A7282)),
             ),
           ),
         ],
@@ -532,13 +684,31 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
   }
 
   /// 发送消息
-  void _sendMessage(InterviewService service) {
+  Future<void> _sendMessage(InterviewService service) async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
     if (service.isStreaming) return;
 
-    _messageController.clear();
-    service.sendMessage(text);
+    await service.sendMessage(text);
+    if (service.hasTailDraftForCurrentBranch) {
+      _messageController.text = service.tailDraft;
+      _messageController.selection = TextSelection.collapsed(
+        offset: _messageController.text.length,
+      );
+    } else {
+      _messageController.clear();
+    }
+  }
+
+  void _syncRecoveryController(InterviewService service) {
+    final recovery = service.recoveryAttempt;
+    if (recovery != null && recovery.turnId != _recoveryTurnId) {
+      _recoveryTurnId = recovery.turnId;
+      _recoveryController.text = recovery.candidateAnswer;
+    } else if (recovery == null && _recoveryTurnId != null) {
+      _recoveryTurnId = null;
+      _recoveryController.clear();
+    }
   }
 
   /// 格式化时间
@@ -550,11 +720,16 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
 
   /// 显示退出对话框
   void _showExitDialog(BuildContext context) {
+    final isStreaming = context.read<InterviewService>().isStreaming;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('确认退出'),
-        content: const Text('退出后本次面试进度将丢失，确定要退出吗？'),
+        content: Text(
+          isStreaming
+              ? '此前已提交的进度已保存，但本轮结果尚未确认提交。退出后请稍后从面试历史刷新，确定退出吗？'
+              : '当前已提交的面试进度已保存，可稍后从面试历史继续。确定退出吗？',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -563,42 +738,14 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.pop(context);
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/home',
+                (route) => false,
+              );
             },
-            child: const Text(
-              '确定退出',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('确定退出', style: TextStyle(color: Colors.red)),
           ),
-        ],
-      ),
-    );
-  }
-
-  /// 结束面试
-  void _endInterview(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('结束面试'),
-        content: const Text('确定要结束本次面试吗？结束后将生成面试报告。'),
-        actions: [
-	          TextButton(
-	            onPressed: () => Navigator.pop(context),
-	            child: const Text('继续面试'),
-	          ),
-	          TextButton(
-	            onPressed: () {
-	              Navigator.pop(context);
-	              final service = context.read<InterviewService>();
-	              Navigator.pushReplacementNamed(
-	                context,
-	                '/result',
-	                arguments: service.buildResult(),
-	              );
-	            },
-	            child: const Text('结束面试'),
-	          ),
         ],
       ),
     );

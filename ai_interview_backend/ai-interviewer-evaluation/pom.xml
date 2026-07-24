@@ -27,6 +27,16 @@
         <dependency>
             <groupId>com.aiinterviewer</groupId>
             <artifactId>ai-interviewer-interview</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.flywaydb</groupId>
+                    <artifactId>flyway-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.flywaydb</groupId>
+                    <artifactId>flyway-database-postgresql</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Spring Web -->

@@ -16,7 +16,24 @@ class UploadResumePage extends StatefulWidget {
 class _UploadResumePageState extends State<UploadResumePage> {
   bool _hasUploadedFile = false;
   String? _uploadedFileName;
-  String? _resumeId;
+  int? _resumeId;
+  int? _jobId;
+  bool _starting = false;
+  bool _routeInitialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_routeInitialized) return;
+    _routeInitialized = true;
+    final arguments = ModalRoute.of(context)?.settings.arguments;
+    final rawJobId = arguments is Map ? arguments['jobId'] : arguments;
+    _jobId = switch (rawJobId) {
+      int value => value,
+      String value => int.tryParse(value),
+      _ => null,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +150,7 @@ class _UploadResumePageState extends State<UploadResumePage> {
   /// 上传区域
   Widget _buildUploadArea(ResumeService resumeService) {
     return GestureDetector(
-      onTap: resumeService.isLoading ? null : _handleUpload,
+      onTap: resumeService.isLoading || _starting ? null : _handleUpload,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 48),
@@ -286,8 +303,9 @@ class _UploadResumePageState extends State<UploadResumePage> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _hasUploadedFile
-                  ? () => _navigateToChat(context)
+              key: const Key('start-with-resume'),
+              onPressed: _hasUploadedFile && !_starting
+                  ? _navigateToChat
                   : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2B7FFF),
@@ -300,7 +318,11 @@ class _UploadResumePageState extends State<UploadResumePage> {
                 elevation: 0,
               ),
               child: Text(
-                _hasUploadedFile ? '继续' : '请先上传简历',
+                _starting
+                    ? '正在创建面试...'
+                    : _hasUploadedFile
+                    ? '继续'
+                    : '请先上传简历',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -312,10 +334,11 @@ class _UploadResumePageState extends State<UploadResumePage> {
 
           // 跳过按钮
           TextButton(
-            onPressed: () => _navigateToChat(context, skip: true),
-            child: const Text(
-              '跳过此步骤',
-              style: TextStyle(fontSize: 14, color: Color(0xFF6A7282)),
+            key: const Key('skip-resume-start'),
+            onPressed: _starting ? null : () => _navigateToChat(skip: true),
+            child: Text(
+              _starting ? '正在创建面试...' : '跳过此步骤',
+              style: const TextStyle(fontSize: 14, color: Color(0xFF6A7282)),
             ),
           ),
         ],
@@ -326,7 +349,7 @@ class _UploadResumePageState extends State<UploadResumePage> {
   /// 处理上传
   Future<void> _handleUpload() async {
     final resumeService = Provider.of<ResumeService>(context, listen: false);
-    
+
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
@@ -338,8 +361,11 @@ class _UploadResumePageState extends State<UploadResumePage> {
 
       if (!mounted) return;
 
-      final resumeId = await resumeService.uploadResume(file);
-      
+      final uploadedResumeId = await resumeService.uploadResume(file);
+      final resumeId = uploadedResumeId == null
+          ? null
+          : int.tryParse(uploadedResumeId);
+
       if (resumeId != null) {
         if (mounted) {
           setState(() {
@@ -347,41 +373,48 @@ class _UploadResumePageState extends State<UploadResumePage> {
             _uploadedFileName = result.files.single.name;
             _resumeId = resumeId;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('上传成功')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('上传成功')));
         }
       } else {
-         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text(resumeService.error ?? '上传失败')),
-           );
-         }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                resumeService.error ??
+                    (uploadedResumeId == null ? '上传失败' : '简历 ID 格式无效'),
+              ),
+            ),
+          );
+        }
       }
     }
   }
 
   /// 导航到面试对话页
-  Future<void> _navigateToChat(BuildContext context, {bool skip = false}) async {
-    // Start the interview with the resumeId if we have it
-    final interviewService = Provider.of<InterviewService>(context, listen: false);
-    
-    // We should pass resumeId and potentially jobId (if we have it from previous page args)
-    // Assuming jobId is not passed here yet, we pass null.
-    // If we skipped, resumeId is null.
-    
-    if (!skip && _resumeId != null) {
-      // Start real interview logic
-      interviewService.startNewInterview(_resumeId!, null);
-    } else {
-      // Demo mode or skip
-      // We still need to start interview but maybe with empty resumeId? 
-      // Backend says resumeId is required for first chat.
-      // If user skips, maybe we can't really start? 
-      // The instruction says "On Continue: navigate to /chat and pass resumeId".
-      // If skipped, maybe we just go there.
+  Future<void> _navigateToChat({bool skip = false}) async {
+    if (_starting) return;
+    setState(() => _starting = true);
+    final interviewService = Provider.of<InterviewService>(
+      context,
+      listen: false,
+    );
+    try {
+      await interviewService.startNewInterview(
+        resumeId: skip ? null : _resumeId,
+        jobId: _jobId,
+      );
+      if (!mounted) return;
+      Navigator.pushNamed(context, '/chat');
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Bad state: ', '');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('创建面试失败：$message')));
+    } finally {
+      if (mounted) setState(() => _starting = false);
     }
-
-    Navigator.pushNamed(context, '/chat');
   }
 }

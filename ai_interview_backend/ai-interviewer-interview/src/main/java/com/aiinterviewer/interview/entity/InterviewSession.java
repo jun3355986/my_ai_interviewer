@@ -86,13 +86,13 @@ public class InterviewSession implements Serializable {
      * 项目问题池(JSON)
      */
     @TableField(typeHandler = JacksonTypeHandler.class)
-    private List<String> projectQuestionsPool;
+    private List<Object> projectQuestionsPool;
 
     /**
      * 技术问题池(JSON)
      */
     @TableField(typeHandler = JacksonTypeHandler.class)
-    private List<String> technicalQuestionsPool;
+    private List<Object> technicalQuestionsPool;
 
     /**
      * 当前追问计数
@@ -103,6 +103,46 @@ public class InterviewSession implements Serializable {
      * Python后端会话ID
      */
     private String pythonSessionId;
+
+    /**
+     * 面试谱系ID
+     */
+    private String lineageId;
+
+    /**
+     * 父分支会话ID，根分支为空
+     */
+    private String parentSessionId;
+
+    /**
+     * 实际继承上下文的分叉消息ID
+     */
+    private Long forkPointMessageId;
+
+    /**
+     * 用户在回放中选择的触发消息ID
+     */
+    private Long forkTriggerMessageId;
+
+    /**
+     * 分支显示名称
+     */
+    private String branchLabel;
+
+    /**
+     * 分支乐观锁版本
+     */
+    private Long branchVersion;
+
+    /**
+     * 最近有效业务消息时间
+     */
+    private LocalDateTime lastBusinessActivityAt;
+
+    /**
+     * 是否由旧会话迁移而来
+     */
+    private Boolean legacyMigrated;
 
     /**
      * 最后一个问题

@@ -1,5 +1,6 @@
 package com.aiinterviewer.interview.dto;
 
+import com.aiinterviewer.interview.model.BranchSnapshot;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
@@ -33,6 +34,12 @@ public class PythonChatRequest implements Serializable {
      */
     @JsonProperty("agent_run_id")
     private String agentRunId;
+
+    @JsonProperty("turn_id")
+    private String turnId;
+
+    @JsonProperty("branch_snapshot")
+    private BranchSnapshot branchSnapshot;
 
     /**
      * Java面试会话ID

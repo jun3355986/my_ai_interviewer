@@ -29,6 +29,48 @@ cd ai_interviewer_front
 flutter test test/api_client_session_expiry_test.dart
 ```
 
+The real-history, replay, resume-hydration, and early-exit regressions can be run together with:
+
+```bash
+cd ai_interviewer_front
+flutter test \
+  test/interview_resume_hydration_test.dart \
+  test/interview_history_page_test.dart \
+  test/history_detail_replay_test.dart \
+  test/interview_exit_preserves_progress_test.dart
+```
+
+The Task 4 durable start, API/service state machine, responsive replay, history filtering, and maintained read/exit regressions can be run together with:
+
+```bash
+cd ai_interviewer_front
+flutter test --no-pub \
+  test/interview_replay_contract_test.dart \
+  test/interview_replay_service_test.dart \
+  test/interview_replay_ui_test.dart \
+  test/interview_durable_start_widget_test.dart \
+  test/interview_history_page_test.dart \
+  test/interview_resume_hydration_test.dart \
+  test/history_detail_replay_test.dart \
+  test/interview_exit_preserves_progress_test.dart
+flutter analyze --no-pub
+```
+
+The durable-start widget fake keeps its processing SSE connection open so the start-page attachment and Chat-page restoration exercise the real single-flight rule. `InterviewService` persists only the non-secret pending start tuple (`turnId`, `resumeId`, `jobId`) through an injectable `PendingStartStore`; production uses SharedPreferences and deterministic tests use an in-memory store. The key is saved before the HTTP request, reused after service reconstruction for an exact retry, replaced when the requested resume/job payload changes, and conditionally cleared only when the successful response still matches that key. Logout, a new successful login, and protected-request session expiry clear the pending tuple so one account cannot inherit another account's opening retry.
+
+An empty or failed Attempt event stream is treated as a disconnect. One business `attachToActiveAttempt()` call owns the bounded reconnect loop with default 250 ms, 500 ms, and 1 second delays. Tests inject the delay function to verify the retry ceiling without sleeping, and verify that a branch switch or replacement Attempt prevents the old delayed attachment from subscribing or refreshing canonical state.
+
+On a workstation without a local Flutter SDK, use the repository's cached packages with the stable Flutter container. `flutter pub get --offline` may rewrite SDK-owned transitive lock entries when the container SDK differs from the repository SDK; do not retain those unrelated lockfile changes.
+
+```bash
+docker run --rm \
+  -v "$PWD/ai_interviewer_front:/workspace" \
+  -v "$HOME/.pub-cache:/root/.pub-cache" \
+  -w /workspace \
+  ghcr.io/cirruslabs/flutter:stable \
+  bash -lc $'set -e\nflutter pub get --offline\nflutter test'
+```
+
 ## Python AI Unit Tests
 
 Python AI unit tests live under `ai_interviewer/tests` and use pytest through uv.
@@ -45,6 +87,38 @@ cd ai_interviewer
 uv sync --group dev
 ```
 
+Java-authoritative snapshot reconstruction and durable `turn_id` idempotency use deterministic fakes and temporary storage only:
+
+```bash
+cd ai_interviewer
+uv run pytest \
+  tests/test_database_injection.py \
+  tests/test_branch_snapshot_reconstruction.py \
+  tests/test_durable_turn_processor.py \
+  tests/test_durable_turn_router.py \
+  -q
+```
+
+Run the maintained Python unit suite with:
+
+```bash
+cd ai_interviewer
+uv run pytest tests -q
+```
+
+The repository-root `test_interview.py` is a live HTTP dual-agent simulation, not an isolated unit test. A bare `uv run pytest -q` also collects that harness and requires a compatible service at its configured `BASE_URL`; use `uv run pytest tests -q` for the deterministic full unit suite.
+
+Python storage isolation variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AI_INTERVIEW_DB_PATH` | `ai_interviewer/storage/database/interviews.db` | Overrides the replaceable session cache and restart-safe turn ledger SQLite file. Tests set this to an OS temporary path before importing service modules. |
+| `AI_INTERVIEW_VECTOR_DB_PATH` | `ai_interviewer/storage/vector_db` | Overrides the Chroma persistence directory. Tests set this to an OS temporary directory so collection cannot create or update repository/runtime vector files. |
+
+The durable ledger uses owner-and-status compare-and-swap fencing for stale takeover, completion, and failure cleanup. A successful completion writes the durable result and replaceable SQLite session cache in one transaction; only after that transaction commits may the in-memory cache be published. Storage/acquisition/replay failures cross the API boundary as sanitized durable errors.
+
+The supported Java model call is bounded at 10 minutes. Python's default stale-processing lease is 15 minutes, and configuration at or below the supported call timeout is rejected. This guarantees that a legitimate request still inside the supported model-call duration cannot be taken over as stale; if the Java timeout changes, update and re-verify the Python lease invariant in the same change.
+
 ## Java Unit Tests
 
 Java admin unit and schema tests run with local Maven and JDK 21:
@@ -60,6 +134,97 @@ The backend monorepo modules currently inherit an older default Surefire plugin 
 cd ai_interview_backend
 env JAVA_HOME=$HOME/.jenv/versions/21 PATH=$HOME/.jenv/versions/21/bin:$PATH mvn -pl ai-interviewer-interview test-compile org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test -Dtest=InterviewUsernamePropagationTest
 ```
+
+Interview Flyway migration tests use Testcontainers with PostgreSQL 16 and require a running Docker daemon. Resolve the effective JDK from jenv rather than macOS `java_home`, which may select an unrelated JDK on this workstation:
+
+```bash
+cd ai_interview_backend
+JENV_ROOT=$HOME/.jenv \
+JAVA_HOME=$(/opt/homebrew/bin/jenv prefix) \
+PATH=$JAVA_HOME/bin:$PATH \
+mvn -pl ai-interviewer-interview -Dtest=InterviewFlywayMigrationTest test
+```
+
+The migration test deliberately keeps Interview Service history in `flyway_interview_schema_history`; the shared database's default `flyway_schema_history` belongs to the Admin service.
+
+`ai_interview_backend/sql/init.sql` intentionally remains the pre-Lineage shared-schema bootstrap. A fresh Docker database runs that file first, then Interview Service baselines the non-empty schema at version 0 and applies V1+. `InterviewFlywayMigrationTest.freshDockerBootstrapRemainsCompatibleWithAllInterviewMigrations` reads the real bootstrap file and prevents duplicate-object drift; do not copy versioned Lineage or Turn Attempt DDL into `init.sql`.
+
+To verify a local PostgreSQL custom backup without connecting to the authoritative Compose database, provide the backup path to the isolated restore wrapper:
+
+```bash
+INTERVIEW_BACKUP_PATH=/absolute/path/to/ai_interviewer.dump \
+bash tests/scripts/verify-interview-migration.sh
+```
+
+The wrapper creates an unexposed temporary PostgreSQL 16 container and a private Docker network, restores with `pg_restore`, and applies the Interview Flyway migrations through the dedicated history table. It requires the repository's latest versioned migration to match `INTERVIEW_EXPECTED_FLYWAY_VERSION` (default `6`), compares both row counts and deterministic legacy-business-content digests, checks one root Lineage per legacy Session and orphan counts, verifies the configured legacy anchor is visible/non-forkable, then reruns Flyway and requires the business digest, Interview schema digest, and Flyway history digest to remain unchanged. It removes both temporary Docker resources on success or failure. Optional overrides are `INTERVIEW_EXPECTED_FLYWAY_VERSION`, `INTERVIEW_LEGACY_ANCHOR_ID`, `INTERVIEW_EXPECTED_ANCHOR_MESSAGE_COUNT`, `INTERVIEW_MIGRATION_POSTGRES_IMAGE`, `INTERVIEW_MIGRATION_FLYWAY_IMAGE`, and `INTERVIEW_MIGRATION_FLYWAY_PLATFORM`.
+
+Compose publishes the Interview and Evaluation services only on the internal `ai-interviewer-net`; authenticated application traffic must use the Gateway on port `9000`. Direct host calls to ports `9003` and `9005` are intentionally unavailable because downstream services trust identity headers injected by the Gateway.
+
+Docker Engine 29 requires API 1.44 or newer. The repository pins the Testcontainers docker-java client through `ai_interviewer-interview/src/test/resources/docker-java.properties`; keep that file when running migration tests on Docker Desktop 29.
+
+Durable Turn Attempt lifecycle tests use the same PostgreSQL 16 Testcontainers fixture and run the real Spring transaction boundary. If a local Docker Desktop setup cannot route Ryuk's published callback port, set `TESTCONTAINERS_RYUK_DISABLED=true` for the focused/full module run. JUnit/Testcontainers still stops its declared PostgreSQL container when the test JVM exits; the setting must not be used as a reason to target the authoritative local PostgreSQL database.
+
+```bash
+cd ai_interview_backend
+TESTCONTAINERS_RYUK_DISABLED=true \
+JENV_ROOT=$HOME/.jenv \
+/opt/homebrew/bin/jenv exec mvn \
+  -pl ai-interviewer-interview -am \
+  -Dtest=TurnAttemptLifecycleIntegrationTest,TurnAttemptControllerTest,TurnAttemptWorkerSchedulingTest,TurnAttemptEventPublisherTest,InterviewFlywayMigrationTest \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+The Task 2 snapshot/state-focused Java check is:
+
+```bash
+cd ai_interview_backend
+JENV_ROOT=$HOME/.jenv \
+/opt/homebrew/bin/jenv exec mvn \
+  -pl ai-interviewer-interview -am \
+  -Dtest=BranchSnapshotComposerTest,WebClientTurnModelClientSnapshotTest,TurnAttemptWorkerSnapshotTest,TurnAttemptControllerTest,TurnAttemptWorkerSchedulingTest,TurnAttemptLifecycleIntegrationTest,InterviewFlywayMigrationTest \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+It uses PostgreSQL 16 Testcontainers and verifies that only `TurnCommitService` writes the returned post-turn pools/counters/stage into canonical Java state before the next snapshot is composed. Flyway V4 persists and backfills immutable Turn Attempt `owner_user_id`; the worker and commit boundary continue to use that creation-time owner even if mutable branch ownership drifts. It does not call a real Python or paid model provider.
+
+The Task 3 Lineage/Fork/Evaluation focused check is:
+
+```bash
+cd ai_interview_backend
+JENV_ROOT=$HOME/.jenv \
+/opt/homebrew/bin/jenv exec mvn \
+  -pl ai-interviewer-interview,ai-interviewer-evaluation -am \
+  -Dtest=InterviewHistoryServiceTest,InterviewHistoryControllerTest,InterviewLineageMapperIntegrationTest,LineageTreeServiceTest,ForkAttemptServiceTest,ComposedAssessmentServiceTest,LineageForkIntegrationTest,LineageCompositionIntegrationTest,InterviewFlywayMigrationTest,SSEProxyServiceStubReplayTest,BranchSnapshotComposerTest,TurnAttemptWorkerSnapshotTest,TurnAttemptControllerTest,TurnAttemptWorkerSchedulingTest,TurnAttemptLifecycleIntegrationTest,EvaluationServiceLineageTest \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+This command uses only deterministic fakes and ephemeral PostgreSQL 16 Testcontainers. It covers exact state metadata, structured project/technical pool preservation, Forkable Message and Owning Branch resolution, atomic child-plus-first-attempt creation, first-child numbering, inherited-tail fallback, exact `turnId` idempotency and concurrent replay, lineage-first fork/commit locking with a real PostgreSQL deadlock regression, nested canonical transcript/assessment composition, deterministic V6 legacy score linkage, observable ambiguous-score fallback, ownership reassignment for tree/list/evaluation/attempt rows, composed best-score sorting in one recursive SQL query, canonical/legacy QNA category aliases, and independent per-branch reports. It does not call Python, a real model provider, or the authoritative local PostgreSQL database.
+
+Run the complete Interview Service module suite after the focused Turn Attempt tests:
+
+```bash
+cd ai_interview_backend
+TESTCONTAINERS_RYUK_DISABLED=true \
+JENV_ROOT=$HOME/.jenv \
+/opt/homebrew/bin/jenv exec mvn \
+  -pl ai-interviewer-interview -am \
+  test
+```
+
+When Evaluation depends on composed Lineage assessments, verify both affected modules together:
+
+```bash
+cd ai_interview_backend
+JENV_ROOT=$HOME/.jenv \
+/opt/homebrew/bin/jenv exec mvn \
+  -pl ai-interviewer-interview,ai-interviewer-evaluation -am \
+  test
+```
+
+This combined suite also verifies deterministic branch report dimension scores, Evaluation runtime wiring, sanitized compatibility SSE failures, and the shared HTTP 409 handler for durable start and normal/fork Turn Attempt idempotency conflicts. Evaluation deliberately excludes `FlywayAutoConfiguration`, sets `spring.flyway.enabled=false`, and excludes the transitive Flyway artifacts; Interview Service is the sole owner of `flyway_interview_schema_history`. Confirm the dependency boundary with `JENV_ROOT=$HOME/.jenv /opt/homebrew/bin/jenv exec mvn -pl ai-interviewer-evaluation dependency:tree -Dincludes=org.flywaydb` (the tree must contain no Flyway dependency rows).
 
 ## Smoke Tests
 

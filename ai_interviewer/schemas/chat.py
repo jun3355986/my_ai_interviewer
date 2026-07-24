@@ -20,6 +20,11 @@ class ChatResponse(BaseModel):
 
 class UnifiedChatRequest(BaseModel):
     session_id: Optional[str] = Field(default=None, description="会话ID，可为空")
+    turn_id: Optional[str] = Field(default=None, description="Java durable Turn Attempt ID")
+    branch_snapshot: Optional[Dict[str, object]] = Field(
+        default=None,
+        description="Java authoritative branch snapshot for durable turns",
+    )
     message: str = Field(..., description="用户当前消息")
     resume_content: Optional[str] = Field(default=None, description="简历内容（首次建议传入）")
     job_requirements: Optional[str] = Field(default=None, description="职位要求")

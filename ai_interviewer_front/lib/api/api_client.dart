@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/pending_start_store.dart';
+
 typedef SessionExpiredCallback = Future<void> Function();
 
 class ApiClient {
@@ -162,6 +164,7 @@ class ApiClient {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('accessToken');
     await prefs.remove('refreshToken');
+    await const SharedPreferencesPendingStartStore().clearAll();
     await onSessionExpired?.call();
   }
 

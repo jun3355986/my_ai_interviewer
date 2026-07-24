@@ -23,7 +23,18 @@ public interface EvaluationMapper extends BaseMapper<Evaluation> {
     /**
      * 查询用户的评估报告
      */
-    @Select("SELECT * FROM t_evaluation WHERE user_id = #{userId} ORDER BY created_at DESC")
+    @Select("""
+            SELECT evaluation.*
+            FROM t_evaluation evaluation
+            JOIN t_interview_session session
+              ON session.id = evaluation.session_id
+             AND session.user_id = #{userId}
+            JOIN t_interview_lineage lineage
+              ON lineage.id = session.lineage_id
+             AND lineage.user_id = #{userId}
+            WHERE evaluation.user_id = #{userId}
+            ORDER BY evaluation.created_at DESC
+            """)
     List<Evaluation> selectByUserId(@Param("userId") Long userId);
 
     /**

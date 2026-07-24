@@ -37,7 +37,9 @@ class QuestionBank:
         self.embeddings = get_embeddings()
         
         # Chroma向量数据库
-        persist_directory = str(Path(__file__).parent.parent / "storage" / "vector_db")
+        persist_directory = os.getenv("AI_INTERVIEW_VECTOR_DB_PATH") or str(
+            Path(__file__).parent.parent / "storage" / "vector_db"
+        )
         os.makedirs(persist_directory, exist_ok=True)
         
         self.vectorstore = Chroma(
