@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.aiinterviewer.job.handler.JobSkillsJsonbTypeHandler;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -84,7 +84,7 @@ public class Job implements Serializable {
     /**
      * 技能标签 (JSON数组)
      */
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = JobSkillsJsonbTypeHandler.class)
     private List<String> skills;
 
     /**
