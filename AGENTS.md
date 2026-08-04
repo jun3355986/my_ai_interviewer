@@ -98,6 +98,23 @@ The root `tests/` directory is the unified test asset center for this project.
 - When fixing a bug with a required regression test, document the regression scenario and its automation location in `tests/docs/test-cases.md`.
 - Prefer root wrapper commands in `tests/scripts/` for repeatable local and CI execution.
 
+## FDE Learning Plan and Career Context
+
+This project is also the practical training ground for the user's FDE / Applied AI career transition. The authoritative, continuously maintained plan is the Obsidian note:
+
+`/Users/junjielong/Library/Mobile Documents/iCloud~md~obsidian/Documents/我的笔记/程序猿/面试/转行FDE 工程师计划.md`
+
+Related Shenzhen target-job evidence is maintained in:
+
+`/Users/junjielong/Library/Mobile Documents/iCloud~md~obsidian/Documents/我的笔记/程序猿/面试/2026-07-25 FDE 目标岗位 JD 样本（BOSS直聘）.md`
+
+- Before planning FDE learning, portfolio work, interview preparation, résumé claims, or AI-interviewer roadmap changes, read the current Obsidian plan instead of relying on copied or remembered versions.
+- Use this existing Java + Python + Flutter system as the main learning and evidence platform; do not propose rewriting it solely to adopt another language or framework.
+- Align relevant project increments with the plan's loop: theory → runnable increment → automated test/evaluation → decision and failure record → demonstrable result → interview practice.
+- Treat the Obsidian plan as a living source of truth for priorities, weekly tasks, acceptance criteria, progress, JD-derived gaps, and evidence links. Do not duplicate the full plan into repository instruction files.
+- When the user asks to update the learning plan, or when an authorized task materially completes or invalidates a listed milestone, update the Obsidian note with the date, status, measured evidence, and links to project artifacts. Do not mark work complete based only on code presence or AI-generated output.
+- Keep this section in `AGENTS.md` and `CLAUDE.md` semantically synchronized when its paths or usage rules change.
+
 <!-- setting_my_dev:start -->
 
 每次收到任务时，先判断规模，后续所有工具选择都基于此判断：

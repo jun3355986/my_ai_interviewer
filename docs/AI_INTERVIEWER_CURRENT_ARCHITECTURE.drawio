@@ -1,0 +1,208 @@
+<mxfile host="Electron" modified="2026-07-29T03:30:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="ai-interviewer-current-architecture" name="Architecture Overview">
+    <mxGraphModel dx="2200" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1400" math="0" shadow="0" background="#F8FAFC">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="AI 面试助手｜当前端到端架构" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontFamily=Helvetica;fontSize=32;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="24" width="1320" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Current State · 本地 Docker Compose 联调拓扑 · 2026-07-29" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontFamily=Helvetica;fontSize=16;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="42" y="70" width="1200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="scope-note" value="范围：系统/容器级 Architecture Overview；完整请求时序、模型调用清单和持久化清单在 Day 2 后续任务补充。" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#CBD5E1;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=14;fontFamily=Helvetica;fontSize=14;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="28" width="820" height="62" as="geometry" />
+        </mxCell>
+
+        <mxCell id="compose-boundary" value="本地运行边界 · Docker Compose / ai-interviewer-net" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 6;strokeWidth=2;strokeColor=#94A3B8;fillColor=#FFFFFF;fillOpacity=35;align=left;verticalAlign=top;spacingTop=14;spacingLeft=18;fontFamily=Helvetica;fontSize=18;fontStyle=1;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="205" y="125" width="1565" height="1160" as="geometry" />
+        </mxCell>
+
+        <mxCell id="client-layer" value="体验与入口层" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#A78BFA;fillColor=#F5F3FF;align=left;verticalAlign=top;spacingTop=14;spacingLeft=18;fontFamily=Helvetica;fontSize=18;fontStyle=1;fontColor=#5B21B6;" vertex="1" parent="1">
+          <mxGeometry x="250" y="185" width="410" height="390" as="geometry" />
+        </mxCell>
+        <mxCell id="candidate" value="候选人" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;whiteSpace=wrap;strokeWidth=3;strokeColor=#7C3AED;fillColor=#EDE9FE;fontFamily=Helvetica;fontSize=16;fontStyle=1;fontColor=#4C1D95;" vertex="1" parent="1">
+          <mxGeometry x="62" y="242" width="80" height="108" as="geometry" />
+        </mxCell>
+        <mxCell id="operator" value="招聘 / 运营人员" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;whiteSpace=wrap;strokeWidth=3;strokeColor=#7C3AED;fillColor=#EDE9FE;fontFamily=Helvetica;fontSize=15;fontStyle=1;fontColor=#4C1D95;" vertex="1" parent="1">
+          <mxGeometry x="62" y="445" width="80" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="flutter" value="&lt;b&gt;候选人端&lt;/b&gt;&lt;br&gt;Flutter Web / iOS&lt;br&gt;&lt;font color=&quot;#6D28D9&quot;&gt;frontend · :8088 → Nginx :80&lt;/font&gt;&lt;br&gt;登录、简历、岗位、面试 SSE、结果" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#7C3AED;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=16;fontFamily=Helvetica;fontSize=15;fontColor=#312E81;" vertex="1" parent="1">
+          <mxGeometry x="285" y="260" width="340" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="admin-web" value="&lt;b&gt;企业管理端&lt;/b&gt;&lt;br&gt;React + TypeScript + Vite&lt;br&gt;&lt;font color=&quot;#6D28D9&quot;&gt;admin-web · :8090 → Nginx :80&lt;/font&gt;&lt;br&gt;题库、评测、AI 可观测性、配置" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#7C3AED;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=16;fontFamily=Helvetica;fontSize=15;fontColor=#312E81;" vertex="1" parent="1">
+          <mxGeometry x="285" y="420" width="340" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gateway" value="&lt;b&gt;Spring Cloud Gateway&lt;/b&gt;&lt;br&gt;gateway · :9000&lt;br&gt;&lt;font color=&quot;#0F766E&quot;&gt;JWT / CORS / Redis 限流 / SSE 路由&lt;/font&gt;&lt;br&gt;/api/v1/** · /admin/**" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=3;strokeColor=#0F766E;fillColor=#ECFDF5;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=16;fontColor=#134E4A;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="705" y="290" width="300" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="nacos" value="&lt;b&gt;Nacos · :8848&lt;/b&gt;&lt;br&gt;服务注册 / 发现 / 配置中心&lt;br&gt;&lt;font color=&quot;#64748B&quot;&gt;Gateway + 全部 Java 服务&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#64748B;fillColor=#F8FAFC;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=15;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="705" y="495" width="300" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="java-layer" value="Java 业务与管理服务 · Java 21 / Spring Boot 3 / Spring Cloud Alibaba" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#3B82F6;fillColor=#EFF6FF;align=left;verticalAlign=top;spacingTop=14;spacingLeft=18;fontFamily=Helvetica;fontSize=18;fontStyle=1;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="165" width="660" height="570" as="geometry" />
+        </mxCell>
+        <mxCell id="user-service" value="&lt;b&gt;User · :9001&lt;/b&gt;&lt;br&gt;认证、用户、JWT" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#2563EB;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=14;fontFamily=Helvetica;fontSize=15;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="245" width="275" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="resume-service" value="&lt;b&gt;Resume · :9002&lt;/b&gt;&lt;br&gt;文件、解析、简历业务" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#2563EB;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=14;fontFamily=Helvetica;fontSize=15;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="1385" y="245" width="275" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="interview-service" value="&lt;b&gt;Interview · :9003&lt;/b&gt;&lt;br&gt;会话 / 分支 / Turn 持久化&lt;br&gt;异步模型执行 + SSE" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#2563EB;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=14;fontFamily=Helvetica;fontSize=15;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="350" width="275" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="job-service" value="&lt;b&gt;Job · :9004&lt;/b&gt;&lt;br&gt;岗位与职位要求" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#2563EB;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=14;fontFamily=Helvetica;fontSize=15;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="1385" y="350" width="275" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="evaluation-service" value="&lt;b&gt;Evaluation · :9005&lt;/b&gt;&lt;br&gt;评分与评估查询" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#2563EB;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=14;fontFamily=Helvetica;fontSize=15;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="472" width="275" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="notification-service" value="&lt;b&gt;Notification · :9006&lt;/b&gt;&lt;br&gt;站内信；MQ 消费可选" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#2563EB;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=14;fontFamily=Helvetica;fontSize=15;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="1385" y="472" width="275" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="admin-service" value="&lt;b&gt;Admin · :9010&lt;/b&gt;&lt;br&gt;独立 Spring Boot 服务 · 独立 Admin JWT&lt;br&gt;题库 / 媒体 / 评测数据集 / AI Trace 与调用明细" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#1D4ED8;fillColor=#DBEAFE;align=left;verticalAlign=middle;spacingLeft=14;fontFamily=Helvetica;fontSize=15;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="585" width="585" height="105" as="geometry" />
+        </mxCell>
+
+        <mxCell id="python-service" value="&lt;b&gt;Python AI Service · FastAPI · :8000&lt;/b&gt;&lt;br&gt;&lt;br&gt;• 面试状态机 / Agent / Prompt 编排&lt;br&gt;• /interview/chat（SSE）与 durable turn contract&lt;br&gt;• 简历解析、题库检索、向量同步&lt;br&gt;• 模型调用观测、LangGraph 可选包装" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=3;strokeColor=#D97706;fillColor=#FFFBEB;align=left;verticalAlign=middle;spacingLeft=20;fontFamily=Helvetica;fontSize=16;fontColor=#78350F;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="790" width="540" height="220" as="geometry" />
+        </mxCell>
+
+        <mxCell id="storage-layer" value="数据与运行状态" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#10B981;fillColor=#ECFDF5;align=left;verticalAlign=top;spacingTop=14;spacingLeft=18;fontFamily=Helvetica;fontSize=18;fontStyle=1;fontColor=#065F46;" vertex="1" parent="1">
+          <mxGeometry x="265" y="790" width="760" height="390" as="geometry" />
+        </mxCell>
+        <mxCell id="postgres" value="&lt;b&gt;PostgreSQL 16&lt;/b&gt;&lt;br&gt;host :5433 → container :5432&lt;br&gt;Java 业务事实、面试分支/Turn&lt;br&gt;Admin 题库、评测与可观测性" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;strokeWidth=2;strokeColor=#059669;fillColor=#FFFFFF;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=14;fontColor=#064E3B;" vertex="1" parent="1">
+          <mxGeometry x="300" y="875" width="205" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" value="&lt;b&gt;Redis 7&lt;/b&gt;&lt;br&gt;host :6380 → :6379&lt;br&gt;JWT 黑名单 / 会话缓存&lt;br&gt;Gateway 限流" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;strokeWidth=2;strokeColor=#059669;fillColor=#FFFFFF;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=14;fontColor=#064E3B;" vertex="1" parent="1">
+          <mxGeometry x="540" y="875" width="205" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="minio" value="&lt;b&gt;MinIO&lt;/b&gt;&lt;br&gt;API :19000 / Console :19001&lt;br&gt;简历文件与题目媒体" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;strokeWidth=2;strokeColor=#059669;fillColor=#FFFFFF;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=14;fontColor=#064E3B;" vertex="1" parent="1">
+          <mxGeometry x="780" y="875" width="205" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="python-storage" value="&lt;b&gt;宿主机挂载 · ai_interviewer/storage&lt;/b&gt;&lt;br&gt;SQLite · database/interviews.db&lt;br&gt;SQLite · agent_checkpoints.sqlite3&lt;br&gt;ChromaDB · vector_db/" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#059669;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=16;fontFamily=Helvetica;fontSize=14;fontColor=#064E3B;" vertex="1" parent="1">
+          <mxGeometry x="375" y="1040" width="535" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="external-label" value="外部 / 可选依赖" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontFamily=Helvetica;fontSize=18;fontStyle=1;fontColor=#9F1239;" vertex="1" parent="1">
+          <mxGeometry x="1835" y="145" width="300" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="model-provider" value="&lt;b&gt;Azure OpenAI 兼容端点&lt;/b&gt;&lt;br&gt;Chat：主模型 + 备用模型&lt;br&gt;Embedding：题库向量化" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#E11D48;fillColor=#FFF1F2;align=left;verticalAlign=middle;spacingLeft=16;fontFamily=Helvetica;fontSize=15;fontColor=#881337;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1835" y="205" width="320" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="langsmith" value="&lt;b&gt;LangSmith（可选）&lt;/b&gt;&lt;br&gt;Trace / Dataset / Evaluation&lt;br&gt;默认由环境变量显式启用" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;strokeWidth=2;strokeColor=#E11D48;fillColor=#FFF7ED;align=left;verticalAlign=middle;spacingLeft=16;fontFamily=Helvetica;fontSize=15;fontColor=#9A3412;" vertex="1" parent="1">
+          <mxGeometry x="1835" y="400" width="320" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="rocketmq" value="&lt;b&gt;RocketMQ（可选）&lt;/b&gt;&lt;br&gt;Notification 消费器&lt;br&gt;Compose 默认关闭" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;strokeWidth=2;strokeColor=#E11D48;fillColor=#FFF7ED;align=left;verticalAlign=middle;spacingLeft=16;fontFamily=Helvetica;fontSize=15;fontColor=#9A3412;" vertex="1" parent="1">
+          <mxGeometry x="1835" y="590" width="320" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="current-state-callout" value="&lt;b&gt;当前入口约束&lt;/b&gt;&lt;br&gt;Compose 联调：Flutter Web / React Admin 均经 Nginx → Gateway；直连 9001/9004 等业务端口只作为本地诊断入口，不是推荐调用路径。" style="shape=note;whiteSpace=wrap;html=1;size=18;strokeWidth=2;strokeColor=#F59E0B;fillColor=#FFFBEB;align=left;verticalAlign=middle;spacingLeft=18;spacingRight=18;fontFamily=Helvetica;fontSize=14;fontColor=#78350F;" vertex="1" parent="1">
+          <mxGeometry x="1835" y="785" width="320" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend" value="&lt;b&gt;图例&lt;/b&gt;　— 实线：同步请求 / 数据访问　　- - - 虚线：注册发现 / 可选依赖 / 遥测　　蓝色：Java　橙色：Python AI　绿色：数据　紫色：客户端" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#CBD5E1;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=16;fontFamily=Helvetica;fontSize=14;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="260" y="1210" width="1495" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="source-note" value="核对来源：当前源码、根 README、docker-compose.yml、Gateway/Admin 配置；本图描述当前可运行架构，不代表未来目标架构。" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontFamily=Helvetica;fontSize=13;fontColor=#64748B;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="1305" width="1095" height="34" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge-candidate-flutter" value="使用" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#7C3AED;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=13;fontColor=#5B21B6;" edge="1" parent="1" source="candidate" target="flutter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-operator-adminweb" value="管理" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#7C3AED;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=13;fontColor=#5B21B6;" edge="1" parent="1" source="operator" target="admin-web">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-flutter-gateway" value="HTTPS /api/*&lt;br&gt;REST + SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#7C3AED;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#5B21B6;exitX=1;exitY=0.5;entryX=0;entryY=0.35;" edge="1" parent="1" source="flutter" target="gateway">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-adminweb-gateway" value="HTTPS /admin/*" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#7C3AED;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#5B21B6;exitX=1;exitY=0.5;entryX=0;entryY=0.72;" edge="1" parent="1" source="admin-web" target="gateway">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-gateway-java" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#0F766E;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#0F766E;exitX=1;exitY=0.5;entryX=0;entryY=0.35;" edge="1" parent="1" source="gateway" target="java-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-gateway-nacos" value="发现 / 配置" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;dashPattern=6 4;strokeWidth=2;strokeColor=#64748B;startArrow=none;endArrow=open;endFill=0;fontFamily=Helvetica;fontSize=13;fontColor=#475569;" edge="1" parent="1" source="gateway" target="nacos">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-java-nacos" value="注册 / 配置" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;dashPattern=6 4;strokeWidth=2;strokeColor=#64748B;startArrow=none;endArrow=open;endFill=0;fontFamily=Helvetica;fontSize=13;fontColor=#475569;exitX=0;exitY=0.78;entryX=1;entryY=0.5;" edge="1" parent="1" source="java-layer" target="nacos">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge-resume-python" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#D97706;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=13;fontColor=#92400E;exitX=1;exitY=0.5;entryX=1;entryY=0.25;" edge="1" parent="1" source="resume-service" target="python-service">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1710" y="284" />
+              <mxPoint x="1710" y="845" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-interview-python" value="/interview/chat&lt;br&gt;SSE + durable turn" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#D97706;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#92400E;exitX=0.5;exitY=1;entryX=0.35;entryY=0;" edge="1" parent="1" source="interview-service" target="python-service">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1213" y="760" />
+              <mxPoint x="1299" y="760" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-admin-python" value="题库 sync / delete" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#D97706;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=13;fontColor=#92400E;exitX=0.75;exitY=1;entryX=0.75;entryY=0;" edge="1" parent="1" source="admin-service" target="python-service">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge-java-postgres" value="JDBC / MyBatis / JPA" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#059669;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=13;fontColor=#047857;exitX=0;exitY=0.85;entryX=1;entryY=0.3;" edge="1" parent="1" source="java-layer" target="postgres">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1010" y="650" />
+              <mxPoint x="1010" y="830" />
+              <mxPoint x="500" y="830" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-gateway-redis" value="限流 / Token" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#059669;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=13;fontColor=#047857;exitX=0;exitY=0.8;entryX=0.5;entryY=0;" edge="1" parent="1" source="gateway" target="redis">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="675" y="410" />
+              <mxPoint x="675" y="760" />
+              <mxPoint x="642" y="760" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-resume-minio" value="文件 / 媒体" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#059669;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=13;fontColor=#047857;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="resume-service" target="minio">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1680" y="284" />
+              <mxPoint x="1680" y="760" />
+              <mxPoint x="883" y="760" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-python-storage" value="会话 / Checkpoint / 向量" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#059669;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=13;fontColor=#047857;exitX=0;exitY=0.72;entryX=1;entryY=0.5;" edge="1" parent="1" source="python-service" target="python-storage">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge-python-model" value="Chat / Embedding API" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#E11D48;endArrow=block;endFill=1;fontFamily=Helvetica;fontSize=14;fontColor=#9F1239;exitX=1;exitY=0.2;entryX=0;entryY=0.5;" edge="1" parent="1" source="python-service" target="model-provider">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1795" y="834" />
+              <mxPoint x="1795" y="265" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-python-langsmith" value="Trace / Evaluation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;dashPattern=6 4;strokeWidth=2;strokeColor=#E11D48;endArrow=open;endFill=0;fontFamily=Helvetica;fontSize=13;fontColor=#9F1239;exitX=1;exitY=0.45;entryX=0;entryY=0.5;" edge="1" parent="1" source="python-service" target="langsmith">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1810" y="889" />
+              <mxPoint x="1810" y="457" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-notification-rocketmq" value="可选消费" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;dashPattern=6 4;strokeWidth=2;strokeColor=#E11D48;endArrow=open;endFill=0;fontFamily=Helvetica;fontSize=13;fontColor=#9F1239;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="notification-service" target="rocketmq">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
