@@ -121,7 +121,7 @@ public class TurnCommitService {
                         session_id, question_index, question_type, question, answer,
                         score, feedback, is_followup, turn_id, question_message_id,
                         answer_message_id, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, false, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     branch.id(),
                     questionIndex,
@@ -130,6 +130,7 @@ public class TurnCommitService {
                     attempt.getCandidateAnswer(),
                     result.score(),
                     result.feedback(),
+                    Boolean.TRUE.equals(result.isFollowup()),
                     turnId,
                     attempt.getExpectedTailMessageId(),
                     answerMessageId,

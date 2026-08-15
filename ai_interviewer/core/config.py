@@ -13,13 +13,15 @@ def get_llm(
     base_url: Optional[str] = None,
 ) -> Any:
     """
-    返回统一配置后的 Azure OpenAI / Foundry Chat LLM。
+    返回统一配置后的 OpenAI-compatible Chat LLM。
 
     优先使用传入参数，其次读取环境变量：
-      - AZURE_OPENAI_API_KEY（必需）
-      - AZURE_OPENAI_ENDPOINT（可选，默认项目内置 endpoint）
-      - AZURE_OPENAI_CHAT_MODEL（可选，默认 grok-4-20-reasoning）
-      - AZURE_OPENAI_BACKUP_CHAT_MODEL（可选，默认 gpt-5.4）
+      - AI_OPENAI_COMPAT_API_KEY（必需）
+      - AI_OPENAI_COMPAT_BASE_URL（可选，默认 OpenCode Go endpoint）
+      - AI_OPENAI_COMPAT_CHAT_MODEL（可选，默认 deepseek-v4-flash）
+      - AI_OPENAI_COMPAT_FALLBACK_CHAT_MODELS（可选，逗号分隔，默认 MiMo 2.5、MiMo 2.5 Pro）
+
+    旧的 AZURE_OPENAI_* 变量仍可作为兼容回退读取，但新部署不应再依赖它们。
     """
     return build_chat_llm(
         model=model,

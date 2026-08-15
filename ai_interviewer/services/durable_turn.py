@@ -53,6 +53,7 @@ class DurableTurnResult(BaseModel):
     interview_complete: bool
     score: Optional[int] = None
     feedback: Optional[str] = None
+    is_followup: bool = False
     next_question: Optional[str] = None
     question: Optional[dict[str, Any]] = None
     final_message: Optional[str] = None
@@ -351,12 +352,18 @@ class DurableTurnProcessor:
         if raw_result.get("message") and next_question:
             final_message = f"{raw_result['message']}\n\n{next_question}"
 
+        qa_record = raw_result.get("qa_record")
+        is_followup = bool(
+            isinstance(qa_record, dict) and qa_record.get("is_followup", False)
+        )
+
         return DurableTurnResult(
             python_session_id=session.session_id,
             next_stage=next_stage,
             interview_complete=next_stage == InterviewStage.CONCLUDED.value,
             score=raw_result.get("score"),
             feedback=raw_result.get("feedback"),
+            is_followup=is_followup,
             next_question=next_question,
             question=question_payload,
             final_message=final_message,

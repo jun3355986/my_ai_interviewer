@@ -28,6 +28,9 @@ class WebClientTurnModelClientSnapshotTest {
                     event: chunk
                     data: {"content":"next question","turn_id":"turn-1"}
 
+                    event: score
+                    data: {"score":45,"feedback":"需要继续追问","is_followup":true,"turn_id":"turn-1"}
+
                     event: result
                     data: {"next_stage":"project_qna","next_question":"next question","turn_id":"turn-1","post_turn_state":{"current_stage":"project_qna","branch_status":1,"project_questions_count":2,"target_project_questions":3,"current_followup_count":1,"project_questions_pool":["project-after"],"technical_questions_pool":[{"id":"tech-after"}]}}
 
@@ -108,6 +111,8 @@ class WebClientTurnModelClientSnapshotTest {
             assertThat(json.get("username").asText()).isEqualTo("alice");
             assertThat(result.aiMessage()).isEqualTo("next question");
             assertThat(result.nextStage()).isEqualTo("project_qna");
+            assertThat(result.score()).isEqualTo(45);
+            assertThat(result.isFollowup()).isTrue();
             assertThat(result.authoritativeState().projectQuestionsCount()).isEqualTo(2);
             assertThat(result.authoritativeState().currentFollowupCount()).isEqualTo(1);
             assertThat(result.authoritativeState().projectQuestionsPool())

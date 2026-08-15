@@ -74,6 +74,7 @@ def test_durable_chat_emits_existing_sse_contract_with_turn_correlation(monkeypa
                 interview_complete=False,
                 score=93,
                 feedback="good",
+                is_followup=True,
                 next_question="下一道结构化问题",
                 question={
                     "id": "q-next",
@@ -129,6 +130,8 @@ def test_durable_chat_emits_existing_sse_contract_with_turn_correlation(monkeypa
         if "turn_id" in payload
     )
     assert '"id": "q-next"' in joined
+    score_payload = next(payload for payload in payloads if payload.get("score") == 93)
+    assert score_payload["is_followup"] is True
     result_payload = next(
         payload for payload in payloads if "post_turn_state" in payload
     )

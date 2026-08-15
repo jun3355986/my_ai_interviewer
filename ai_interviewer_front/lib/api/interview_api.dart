@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'api_client.dart';
+import '../models/evaluation_report.dart';
 import '../models/interview_history.dart';
 
 class InterviewApi {
@@ -67,6 +68,13 @@ class InterviewApi {
           data: {'turnId': turnId, 'resumeId': ?resumeId, 'jobId': ?jobId},
         );
     return StartAttempt.fromJson(_readMap(response, '启动面试响应格式错误'));
+  }
+
+  Future<EvaluationReport> generateEvaluationReport(String branchId) async {
+    final response = await _apiClient
+        .getServiceDio(ApiClient.evaluationBaseUrl)
+        .post(ApiClient.evaluationPath('/evaluations/$branchId'));
+    return EvaluationReport.fromJson(_readMap(response, '评估报告响应格式错误'));
   }
 
   Future<TurnAttempt> createTurnAttempt({

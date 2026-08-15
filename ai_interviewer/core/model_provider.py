@@ -5,6 +5,13 @@ from typing import Optional
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 
+OPENAI_COMPAT_API_KEY_ENV = "AI_OPENAI_COMPAT_API_KEY"
+OPENAI_COMPAT_BASE_URL_ENV = "AI_OPENAI_COMPAT_BASE_URL"
+OPENAI_COMPAT_CHAT_MODEL_ENV = "AI_OPENAI_COMPAT_CHAT_MODEL"
+OPENAI_COMPAT_FALLBACK_CHAT_MODELS_ENV = "AI_OPENAI_COMPAT_FALLBACK_CHAT_MODELS"
+
+# Azure/Foundry 变量保留为兼容旧部署与 embedding 配置。聊天模型优先读取上面的
+# 通用 OpenAI-compatible 变量，避免把供应商名称写进业务层。
 AZURE_OPENAI_API_KEY_ENV = "AZURE_OPENAI_API_KEY"
 AZURE_OPENAI_ENDPOINT_ENV = "AZURE_OPENAI_ENDPOINT"
 AZURE_OPENAI_CHAT_MODEL_ENV = "AZURE_OPENAI_CHAT_MODEL"
@@ -12,13 +19,19 @@ AZURE_OPENAI_BACKUP_CHAT_MODEL_ENV = "AZURE_OPENAI_BACKUP_CHAT_MODEL"
 AZURE_OPENAI_EMBEDDING_MODEL_ENV = "AZURE_OPENAI_EMBEDDING_MODEL"
 AZURE_OPENAI_EMBEDDING_DIMENSION_ENV = "AZURE_OPENAI_EMBEDDING_DIMENSION"
 
+EMBEDDING_API_KEY_ENV = "AI_EMBEDDING_API_KEY"
+EMBEDDING_BASE_URL_ENV = "AI_EMBEDDING_BASE_URL"
+EMBEDDING_MODEL_ENV = "AI_EMBEDDING_MODEL"
+EMBEDDING_DIMENSION_ENV = "AI_EMBEDDING_DIMENSION"
+
 # 兼容旧变量，便于平滑迁移
 LEGACY_API_KEY_ENV = "DEEPSEEK_API_KEY"
 LEGACY_EMBEDDING_DIMENSION_ENV = "DASHSCOPE_EMBEDDING_DIMENSION"
 
-DEFAULT_ENDPOINT = "https://liuwe-m7o7yvmk-eastus2.services.ai.azure.com/openai/v1/"
-DEFAULT_CHAT_MODEL = "grok-4-20-reasoning"
-DEFAULT_BACKUP_CHAT_MODEL = "gpt-5.4"
+DEFAULT_CHAT_ENDPOINT = "https://opencode.ai/zen/go/v1/"
+DEFAULT_CHAT_MODEL = "deepseek-v4-flash"
+DEFAULT_FALLBACK_CHAT_MODELS = ("mimo-v2.5", "mimo-v2.5-pro")
+DEFAULT_EMBEDDING_ENDPOINT = "https://liuwe-m7o7yvmk-eastus2.services.ai.azure.com/openai/v1/"
 DEFAULT_EMBEDDING_MODEL = "embed-v-4-0"
 DEFAULT_EMBEDDING_DIMENSION = 1024
 
@@ -37,7 +50,9 @@ def get_env(name: str, default: Optional[str] = None) -> Optional[str]:
 
 def _normalize_openai_base_url(endpoint: str) -> str:
     normalized = endpoint.strip().rstrip("/")
-    if normalized.endswith("/openai/v1"):
+    # Agent Plan 的 OpenAI-compatible 地址以 /api/plan/v3 结尾，而不是 /v1。
+    # 不能把它再次拼接为 /openai/v1，否则实际请求会落到不存在的路径。
+    if normalized.endswith("/v1") or normalized.endswith("/api/plan/v3"):
         return f"{normalized}/"
     if normalized.endswith("/openai"):
         return f"{normalized}/v1/"
@@ -50,26 +65,53 @@ class AzureModelSettings:
     base_url: str
     chat_model: str
     backup_chat_model: str
+    fallback_chat_models: tuple[str, ...]
     embedding_model: str
     embedding_dimension: int
 
 
-def _resolve_api_key(explicit_api_key: Optional[str] = None) -> str:
-    api_key = (
-        explicit_api_key
-        or get_env(AZURE_OPENAI_API_KEY_ENV)
-        or get_env(LEGACY_API_KEY_ENV)
-        or ""
-    ).strip()
+def _require_valid_api_key(api_key: str, env_hint: str) -> str:
+    api_key = api_key.strip()
     if api_key.lower() in _PLACEHOLDER_API_KEYS:
         raise RuntimeError(
-            f"缺少有效的 {AZURE_OPENAI_API_KEY_ENV}。"
-            "请在本地配置真实 Azure API Key，不能使用 test-key。"
+            f"缺少有效的 {env_hint}。"
+            "请在本地配置真实 API Key，不能使用 test-key。"
         )
     return api_key
 
 
-def load_azure_model_settings(
+def _resolve_chat_api_key(explicit_api_key: Optional[str] = None) -> str:
+    api_key = (
+        explicit_api_key
+        or get_env(OPENAI_COMPAT_API_KEY_ENV)
+        or get_env(AZURE_OPENAI_API_KEY_ENV)
+        or get_env(LEGACY_API_KEY_ENV)
+        or ""
+    )
+    return _require_valid_api_key(api_key, OPENAI_COMPAT_API_KEY_ENV)
+
+
+def _resolve_embedding_api_key(explicit_api_key: Optional[str] = None) -> str:
+    api_key = (
+        explicit_api_key
+        or get_env(EMBEDDING_API_KEY_ENV)
+        or get_env(AZURE_OPENAI_API_KEY_ENV)
+        or get_env(LEGACY_API_KEY_ENV)
+        or ""
+    )
+    return _require_valid_api_key(api_key, EMBEDDING_API_KEY_ENV)
+
+
+def _parse_fallback_models(raw_models: Optional[str], primary_model: str) -> tuple[str, ...]:
+    models = []
+    for value in (raw_models or "").split(","):
+        candidate = value.strip()
+        if candidate and candidate != primary_model and candidate not in models:
+            models.append(candidate)
+    return tuple(models)
+
+
+def load_model_settings(
     *,
     model: Optional[str] = None,
     api_key: Optional[str] = None,
@@ -77,40 +119,45 @@ def load_azure_model_settings(
     embedding_model: Optional[str] = None,
     embedding_dimension: Optional[int] = None,
 ) -> AzureModelSettings:
-    resolved_api_key = _resolve_api_key(api_key)
-    raw_endpoint = endpoint or get_env(AZURE_OPENAI_ENDPOINT_ENV, DEFAULT_ENDPOINT)
+    resolved_api_key = _resolve_chat_api_key(api_key)
+    raw_endpoint = (
+        endpoint
+        or get_env(OPENAI_COMPAT_BASE_URL_ENV)
+        or get_env(AZURE_OPENAI_ENDPOINT_ENV)
+        or DEFAULT_CHAT_ENDPOINT
+    )
     resolved_base_url = _normalize_openai_base_url(raw_endpoint)
 
-    resolved_chat_model = model or get_env(
-        AZURE_OPENAI_CHAT_MODEL_ENV, DEFAULT_CHAT_MODEL
+    resolved_chat_model = model or (
+        get_env(OPENAI_COMPAT_CHAT_MODEL_ENV)
+        or get_env(AZURE_OPENAI_CHAT_MODEL_ENV)
+        or DEFAULT_CHAT_MODEL
     )
-    resolved_backup_chat_model = get_env(
-        AZURE_OPENAI_BACKUP_CHAT_MODEL_ENV, DEFAULT_BACKUP_CHAT_MODEL
+    raw_fallback_models = (
+        get_env(OPENAI_COMPAT_FALLBACK_CHAT_MODELS_ENV)
+        or get_env(AZURE_OPENAI_BACKUP_CHAT_MODEL_ENV)
+        or ",".join(DEFAULT_FALLBACK_CHAT_MODELS)
     )
-    resolved_embedding_model = embedding_model or get_env(
-        AZURE_OPENAI_EMBEDDING_MODEL_ENV, DEFAULT_EMBEDDING_MODEL
+    resolved_fallback_models = _parse_fallback_models(
+        raw_fallback_models,
+        resolved_chat_model,
     )
-
-    if embedding_dimension is not None:
-        resolved_embedding_dimension = embedding_dimension
-    else:
-        resolved_embedding_dimension = int(
-            get_env(
-                AZURE_OPENAI_EMBEDDING_DIMENSION_ENV,
-                get_env(
-                    LEGACY_EMBEDDING_DIMENSION_ENV, str(DEFAULT_EMBEDDING_DIMENSION)
-                ),
-            )
-        )
 
     return AzureModelSettings(
         api_key=resolved_api_key,
         base_url=resolved_base_url,
         chat_model=resolved_chat_model,
-        backup_chat_model=resolved_backup_chat_model,
-        embedding_model=resolved_embedding_model,
-        embedding_dimension=resolved_embedding_dimension,
+        backup_chat_model=resolved_fallback_models[0] if resolved_fallback_models else "",
+        fallback_chat_models=resolved_fallback_models,
+        # 这里的两个字段仅为兼容旧的 Settings 消费者；embedding 使用下方独立配置。
+        embedding_model=embedding_model or DEFAULT_EMBEDDING_MODEL,
+        embedding_dimension=embedding_dimension or DEFAULT_EMBEDDING_DIMENSION,
     )
+
+
+def load_azure_model_settings(**kwargs) -> AzureModelSettings:
+    """兼容旧导入；新代码请使用 load_model_settings。"""
+    return load_model_settings(**kwargs)
 
 
 def build_chat_llm(
@@ -119,7 +166,7 @@ def build_chat_llm(
     endpoint: Optional[str] = None,
     temperature: float = 0.3,
 ):
-    settings = load_azure_model_settings(model=model, api_key=api_key, endpoint=endpoint)
+    settings = load_model_settings(model=model, api_key=api_key, endpoint=endpoint)
     primary_llm = ChatOpenAI(
         model=settings.chat_model,
         api_key=settings.api_key,
@@ -131,17 +178,61 @@ def build_chat_llm(
     if model:
         return primary_llm
 
-    backup_model = settings.backup_chat_model.strip()
-    if backup_model and backup_model != settings.chat_model:
-        backup_llm = ChatOpenAI(
-            model=backup_model,
-            api_key=settings.api_key,
-            base_url=settings.base_url,
-            temperature=temperature,
-        )
-        return primary_llm.with_fallbacks([backup_llm])
+    if settings.fallback_chat_models:
+        fallback_llms = [
+            ChatOpenAI(
+                model=fallback_model,
+                api_key=settings.api_key,
+                base_url=settings.base_url,
+                temperature=temperature,
+            )
+            for fallback_model in settings.fallback_chat_models
+        ]
+        return primary_llm.with_fallbacks(fallback_llms)
 
     return primary_llm
+
+
+def load_embedding_settings(
+    *,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    embedding_dimension: Optional[int] = None,
+) -> AzureModelSettings:
+    resolved_api_key = _resolve_embedding_api_key(api_key)
+    raw_endpoint = (
+        endpoint
+        or get_env(EMBEDDING_BASE_URL_ENV)
+        or get_env(AZURE_OPENAI_ENDPOINT_ENV)
+        or DEFAULT_EMBEDDING_ENDPOINT
+    )
+    resolved_embedding_model = (
+        model
+        or get_env(EMBEDDING_MODEL_ENV)
+        or get_env(AZURE_OPENAI_EMBEDDING_MODEL_ENV)
+        or DEFAULT_EMBEDDING_MODEL
+    )
+    resolved_embedding_dimension = embedding_dimension
+    if resolved_embedding_dimension is None:
+        resolved_embedding_dimension = int(
+            get_env(
+                EMBEDDING_DIMENSION_ENV,
+                get_env(
+                    AZURE_OPENAI_EMBEDDING_DIMENSION_ENV,
+                    get_env(LEGACY_EMBEDDING_DIMENSION_ENV, str(DEFAULT_EMBEDDING_DIMENSION)),
+                ),
+            )
+        )
+    return AzureModelSettings(
+        api_key=resolved_api_key,
+        base_url=_normalize_openai_base_url(raw_endpoint),
+        chat_model="",
+        backup_chat_model="",
+        fallback_chat_models=(),
+        embedding_model=resolved_embedding_model,
+        embedding_dimension=resolved_embedding_dimension,
+    )
 
 
 def build_embeddings(
@@ -150,10 +241,10 @@ def build_embeddings(
     endpoint: Optional[str] = None,
     dimensions: Optional[int] = None,
 ) -> OpenAIEmbeddings:
-    settings = load_azure_model_settings(
+    settings = load_embedding_settings(
         api_key=api_key,
         endpoint=endpoint,
-        embedding_model=model,
+        model=model,
         embedding_dimension=dimensions,
     )
     kwargs = {

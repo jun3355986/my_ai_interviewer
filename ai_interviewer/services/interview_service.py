@@ -58,18 +58,62 @@ class InterviewService:
     def _coerce_question_item(self, value) -> QuestionItem:
         return QuestionItem.from_legacy(value)
 
-    def _add_ai_question(self, session: InterviewSession, question) -> QuestionItem:
+    def _add_ai_question(
+        self,
+        session: InterviewSession,
+        question,
+        *,
+        is_followup: bool = False,
+    ) -> QuestionItem:
         item = self._coerce_question_item(question)
-        session.history.append(item.to_history_message())
+        message = item.to_history_message()
+        # A reconstructed durable branch has a stage on every Java message. Keep
+        # native Python histories equally explicit for technical questions so an
+        # idempotent "start technical" request can never reuse the last project
+        # question as its first technical question.
+        if session.stage == InterviewStage.TECHNICAL_QNA:
+            message["stage"] = session.stage.value
+        if is_followup:
+            message["is_followup"] = True
+            message["question"]["is_followup"] = True
+        session.history.append(message)
         session.updated_at = datetime.now()
         return item
 
-    def _get_current_ai_question(self, session: InterviewSession) -> QuestionItem | None:
+    @staticmethod
+    def _is_followup_message(message: dict | None) -> bool:
+        if not message:
+            return False
+        question = message.get("question")
+        metadata = message.get("metadata")
+        return bool(
+            message.get("is_followup")
+            or (isinstance(question, dict) and question.get("is_followup"))
+            or (isinstance(metadata, dict) and metadata.get("is_followup"))
+        )
+
+    def _get_current_ai_question(
+        self,
+        session: InterviewSession,
+        *,
+        expected_stage: InterviewStage | None = None,
+    ) -> QuestionItem | None:
         for msg in reversed(session.history):
             if msg.get("role") == "ai":
                 raw_question = msg.get("question") or msg.get("content")
                 if raw_question:
-                    return self._coerce_question_item(raw_question)
+                    item = self._coerce_question_item(raw_question)
+                    if expected_stage == InterviewStage.TECHNICAL_QNA:
+                        message_stage = str(msg.get("stage") or "").lower()
+                        question_type = str(item.question_type or "").lower()
+                        is_declared_project_question = question_type.startswith("project")
+                        has_technical_evidence = (
+                            message_stage == InterviewStage.TECHNICAL_QNA.value
+                            or (bool(question_type) and not is_declared_project_question)
+                        )
+                        if not has_technical_evidence:
+                            continue
+                    return item
         return None
 
     def _select_technical_question_items(
@@ -234,12 +278,16 @@ class InterviewService:
         session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
-        
+        if session.stage != InterviewStage.PROJECT_QNA:
+            raise ValueError(f"当前阶段不是项目提问阶段: {session.stage}")
+
         # 获取当前问题（最后一个AI消息）
         current_question = None
+        current_question_message = None
         for msg in reversed(session.history):
             if msg.get("role") == "ai":
                 current_question = msg.get("content")
+                current_question_message = msg
                 break
         
         if not current_question:
@@ -261,6 +309,7 @@ class InterviewService:
             answer=answer,
             score=score,
             feedback=feedback,
+            is_followup=self._is_followup_message(current_question_message),
         )
         session.add_project_qa(qa)
         
@@ -272,13 +321,18 @@ class InterviewService:
                 "answer": answer,
                 "score": score,
                 "feedback": feedback,
+                "is_followup": qa.is_followup,
             },
             "stage": session.stage.value,  # 确保始终包含 stage 字段
         }
         
-        # 判断是否需要追问（如果回答有漏洞、逻辑不清，或需要深入时追问）
-        # 只有高分（>=70）且有追问理由时才追问，低分不给追问机会
-        need_followup = followup_reason is not None and score >= 70 and session.current_question_followup_count < 3
+        # The model has already made the follow-up decision from answer quality. Do not
+        # override it with an arbitrary score threshold: a low-scoring but diagnosable
+        # answer is exactly when a targeted follow-up can collect missing evidence.
+        need_followup = (
+            followup_reason is not None
+            and session.current_question_followup_count < 3
+        )
         
         if need_followup:
             # 生成追问
@@ -288,8 +342,13 @@ class InterviewService:
                 followup_reason,
             )
             session.current_question_followup_count += 1
-            session.add_message("ai", followup_question)
-            result["next_question"] = followup_question
+            followup_item = self._add_ai_question(
+                session,
+                QuestionItem(text=followup_question, question_type="PROJECT"),
+                is_followup=True,
+            )
+            result["question"] = followup_item.to_public_dict()
+            result["next_question"] = followup_item.text
             result["is_followup"] = True
             result["current_question_followup_count"] = session.current_question_followup_count
             result["stage"] = session.stage.value  # 确保包含 stage
@@ -354,7 +413,10 @@ class InterviewService:
         if session.stage != InterviewStage.TECHNICAL_QNA:
             raise ValueError(f"当前阶段不是技术面试阶段: {session.stage}")
 
-        current_question = self._get_current_ai_question(session)
+        current_question = self._get_current_ai_question(
+            session,
+            expected_stage=InterviewStage.TECHNICAL_QNA,
+        )
         if current_question or session.technical_questions_pool:
             if not current_question:
                 current_question = self._add_ai_question(session, session.technical_questions_pool.pop(0))
@@ -432,6 +494,8 @@ class InterviewService:
         session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
+        if session.stage != InterviewStage.TECHNICAL_QNA:
+            raise ValueError(f"当前阶段不是技术面试阶段: {session.stage}")
         
         # 获取当前问题
         current_question = None
@@ -487,10 +551,14 @@ class InterviewService:
             result["remaining_questions"] = len(questions_pool)
             result["stage"] = session.stage.value  # 更新 stage
         else:
-            # 所有问题已回答，进入总结
-            session.stage = InterviewStage.CONCLUDED
+            # The final technical answer is not the final interview result. Generate
+            # and persist the closing summary in the same durable turn so callers
+            # cannot observe a completed branch without a conclusion.
+            final_score, final_feedback = self._conclude_session(session)
             result["stage"] = session.stage.value
-            result["message"] = "所有技术问题已回答，面试结束"
+            result["final_score"] = final_score
+            result["final_feedback"] = final_feedback
+            result["message"] = final_feedback
         
         self._save_session(session)
         return result
@@ -505,22 +573,31 @@ class InterviewService:
         session = self.session_manager.get_session(session_id)
         if not session:
             raise ValueError(f"会话不存在: {session_id}")
-        
-        # 生成总结
-        final_score, feedback = self.interviewer.conclude_interview(session)
-        
-        session.final_score = final_score
-        session.final_feedback = feedback
-        session.stage = InterviewStage.CONCLUDED
-        
+        if session.stage != InterviewStage.CONCLUDED:
+            raise ValueError("技术面试尚未完成，不能提前生成总结")
+        if session.final_score is None or session.final_feedback is None:
+            self._conclude_session(session)
+
         self._save_session(session)
-        
+
         return {
-            "final_score": final_score,
-            "final_feedback": feedback,
+            "final_score": session.final_score,
+            "final_feedback": session.final_feedback,
             "average_score": session.get_average_score(),
             "stage": session.stage.value,
         }
+
+    def _conclude_session(self, session: InterviewSession) -> tuple[int, str]:
+        """Generate one idempotent final conclusion for an already-scored interview."""
+        if session.final_score is not None and session.final_feedback is not None:
+            session.stage = InterviewStage.CONCLUDED
+            return session.final_score, session.final_feedback
+
+        final_score, feedback = self.interviewer.conclude_interview(session)
+        session.final_score = final_score
+        session.final_feedback = feedback
+        session.stage = InterviewStage.CONCLUDED
+        return final_score, feedback
     
     def get_session(self, session_id: str) -> Optional[InterviewSession]:
         """获取会话"""

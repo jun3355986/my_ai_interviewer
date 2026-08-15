@@ -208,6 +208,7 @@ def chat_stream(req: UnifiedChatRequest):
                                 {
                                     "score": durable_result.score,
                                     "feedback": durable_result.feedback or "",
+                                    "is_followup": durable_result.is_followup,
                                     **turn_metadata,
                                 },
                             ),
@@ -285,6 +286,7 @@ def chat_stream(req: UnifiedChatRequest):
 
                 score = None
                 feedback = None
+                is_followup = False
                 next_question = None
                 question_payload = None
                 next_stage = current_stage.value
@@ -321,6 +323,7 @@ def chat_stream(req: UnifiedChatRequest):
                     result = interview_service.handle_project_answer(session.session_id, req.message)
                     score = result.get("score")
                     feedback = result.get("feedback")
+                    is_followup = bool(result.get("qa_record", {}).get("is_followup", False))
                     next_question = result.get("next_question")
                     question_payload = _structured_question_payload(result.get("question"))
                     next_stage = result.get("stage", current_stage.value)
@@ -336,6 +339,7 @@ def chat_stream(req: UnifiedChatRequest):
                     result = interview_service.handle_technical_answer(session.session_id, req.message)
                     score = result.get("score")
                     feedback = result.get("feedback")
+                    is_followup = bool(result.get("qa_record", {}).get("is_followup", False))
                     next_question = result.get("next_question")
                     question_payload = _structured_question_payload(result.get("question"))
                     next_stage = result.get("stage", current_stage.value)
@@ -348,7 +352,14 @@ def chat_stream(req: UnifiedChatRequest):
                 if score is not None:
                     yield _record_sse(
                         recorder,
-                        format_sse(EVENT_SCORE, {"score": int(score), "feedback": feedback or ""}),
+                        format_sse(
+                            EVENT_SCORE,
+                            {
+                                "score": int(score),
+                                "feedback": feedback or "",
+                                "is_followup": is_followup,
+                            },
+                        ),
                     )
 
                 if question_payload:

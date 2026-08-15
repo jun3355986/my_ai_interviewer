@@ -50,6 +50,8 @@ def reconstruct_session_from_snapshot(snapshot: BranchSnapshot) -> InterviewSess
                 structured = message.metadata
             if message.role == "ai" and isinstance(structured, dict):
                 restored["question"] = deepcopy(structured)
+            if message.role == "ai" and bool(message.metadata.get("is_followup", False)):
+                restored["is_followup"] = True
         history.append(restored)
 
     project_qa_list = []
@@ -60,6 +62,7 @@ def reconstruct_session_from_snapshot(snapshot: BranchSnapshot) -> InterviewSess
             answer=assessment.answer,
             score=assessment.score,
             feedback=assessment.feedback,
+            is_followup=assessment.is_followup,
         )
         if "technical" in assessment.question_type.lower():
             technical_qa_list.append(restored_qa)

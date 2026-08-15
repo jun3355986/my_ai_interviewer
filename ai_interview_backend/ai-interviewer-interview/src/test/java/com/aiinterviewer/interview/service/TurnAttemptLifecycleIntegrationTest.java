@@ -377,7 +377,7 @@ class TurnAttemptLifecycleIntegrationTest {
 
     @Test
     void successCommitsMessagesScoreBranchActivityAndAttemptTogether() {
-        modelClient.enqueueSuccess(success("请说明 JVM 内存模型。", 91));
+        modelClient.enqueueSuccess(success("请说明 JVM 内存模型。", 91, true));
 
         service.create(BRANCH_ID, 1L, request("turn-success", "一致性回答", 1L, 6L));
 
@@ -407,12 +407,12 @@ class TurnAttemptLifecycleIntegrationTest {
                 """))
                 .isEqualTo("q-next");
         assertThat(query("""
-                SELECT turn_id || '|' || question_message_id || '|' || answer_message_id || '|' || score
+                SELECT turn_id || '|' || question_message_id || '|' || answer_message_id || '|' || score || '|' || is_followup
                 FROM t_score_record
                 WHERE turn_id = 'turn-success'
                 """))
                 .startsWith("turn-success|6|")
-                .endsWith("|91");
+                .endsWith("|91|true");
         assertThat(count("SELECT branch_version FROM t_interview_session WHERE id = '" + BRANCH_ID + "'"))
                 .isEqualTo(2);
         assertThat(query("""
@@ -968,13 +968,19 @@ class TurnAttemptLifecycleIntegrationTest {
     }
 
     private TurnModelResult success(String aiMessage, int score) {
+        return success(aiMessage, score, false);
+    }
+
+    private TurnModelResult success(String aiMessage, int score, boolean isFollowup) {
         return new TurnModelResult(
                 aiMessage,
                 "project_qna",
                 false,
                 score,
                 "反馈仅用于评分记录",
+                isFollowup,
                 Map.of("id", "q-next", "text", aiMessage),
+                null,
                 null);
     }
 

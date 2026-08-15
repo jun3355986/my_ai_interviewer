@@ -42,6 +42,13 @@ def put_session(session):
     return session
 
 
+def technical_history(item):
+    return {
+        **item.to_history_message(),
+        "stage": InterviewStage.TECHNICAL_QNA.value,
+    }
+
+
 def test_legacy_string_pool_can_be_promoted_to_structured_next_question():
     fake = FakeInterviewer()
     service = make_service(fake)
@@ -100,7 +107,7 @@ def test_project_completion_starts_structured_technical_first_question_immediate
     assert result["question"] == first.to_public_dict()
     assert result["next_question"] == first.text
     assert result["remaining_questions"] == 1
-    assert session.history[-1] == first.to_history_message()
+    assert session.history[-1] == technical_history(first)
     assert session.technical_questions_pool == [second.to_pool_dict()]
 
 
@@ -124,7 +131,7 @@ def test_technical_answer_scores_current_structured_text_and_returns_structured_
             session_id="tech-answer",
             resume_content="负责 Redis 限流和 JVM 调优",
             stage=InterviewStage.TECHNICAL_QNA,
-            history=[current.to_history_message()],
+            history=[technical_history(current)],
             technical_questions_pool=[next_item.to_pool_dict()],
         )
     )
@@ -145,7 +152,7 @@ def test_technical_answer_scores_current_structured_text_and_returns_structured_
     assert result["question"] == next_item.to_public_dict()
     assert result["next_question"] == next_item.text
     assert result["remaining_questions"] == 0
-    assert session.history[-1] == next_item.to_history_message()
+    assert session.history[-1] == technical_history(next_item)
 
 
 def test_start_technical_interview_is_idempotent_after_auto_initialization():
@@ -166,7 +173,7 @@ def test_start_technical_interview_is_idempotent_after_auto_initialization():
             session_id="idempotent-tech",
             resume_content="负责 Redis 限流和 JVM 调优",
             stage=InterviewStage.TECHNICAL_QNA,
-            history=[current.to_history_message()],
+            history=[technical_history(current)],
             technical_questions_pool=[remaining.to_pool_dict()],
         )
     )
@@ -176,7 +183,7 @@ def test_start_technical_interview_is_idempotent_after_auto_initialization():
     assert result["question"] == current.to_public_dict()
     assert result["next_question"] == current.text
     assert result["remaining_questions"] == 1
-    assert session.history == [current.to_history_message()]
+    assert session.history == [technical_history(current)]
     assert session.technical_questions_pool == [remaining.to_pool_dict()]
 
 
@@ -196,3 +203,32 @@ def test_start_technical_interview_falls_back_to_legacy_selector():
     assert result["question"]["text"] == "请解释 synchronized 和 Lock 的区别。"
     assert result["next_question"] == "请解释 synchronized 和 Lock 的区别。"
     assert session.history[-1]["question"]["text"] == "请解释 synchronized 和 Lock 的区别。"
+    assert session.history[-1]["stage"] == InterviewStage.TECHNICAL_QNA.value
+
+
+def test_start_technical_interview_does_not_reuse_a_project_question():
+    first = QuestionItem(
+        id="tech-1",
+        text="请解释事务隔离级别如何避免不可重复读。",
+        question_type="TECHNICAL",
+    )
+    fake = FakeInterviewer([first])
+    service = make_service(fake)
+    session = put_session(
+        InterviewSession(
+            session_id="technical-not-project",
+            resume_content="Java 后端候选人",
+            stage=InterviewStage.TECHNICAL_QNA,
+            history=[{"role": "ai", "content": "请介绍你负责的订单项目。"}],
+        )
+    )
+
+    result = service.start_technical_interview(
+        session.session_id,
+        ["TECHNICAL"],
+        {"TECHNICAL": 1},
+    )
+
+    assert result["question"] == first.to_public_dict()
+    assert result["next_question"] == first.text
+    assert session.history[-1] == technical_history(first)

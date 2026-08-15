@@ -2,6 +2,7 @@
 问题库管理服务：导入、拆分、embedding、存储到向量数据库
 """
 import json
+import logging
 import os
 import re
 from collections import defaultdict
@@ -17,25 +18,60 @@ from core.embeddings import get_embeddings
 from schemas.question_item import QuestionItem, QuestionMedia
 
 
+logger = logging.getLogger(__name__)
+
+
+class _UnavailableEmbeddings:
+    """让 Chroma 显式走到可捕获的检索降级路径，而不是隐式下载默认模型。"""
+
+    @staticmethod
+    def _raise_unavailable() -> None:
+        raise RuntimeError("embedding provider is not configured")
+
+    def embed_query(self, _text: str) -> list[float]:
+        self._raise_unavailable()
+
+    def embed_documents(self, _texts: list[str]) -> list[list[float]]:
+        self._raise_unavailable()
+
+
 class QuestionBank:
     """问题库管理器"""
 
+    DEFAULT_COLLECTION_NAME = "interview_questions"
+    VECTOR_COLLECTION_ENV = "AI_INTERVIEW_VECTOR_COLLECTION"
     RRF_K = 60
     VECTOR_WEIGHT = 1.0
     KEYWORD_WEIGHT = 1.15
     METADATA_MATCH_BOOST = 0.03
     HOTNESS_BOOST = 0.02
     
-    def __init__(self, collection_name: str = "interview_questions"):
+    def __init__(self, collection_name: Optional[str] = None):
         """
         初始化问题库
         
         Args:
-            collection_name: Chroma集合名称
+            collection_name: Chroma集合名称。未显式传入时读取
+                AI_INTERVIEW_VECTOR_COLLECTION，最后回退到历史默认名称。
         """
-        # 统一走 core/embeddings.py，不在业务层散落模型接入细节
-        self.embeddings = get_embeddings()
+        # 统一走 core/embeddings.py，不在业务层散落模型接入细节。聊天模型与
+        # embedding 供应可独立配置；embedding 未配置时仍允许读取已有题库并做关键词
+        # 检索，不能让整个面试 API 因向量能力不可用而启动失败。
+        try:
+            self.embeddings = get_embeddings()
+        except RuntimeError as exc:
+            logger.warning(
+                "embedding provider unavailable at startup; keyword-only retrieval enabled: %s",
+                type(exc).__name__,
+            )
+            self.embeddings = _UnavailableEmbeddings()
         
+        resolved_collection_name = (
+            collection_name
+            or (os.getenv(self.VECTOR_COLLECTION_ENV) or "").strip()
+            or self.DEFAULT_COLLECTION_NAME
+        )
+
         # Chroma向量数据库
         persist_directory = os.getenv("AI_INTERVIEW_VECTOR_DB_PATH") or str(
             Path(__file__).parent.parent / "storage" / "vector_db"
@@ -43,7 +79,7 @@ class QuestionBank:
         os.makedirs(persist_directory, exist_ok=True)
         
         self.vectorstore = Chroma(
-            collection_name=collection_name,
+            collection_name=resolved_collection_name,
             embedding_function=self.embeddings,
             persist_directory=persist_directory,
         )
@@ -115,7 +151,13 @@ class QuestionBank:
             search_query = f"{search_query}\n{type_filter}"
         
         fetch_k = max(k * 4, k, 20)
-        vector_results = self.vectorstore.similarity_search(search_query, k=fetch_k)
+        try:
+            vector_results = self.vectorstore.similarity_search(search_query, k=fetch_k)
+        except Exception as exc:
+            # Chat 与 embedding 可独立供应。向量服务暂不可用时，保留本地 Chroma
+            # 原文的关键词检索，确保技术面不会因单一 embedding 凭证或供应商故障中断。
+            logger.warning("vector retrieval unavailable; falling back to keyword retrieval: %s", type(exc).__name__)
+            vector_results = []
         keyword_results = self._keyword_search(search_query, k=fetch_k)
 
         return self._merge_ranked_results(

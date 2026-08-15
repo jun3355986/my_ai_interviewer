@@ -550,7 +550,7 @@ public class SSEProxyService {
                     record.setAnswer(userQuestion);
                     record.setScore(score);
                     record.setFeedback(feedback);
-                    record.setIsFollowup(false);
+                    record.setIsFollowup(data.path("is_followup").asBoolean(false));
                     record.setQuestionMessageId(answerContext.questionMessageId());
                     record.setAnswerMessageId(answerContext.answerMessageId());
                     record.setCreatedAt(LocalDateTime.now());

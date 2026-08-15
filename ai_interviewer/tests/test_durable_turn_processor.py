@@ -66,6 +66,7 @@ class FakeInterviewer:
         self.followup_reason = followup_reason
         self.fail = fail
         self.evaluate_calls = 0
+        self.conclude_calls = 0
         self.histories_seen = []
 
     def evaluate_answer(self, question, answer, resume_content):
@@ -76,6 +77,10 @@ class FakeInterviewer:
 
     def generate_followup_question(self, question, answer, reason):
         return "请进一步说明一致性保证。"
+
+    def conclude_interview(self, session):
+        self.conclude_calls += 1
+        return 81, "最终总结：项目经验与技术基础达标。"
 
 
 class BlockingInterviewer(FakeInterviewer):
@@ -662,3 +667,30 @@ def test_reconstructed_followup_technical_and_concluded_boundaries(tmp_path):
     assert concluded_result.next_stage == "concluded"
     assert concluded_result.interview_complete is True
     assert concluded_fake.evaluate_calls == 0
+
+
+def test_final_technical_turn_commits_one_persisted_conclusion(tmp_path):
+    fake = FakeInterviewer()
+    turn_processor, manager, _, _ = processor(tmp_path, fake)
+
+    result = turn_processor.process(
+        turn_id="turn-final-technical",
+        snapshot_payload=snapshot_payload(
+            turn_id="turn-final-technical",
+            stage="technical_qna",
+            project_pool=[],
+            technical_pool=[],
+        ),
+        candidate_answer="我会用隔离级别、唯一索引和重试来保证订单一致性。",
+    )
+
+    saved = manager.get_session("branch-1")
+    assert result.next_stage == "concluded"
+    assert result.interview_complete is True
+    assert result.final_message == "最终总结：项目经验与技术基础达标。"
+    assert fake.evaluate_calls == 1
+    assert fake.conclude_calls == 1
+    assert saved is not None
+    assert saved.stage == InterviewStage.CONCLUDED
+    assert saved.final_score == 81
+    assert saved.final_feedback == "最终总结：项目经验与技术基础达标。"

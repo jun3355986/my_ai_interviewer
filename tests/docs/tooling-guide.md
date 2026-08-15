@@ -117,7 +117,44 @@ Python storage isolation variables:
 
 The durable ledger uses owner-and-status compare-and-swap fencing for stale takeover, completion, and failure cleanup. A successful completion writes the durable result and replaceable SQLite session cache in one transaction; only after that transaction commits may the in-memory cache be published. Storage/acquisition/replay failures cross the API boundary as sanitized durable errors.
 
+## Day 3 Local Durable Replay
+
+With the local Compose stack healthy and a valid model-provider configuration, run the complete durable flow through Gateway. Supply the OpenCode Go credential only through the shell or an uncommitted local secret manager; do not put it in `.env.example`, a report, or source control:
+
+```bash
+OPENCODE_GO_API_KEY='<supplied-at-runtime>' \
+  docker compose -f ai_interview_backend/docker-compose.yml up -d --build python-ai
+python3 tests/scripts/durable_interview_replay.py --timeout 90 --max-turns 30
+```
+
+Compose defaults chat generation to the OpenCode Go OpenAI-compatible endpoint, with `deepseek-v4-flash` primary and `mimo-v2.5,mimo-v2.5-pro` ordered fallbacks. Override only when needed with `OPENCODE_GO_BASE_URL`, `OPENCODE_GO_CHAT_MODEL`, or `OPENCODE_GO_FALLBACK_CHAT_MODELS`. The optional `AI_EMBEDDING_*` values configure semantic retrieval independently; without them, the running service logs a controlled retrieval failure and uses keyword retrieval rather than silently downloading a different embedding model.
+
+The runner uses `REPLAY_ACCESS_TOKEN` when supplied; otherwise it uses the existing local smoke-account environment variables. Never print either value in a report or terminal capture. It writes an ignored JSON file under `tests/reports/durable-replay/` containing only timings, stage/status transitions, canonical message counts, Trace-ID presence, persisted evaluation dimensions, and aggregate trace metadata. It does not store JWTs, API keys, candidate answers, question text, prompts, or model responses. `AI_OBSERVABILITY_STORE_RAW_PAYLOAD` defaults to `false`; leave it false for replay evidence. If a model call fails, the report retains only the sanitized Turn Attempt status and error code, which is the Day 3 failure baseline rather than a successful full-flow claim.
+
 The supported Java model call is bounded at 10 minutes. Python's default stale-processing lease is 15 minutes, and configuration at or below the supported call timeout is rejected. This guarantees that a legitimate request still inside the supported model-call duration cannot be taken over as stale; if the Java timeout changes, update and re-verify the Python lease invariant in the same change.
+
+## Volcano Ark Agent Plan Embeddings
+
+`doubao-embedding-vision` is configured separately from the OpenCode Go chat chain. Use only the Agent Plan **dedicated** key and keep the `/api/plan/v3` segment in the Base URL. Do not use a standard Ark/Coding Plan key or replace the URL with `/api/v3`; the former is not authorized for Agent Plan and the latter may create separate charges.
+
+The service requests `dimensions=1024`, which is the verified size for this configuration. The model default may return a larger vector if the dimensions field is omitted, so keep `AI_EMBEDDING_DIMENSION=1024` explicit.
+
+Never write the dedicated key to the repository. Supply it through the ignored local Compose environment, then re-embed the historical collection into the new target collection before activating semantic retrieval:
+
+```bash
+export AI_EMBEDDING_API_KEY='<Agent Plan dedicated key>'
+export AI_EMBEDDING_BASE_URL='https://ark.cn-beijing.volces.com/api/plan/v3'
+export AI_EMBEDDING_MODEL='doubao-embedding-vision'
+export AI_EMBEDDING_DIMENSION=1024
+
+uv run --directory ai_interviewer pytest tests/test_model_provider.py -q
+uv run --directory ai_interviewer python ../tests/scripts/reindex_question_bank_embeddings.py \
+  --target-collection interview_questions_doubao_embedding_vision_251215_1024_v1
+```
+
+The reindex tool reads `interview_questions` without modification and refuses a non-empty target. This isolation is required even though both old and new vectors are 1024 dimensions: dimensions alone do not establish a shared semantic space.
+
+Agent Plan accepts at most 10 inputs in one Embeddings request. The migration tool therefore defaults to 10 and rejects a larger `--batch-size` before it writes anything. It sends at most one batch per second and performs exponential backoff for provider `429` responses. A partially written target must be inspected and continued only with `--resume`; the tool verifies that all existing target IDs came from the stated source before it writes the remaining documents.
 
 ## Java Unit Tests
 

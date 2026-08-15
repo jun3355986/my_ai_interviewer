@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../api/interview_api.dart';
 import '../models/chat_message.dart';
+import '../models/evaluation_report.dart';
 import '../models/interview_history.dart';
 import '../models/job.dart';
 import 'pending_start_store.dart';
@@ -76,6 +77,9 @@ class InterviewService extends ChangeNotifier {
 
   String? _currentSessionId;
   String? get currentSessionId => _currentSessionId;
+
+  EvaluationReport? _evaluationReport;
+  EvaluationReport? get evaluationReport => _evaluationReport;
 
   int _currentStage = 1;
   int get currentStage => _currentStage;
@@ -244,6 +248,7 @@ class InterviewService extends ChangeNotifier {
       _tailDraft = '';
       _tailDraftBranchId = null;
       _pendingTailSubmission = null;
+      _evaluationReport = null;
     }
     _messages
       ..clear()
@@ -556,6 +561,19 @@ class InterviewService extends ChangeNotifier {
     }
   }
 
+  Future<MatchResult> loadResult() async {
+    final branchId = _currentTranscript?.branchId ?? _currentSessionId;
+    if (branchId == null || !isCurrentBranchCompleted) {
+      throw StateError('面试尚未完成，不能生成评估报告');
+    }
+    final report = await _interviewApi.generateEvaluationReport(branchId);
+    if (_currentSessionId == branchId) {
+      _evaluationReport = report;
+      notifyListeners();
+    }
+    return _matchResultFromReport(report);
+  }
+
   Future<void> _restoreTreeAttempt(String branchId) async {
     final node = _tree?.nodes
         .where((candidate) => candidate.branchId == branchId)
@@ -606,6 +624,7 @@ class InterviewService extends ChangeNotifier {
     _conflictMessage = null;
     _replayError = null;
     _currentSessionId = null;
+    _evaluationReport = null;
     _currentStage = 1;
     _pendingTailSubmission = null;
     _pendingForkSubmission = null;
@@ -669,11 +688,58 @@ class InterviewService extends ChangeNotifier {
   }
 
   MatchResult buildResult() {
+    final report = _evaluationReport;
+    if (report != null) {
+      return _matchResultFromReport(report);
+    }
     return MatchResult(
       matchScore: 0,
       matchLevel: '请查看持久化评估',
       matchDetails: const <MatchDetail>[],
       suggestions: const ['请从面试历史查看该分支的持久化评估结果。'],
+    );
+  }
+
+  MatchResult _matchResultFromReport(EvaluationReport report) {
+    final recommendation = report.recommendationText.isNotEmpty
+        ? report.recommendationText
+        : switch (report.recommendation) {
+            'EXCELLENT' => '强烈推荐',
+            'RECOMMEND' => '推荐',
+            'CONSIDER' => '建议复试',
+            'REJECT' => '暂不推荐',
+            _ => '评估已完成',
+          };
+    return MatchResult(
+      matchScore: report.overallScore.toDouble(),
+      matchLevel: recommendation,
+      matchDetails: [
+        MatchDetail(
+          category: '技术能力',
+          score: report.technicalScore / 10,
+          feedback: report.summary,
+        ),
+        MatchDetail(
+          category: '沟通表达',
+          score: report.communicationScore / 10,
+          feedback: report.summary,
+        ),
+        MatchDetail(
+          category: '逻辑思维',
+          score: report.logicScore / 10,
+          feedback: report.summary,
+        ),
+        MatchDetail(
+          category: '项目经验',
+          score: report.experienceScore / 10,
+          feedback: report.summary,
+        ),
+      ],
+      suggestions: [
+        if (report.summary.isNotEmpty) '面试总结：${report.summary}',
+        if (report.strengths.isNotEmpty) '优势：${report.strengths}',
+        if (report.weaknesses.isNotEmpty) '改进建议：${report.weaknesses}',
+      ],
     );
   }
 

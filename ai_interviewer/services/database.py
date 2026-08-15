@@ -135,6 +135,7 @@ def _qa_payload(qa):
         "answer": qa.answer,
         "score": qa.score,
         "feedback": qa.feedback,
+        "is_followup": qa.is_followup,
         "timestamp": qa.timestamp.isoformat(),
     }
 

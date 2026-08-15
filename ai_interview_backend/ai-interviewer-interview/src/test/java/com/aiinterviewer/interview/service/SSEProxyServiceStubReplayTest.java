@@ -148,7 +148,7 @@ class SSEProxyServiceStubReplayTest {
     void compatibilityChatLinksScoreToPersistedQuestionAndAnswerMessages() throws Exception {
         String responseBody = """
                 event: score
-                data: {"question":"legacy question","score":86,"feedback":"good"}
+                data: {"question":"legacy question","score":86,"feedback":"good","is_followup":true}
 
                 event: done
                 data: {"stage":"project_qna","is_interview_complete":false}
@@ -208,6 +208,7 @@ class SSEProxyServiceStubReplayTest {
         verify(scoreRecordMapper).insert(scoreCaptor.capture());
         assertThat(scoreCaptor.getValue().getQuestionMessageId()).isEqualTo(101L);
         assertThat(scoreCaptor.getValue().getAnswerMessageId()).isEqualTo(202L);
+        assertThat(scoreCaptor.getValue().getIsFollowup()).isTrue();
     }
 
     @Test

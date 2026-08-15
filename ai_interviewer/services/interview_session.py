@@ -27,6 +27,7 @@ class QuestionAnswer:
     answer: str
     score: Optional[int] = None  # 0-100分
     feedback: Optional[str] = None
+    is_followup: bool = False
     timestamp: datetime = field(default_factory=datetime.now)
 
 
@@ -51,15 +52,19 @@ class InterviewSession:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     
-    def add_message(self, role: str, content: str):
+    def add_message(self, role: str, content: str, *, is_followup: bool = False):
         """添加对话消息"""
-        self.history.append({"role": role, "content": content})
+        message = {"role": role, "content": content}
+        if is_followup:
+            message["is_followup"] = True
+        self.history.append(message)
         self.updated_at = datetime.now()
     
     def add_project_qa(self, qa: QuestionAnswer):
         """添加项目问答"""
         self.project_qa_list.append(qa)
-        self.project_questions_count += 1
+        if not qa.is_followup:
+            self.project_questions_count += 1
         self.updated_at = datetime.now()
     
     def add_technical_qa(self, qa: QuestionAnswer):
@@ -177,6 +182,7 @@ class SessionManager:
                     answer=qa_data.get("answer", ""),
                     score=qa_data.get("score"),
                     feedback=qa_data.get("feedback"),
+                    is_followup=bool(qa_data.get("is_followup", False)),
                     timestamp=datetime.fromisoformat(qa_data.get("timestamp", datetime.now().isoformat())),
                 )
                 project_qa_list.append(qa)
@@ -189,6 +195,7 @@ class SessionManager:
                     answer=qa_data.get("answer", ""),
                     score=qa_data.get("score"),
                     feedback=qa_data.get("feedback"),
+                    is_followup=bool(qa_data.get("is_followup", False)),
                     timestamp=datetime.fromisoformat(qa_data.get("timestamp", datetime.now().isoformat())),
                 )
                 technical_qa_list.append(qa)

@@ -537,9 +537,36 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
   /// 输入区域
   Widget _buildInputArea(InterviewService service) {
     if (service.isCurrentBranchCompleted) {
-      return _buildReadOnlyNotice(
-        icon: Icons.lock_outline,
-        text: '该面试分支已结束，仅支持回放历史对话。',
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '该面试分支已结束，可回放历史对话或查看持久化评估报告。',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Color(0xFF6A7282)),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              key: const Key('view-evaluation-report'),
+              onPressed: () => Navigator.pushNamed(context, '/result'),
+              icon: const Icon(Icons.assessment_outlined),
+              label: const Text('查看评估报告'),
+            ),
+          ],
+        ),
       );
     }
     if (service.isProcessing) {

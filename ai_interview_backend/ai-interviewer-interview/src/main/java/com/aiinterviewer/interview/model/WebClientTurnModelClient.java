@@ -70,6 +70,7 @@ public class WebClientTurnModelClient implements TurnModelClient {
         AtomicReference<String> pythonSessionId = new AtomicReference<>(command.pythonSessionId());
         AtomicReference<Integer> score = new AtomicReference<>();
         AtomicReference<String> feedback = new AtomicReference<>();
+        AtomicReference<Boolean> isFollowup = new AtomicReference<>(false);
         AtomicReference<Map<String, Object>> metadata = new AtomicReference<>();
         AtomicReference<AuthoritativeTurnState> authoritativeState = new AtomicReference<>();
         AtomicReference<Boolean> complete = new AtomicReference<>(false);
@@ -113,6 +114,9 @@ public class WebClientTurnModelClient implements TurnModelClient {
                     }
                     if (data.hasNonNull("feedback")) {
                         feedback.set(data.get("feedback").asText());
+                    }
+                    if (data.hasNonNull("is_followup")) {
+                        isFollowup.set(data.get("is_followup").asBoolean(false));
                     }
                 }
                 case "result" -> {
@@ -164,6 +168,7 @@ public class WebClientTurnModelClient implements TurnModelClient {
                 complete.get(),
                 score.get(),
                 feedback.get(),
+                isFollowup.get(),
                 metadata.get(),
                 pythonSessionId.get(),
                 authoritativeState.get());

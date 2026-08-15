@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'models/job.dart';
 import 'services/interview_service.dart';
@@ -27,59 +29,83 @@ class _InterviewResultPageState extends State<InterviewResultPage>
   bool _isStrengthsExpanded = true;
   bool _isImprovementsExpanded = true;
   bool _isInitialized = false;
+  bool _isLoadingReport = false;
+  String? _reportError;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isInitialized) {
-      final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is MatchResult) {
-        _matchResult = args;
-      } else {
-        _matchResult = context.read<InterviewService>().buildResult();
-      }
-
-      if (_matchResult != null) {
-        _totalScore = _matchResult!.matchScore.toInt();
-        _stageScores =
-            _matchResult!.matchDetails
-                ?.map(
-                  (d) => StageScore(
-                    name: d.category,
-                    score: d.score,
-                    maxScore: 10,
-                  ),
-                )
-                .toList() ??
-            [];
-        _strengths =
-            _matchResult!.suggestions
-                ?.where((s) => !s.contains('建议'))
-                .toList() ??
-            [];
-        _improvements =
-            _matchResult!.suggestions
-                ?.where((s) => s.contains('建议'))
-                .toList() ??
-            [];
-      } else {
-        _totalScore = 0;
-      }
-
       _animationController = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 1500),
       );
-      _scoreAnimation = Tween<double>(begin: 0, end: _totalScore.toDouble())
-          .animate(
-            CurvedAnimation(
-              parent: _animationController,
-              curve: Curves.easeOutCubic,
-            ),
-          );
-      _animationController.forward();
+      _totalScore = 0;
+      _scoreAnimation = Tween<double>(begin: 0, end: 0).animate(
+        CurvedAnimation(
+          parent: _animationController,
+          curve: Curves.easeOutCubic,
+        ),
+      );
       _isInitialized = true;
+
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is MatchResult) {
+        _applyMatchResult(args);
+      } else {
+        _isLoadingReport = true;
+        unawaited(_loadPersistedResult(context.read<InterviewService>()));
+      }
     }
+  }
+
+  Future<void> _loadPersistedResult(InterviewService service) async {
+    try {
+      final result = await service.loadResult();
+      if (!mounted) return;
+      setState(() {
+        _isLoadingReport = false;
+        _applyMatchResult(result);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingReport = false;
+        _reportError = '评估报告暂时无法生成，请稍后重试。';
+      });
+    }
+  }
+
+  void _applyMatchResult(MatchResult result) {
+    _matchResult = result;
+    _totalScore = result.matchScore.toInt();
+    _stageScores =
+        result.matchDetails
+            ?.map(
+              (d) => StageScore(name: d.category, score: d.score, maxScore: 10),
+            )
+            .toList() ??
+        [];
+    _strengths =
+        result.suggestions
+            ?.where((suggestion) => !suggestion.startsWith('改进建议：'))
+            .toList() ??
+        [];
+    _improvements =
+        result.suggestions
+            ?.where((suggestion) => suggestion.startsWith('改进建议：'))
+            .toList() ??
+        [];
+    _scoreAnimation = Tween<double>(begin: 0, end: _totalScore.toDouble())
+        .animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+    _animationController
+      ..reset()
+      ..forward();
   }
 
   @override
@@ -106,32 +132,45 @@ class _InterviewResultPageState extends State<InterviewResultPage>
 
             // 主体内容
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    // 恭喜区域
-                    _buildCongratulationSection(),
-                    const SizedBox(height: 32),
+              child: _isLoadingReport
+                  ? const Center(child: CircularProgressIndicator())
+                  : _reportError != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          _reportError!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFF6A7282)),
+                        ),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          // 恭喜区域
+                          _buildCongratulationSection(),
+                          const SizedBox(height: 32),
 
-                    // 总评分
-                    _buildTotalScoreSection(),
-                    const SizedBox(height: 32),
+                          // 总评分
+                          _buildTotalScoreSection(),
+                          const SizedBox(height: 32),
 
-                    // 各环节得分
-                    _buildStageScoresSection(),
-                    const SizedBox(height: 24),
+                          // 各环节得分
+                          _buildStageScoresSection(),
+                          const SizedBox(height: 24),
 
-                    // 优点
-                    _buildStrengthsSection(),
-                    const SizedBox(height: 16),
+                          // 优点
+                          _buildStrengthsSection(),
+                          const SizedBox(height: 16),
 
-                    // 待改进
-                    _buildImprovementsSection(),
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              ),
+                          // 待改进
+                          _buildImprovementsSection(),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
             ),
 
             // 底部按钮
@@ -262,6 +301,7 @@ class _InterviewResultPageState extends State<InterviewResultPage>
                       ),
                       Text(
                         _scoreAnimation.value.toInt().toString(),
+                        key: const Key('evaluation-total-score'),
                         style: const TextStyle(
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
