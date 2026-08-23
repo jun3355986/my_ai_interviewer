@@ -22,6 +22,8 @@ class ApiClient {
 
   static String get evaluationBaseUrl => gatewayBaseUrl;
 
+  static String get notificationBaseUrl => gatewayBaseUrl;
+
   static String authPath(String path) => _normalizePath(path);
 
   static String userPath(String path) => _normalizePath(path);
@@ -33,6 +35,8 @@ class ApiClient {
   static String interviewPath(String path) => _normalizePath(path);
 
   static String evaluationPath(String path) => _normalizePath(path);
+
+  static String notificationPath(String path) => _normalizePath(path);
 
   static String _normalizePath(String path) {
     final normalized = path.startsWith('/') ? path : '/$path';

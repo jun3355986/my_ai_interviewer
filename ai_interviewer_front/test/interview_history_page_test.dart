@@ -50,7 +50,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Java 后端工程师'), findsOneWidget);
-      expect(find.text('测试候选人'), findsOneWidget);
+      expect(find.textContaining('测试候选人'), findsOneWidget);
       expect(find.text('面试回放'), findsOneWidget);
       expect(find.text('继续面试'), findsOneWidget);
       expect(find.text('前端开发工程师'), findsNothing);
@@ -62,7 +62,7 @@ void main() {
       expect(api.statuses, ['all', 'active']);
 
       await tester.enterText(find.byType(TextField), '候选人');
-      await tester.tap(find.byTooltip('搜索'));
+      await tester.tap(find.text('搜索'));
       await tester.pumpAndSettle();
       expect(api.lastKeyword, '候选人');
       expect(api.statuses.last, 'active');
@@ -72,10 +72,13 @@ void main() {
       expect(api.lastSortBy, 'score');
       expect(api.statuses.last, 'active');
 
+      // 滚动到底触发下一页加载（无限滚动分页）
       await tester.drag(find.byType(ListView), const Offset(0, -500));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('下一页'));
-      await tester.pumpAndSettle();
+      if (api.lastCurrent != 2) {
+        await tester.tap(find.text('向下滚动加载更多'));
+        await tester.pumpAndSettle();
+      }
       expect(api.lastCurrent, 2);
       expect(api.statuses.last, 'active');
     },

@@ -25,7 +25,7 @@ void main() {
       expect(find.text('原始分支'), findsWidgets);
       expect(find.text('根分支问题'), findsOneWidget);
       expect(find.text('项目架构图'), findsOneWidget);
-      expect(find.text('最新活动 2026-07-24 09:30'), findsOneWidget);
+      expect(find.text('最新活动 07-24 09:30'), findsOneWidget);
       expect(find.text('评估：架构表达清晰'), findsOneWidget);
 
       final rootDepth = tester.widget<Padding>(
@@ -100,8 +100,8 @@ void main() {
     await tester.enterText(draftField, '编辑后的分支回答');
     await _scrollTranscriptTo(tester, find.byKey(const Key('submit-fork')));
     tester
-        .widget<FilledButton>(find.byKey(const Key('submit-fork')))
-        .onPressed!();
+        .widget<InkWell>(find.byKey(const Key('submit-fork')))
+        .onTap!();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(api.forkCalls, 1);

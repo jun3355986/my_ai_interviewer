@@ -20,7 +20,8 @@ class Job {
   });
 
   factory Job.fromJson(Map<String, dynamic> json) => Job(
-    id: json['id'] as String?,
+    // 后端 t_job 主键是 BIGINT，序列化为数字；历史兼容字符串形式。
+    id: json['id']?.toString(),
     title: json['title'] as String,
     company: json['company'] as String?,
     location: json['location'] as String?,

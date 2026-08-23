@@ -1,0 +1,29 @@
+- generic [active] [ref=e5]:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - button [ref=e95]
+            - generic [ref=e96]: 设置
+            - generic [ref=e97]: 账号资料、通知与退出
+            - group:
+              - button "账号资料" [ref=e98]
+              - button "通知" [ref=e99]
+              - generic [ref=e100]: 管
+              - generic [ref=e101]: 管理员
+              - generic [ref=e102]: 角色：ROLE_USER / ROLE_ADMIN
+              - generic [ref=e103]: 用户名（不可修改）
+              - textbox [ref=e105]
+              - generic [ref=e106]: 邮箱（不可修改）
+              - textbox [ref=e108]
+              - generic [ref=e109]: 昵称
+              - textbox [ref=e111]
+              - generic [ref=e112]: 手机号
+              - textbox "可选" [ref=e114]
+              - button "保存资料" [ref=e115]
+              - button "退出登录" [ref=e116]
+            - button "首页" [ref=e117]
+            - button "面试" [ref=e118]
+            - button "历史" [ref=e119]
+            - button "设置" [ref=e120]

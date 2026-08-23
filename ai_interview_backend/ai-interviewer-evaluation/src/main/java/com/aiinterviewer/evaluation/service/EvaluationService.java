@@ -169,13 +169,13 @@ public class EvaluationService {
             stats.setAverageDuration(avgDuration);
         }
 
-        // 分数分布
+        // 分数分布：与用户客户端分数分布图一致的 5 档分段
         List<StatisticsDTO.ScoreDistribution> distributions = new ArrayList<>();
-        distributions.add(createDistribution("优秀(90-100)", evaluations, 90, 100));
-        distributions.add(createDistribution("良好(70-89)", evaluations, 70, 89));
-        distributions.add(createDistribution("中等(50-69)", evaluations, 50, 69));
-        distributions.add(createDistribution("及格(40-49)", evaluations, 40, 49));
-        distributions.add(createDistribution("待改进(<40)", evaluations, 0, 39));
+        distributions.add(createDistribution("90-100", evaluations, 90, 100));
+        distributions.add(createDistribution("80-89", evaluations, 80, 89));
+        distributions.add(createDistribution("70-79", evaluations, 70, 79));
+        distributions.add(createDistribution("60-69", evaluations, 60, 69));
+        distributions.add(createDistribution("<60", evaluations, 0, 59));
         stats.setScoreDistribution(distributions);
 
         return stats;

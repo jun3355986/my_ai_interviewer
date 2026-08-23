@@ -32,6 +32,14 @@ public class AdminEvaluationService {
         return PageResult.of(current, size, total == null ? 0L : total, records);
     }
 
+    public AdminEvaluationListItem findEvaluationById(Long evaluationId) {
+        return adminEvaluationMapper.selectEvaluationById(evaluationId);
+    }
+
+    public AdminEvaluationListItem findEvaluationBySessionId(String sessionId) {
+        return adminEvaluationMapper.selectEvaluationBySessionId(sessionId);
+    }
+
     private long safeOffset(long current, long size) {
         try {
             return Math.multiplyExact(current - 1, size);

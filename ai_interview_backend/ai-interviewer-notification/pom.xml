@@ -60,6 +60,16 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Flyway：通知域表结构迁移，使用独立 history 表，避免与 Admin 的 flyway_schema_history 冲突 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
         <!-- MyBatis Plus -->
         <dependency>
             <groupId>com.baomidou</groupId>

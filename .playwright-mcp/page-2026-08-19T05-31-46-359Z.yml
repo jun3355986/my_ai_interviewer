@@ -1,0 +1,12 @@
+- generic [active] [ref=f5e5]:
+  - generic:
+    - generic:
+      - generic:
+        - generic [ref=f5e20]:
+          - generic:
+            - generic [ref=f5e21]: 选择目标岗位
+            - button "不指定" [ref=f5e22]
+            - generic:
+              - group:
+                - button "Java 后端工程师（本地改版验收） AI Interviewer Local UAT" [ref=f5e23]
+        - button "Scrim" [ref=f5e24]

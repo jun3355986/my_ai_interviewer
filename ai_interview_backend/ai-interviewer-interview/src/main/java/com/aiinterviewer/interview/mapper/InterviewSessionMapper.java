@@ -61,4 +61,17 @@ public interface InterviewSessionMapper extends BaseMapper<InterviewSession> {
 
     @Select("SELECT * FROM t_interview_session WHERE python_session_id = #{pythonSessionId} LIMIT 1")
     InterviewSession selectByPythonSessionId(@Param("pythonSessionId") String pythonSessionId);
+
+    /**
+     * 统计用户仍有进行中分支的谱系数量
+     */
+    @Select("""
+            SELECT COUNT(DISTINCT session.lineage_id)
+            FROM t_interview_session session
+            JOIN t_interview_lineage lineage ON lineage.id = session.lineage_id
+            WHERE session.user_id = #{userId}
+              AND lineage.user_id = #{userId}
+              AND session.status = 1
+            """)
+    Long countActiveLineages(@Param("userId") Long userId);
 }

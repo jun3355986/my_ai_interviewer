@@ -277,3 +277,188 @@ export interface QuestionCreatePayload {
   tags: string[];
   media?: Array<{ type: string; url: string; caption?: string; alt?: string }>;
 }
+
+/* ─── 面试门户（透传 interview 微服务 durable 链路） ─── */
+
+export interface LineageSummary {
+  lineageId: string;
+  rootSessionId: string;
+  candidateName?: string | null;
+  resumeId?: number | null;
+  jobId?: number | null;
+  jobTitle?: string | null;
+  branchCount?: number | null;
+  activeBranchCount?: number | null;
+  completedBranchCount?: number | null;
+  bestCompletedScore?: number | null;
+  latestActivityAt?: string | null;
+  focusedBranchId: string;
+  focusedBranchStage?: string | null;
+  focusedBranchStageDisplay?: string | null;
+  focusedBranchStatus?: number | null;
+  focusedBranchProgress?: number | null;
+}
+
+export interface LineageTreeNode {
+  branchId: string;
+  parentBranchId?: string | null;
+  branchLabel: string;
+  forkPointMessageId?: number | null;
+  forkTriggerMessageId?: number | null;
+  stage?: string | null;
+  status?: number | null;
+  branchVersion?: number | null;
+  latestBusinessActivityAt?: string | null;
+  progress?: number | null;
+  ownedAssessmentCount?: number | null;
+  inheritedAssessmentCount?: number | null;
+  totalAssessmentCount?: number | null;
+  completedScore?: number | null;
+  evaluationSummary?: string | null;
+  recoverableTurnId?: string | null;
+  recoverableTurnStatus?: string | null;
+  recoverableTurnErrorCode?: string | null;
+}
+
+export interface LineageTree {
+  lineageId: string;
+  rootBranchId: string;
+  focusedBranchId: string;
+  nodes: LineageTreeNode[];
+}
+
+export interface BranchMessage {
+  id: number;
+  owningBranchId: string;
+  role: 'human' | 'ai' | 'system';
+  messageType?: string | null;
+  content: string;
+  stage?: string | null;
+  sequence?: number | null;
+  expectsResponse?: boolean | null;
+  deliveryStatus?: string | null;
+  inherited?: boolean | null;
+  forkable?: boolean | null;
+  forkPointMessageId?: number | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string | null;
+}
+
+export interface BranchTranscript {
+  lineageId: string;
+  branchId: string;
+  branchLabel: string;
+  parentBranchId?: string | null;
+  forkPointMessageId?: number | null;
+  stage?: string | null;
+  status?: number | null;
+  branchVersion: number;
+  messages: BranchMessage[];
+}
+
+export interface TurnAttempt {
+  turnId: string;
+  lineageId: string;
+  branchId: string;
+  expectedBranchVersion?: number | null;
+  expectedTailMessageId?: number | null;
+  candidateAnswer?: string | null;
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'INTERRUPTED' | 'CANCEL_REQUESTED' | 'CANCELLED' | 'DISCARDED';
+  retryOfTurnId?: string | null;
+  errorCode?: string | null;
+  createdAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
+  cancelledAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface StartAttemptResult {
+  lineageId: string;
+  branchId: string;
+  attempt: TurnAttempt;
+}
+
+export interface ForkAttemptResult {
+  branchId: string;
+  attempt: TurnAttempt;
+}
+
+export interface ResumeUploadResult {
+  resumeId: number;
+  filename: string;
+  name?: string | null;
+  jobIntent?: string | null;
+  workYears?: string | null;
+  education?: string | null;
+  university?: string | null;
+  major?: string | null;
+  skillCount?: number;
+  projectCount?: number;
+  preview?: string | null;
+}
+
+/* ─── 配置 ─── */
+
+export interface SystemConfigItem {
+  configKey: string;
+  configValue: string | null;
+  configGroup?: string | null;
+  description?: string | null;
+  editable?: boolean | null;
+}
+
+export interface InterviewStrategy {
+  strategyCode?: string | null;
+  strategyName?: string | null;
+  jobType?: string | null;
+  difficulty?: string | null;
+  questionCount?: number | null;
+  durationMinutes?: number | null;
+  scoringRule?: {
+    questionTypes?: string[];
+    difficultyRatio?: Record<string, number>;
+  } | null;
+  enabled?: boolean | null;
+}
+
+export interface ModelRuntimeConfig {
+  chat_model: string;
+  chat_fallback_models: string[];
+  embedding_model: string;
+  embedding_dimension: number;
+  vector_collection: string;
+  retrieval_top_k: number;
+  retrieval_keyword_fallback: boolean;
+  overridden_keys: string[];
+}
+
+export interface ModelConfigTestResult {
+  chat: { ok: boolean; model: string; latency_ms: number; error?: string };
+  embedding: { ok: boolean; model: string; dimension?: number; latency_ms: number; error?: string };
+  all_ok: boolean;
+}
+
+export type EvaluationDetail = {
+  id: number;
+  sessionId: string;
+  userId?: number | null;
+  username?: string | null;
+  jobId?: number | null;
+  jobTitle?: string | null;
+  overallScore?: number | null;
+  technicalScore?: number | null;
+  communicationScore?: number | null;
+  logicScore?: number | null;
+  experienceScore?: number | null;
+  summary?: string | null;
+  strengths?: string | null;
+  weaknesses?: string | null;
+  recommendation?: string | null;
+  detailedFeedback?: string | null;
+  totalQuestions?: number | null;
+  answeredQuestions?: number | null;
+  averageScore?: number | null;
+  durationMinutes?: number | null;
+  createdAt?: string | null;
+};

@@ -1,8 +1,10 @@
 package com.aiinterviewer.interview.repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -66,6 +68,7 @@ public class StartAttemptRepository {
             String candidateName,
             String resumeContent,
             String jobRequirements,
+            int targetProjectQuestions,
             LocalDateTime now) {
         return jdbcTemplate.update("""
                 INSERT INTO t_interview_session(
@@ -77,7 +80,7 @@ public class StartAttemptRepository {
                     legacy_migrated, started_at, created_at, updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, 'opening', 1,
-                    ?, ?, 0, 5, '[]'::jsonb, '[]'::jsonb, 0, ?,
+                    ?, ?, 0, ?, '[]'::jsonb, '[]'::jsonb, 0, ?,
                     '原始分支', 1, ?, FALSE, ?, ?, ?
                 )
                 ON CONFLICT (id) DO NOTHING
@@ -89,11 +92,37 @@ public class StartAttemptRepository {
                 candidateName,
                 resumeContent,
                 jobRequirements,
+                targetProjectQuestions,
                 rootId,
                 now,
                 now,
                 now,
                 now) == 1;
+    }
+
+    /**
+     * 读取 admin 侧维护的系统配置（t_system_config，共享库）。
+     * 表缺失或值非法时返回 empty，由调用方回退默认值，避免 admin 未部署时阻塞面试。
+     */
+    public Optional<Integer> findIntegerSystemConfig(String configKey) {
+        try {
+            List<String> values = jdbcTemplate.query(
+                    """
+                    SELECT config_value
+                    FROM t_system_config
+                    WHERE config_key = ? AND deleted_at IS NULL
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (rs, rowNum) -> rs.getString("config_value"),
+                    configKey);
+            if (values.isEmpty() || values.getFirst() == null || values.getFirst().isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(Integer.parseInt(values.getFirst().trim()));
+        } catch (DataAccessException | NumberFormatException ex) {
+            return Optional.empty();
+        }
     }
 
     public Optional<RootContext> findRoot(String rootId) {

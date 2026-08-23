@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
+import 'design/app_design.dart';
+import 'models/evaluation_report.dart';
 import 'models/job.dart';
 import 'services/interview_service.dart';
 
-/// AI 面试官助手 - 面试结果页面
-/// 基于 Figma 设计实现
+/// 评估报告：总评分环 + 各维度得分 + 优点/待改进 + 报告元信息。
 class InterviewResultPage extends StatefulWidget {
   const InterviewResultPage({super.key});
 
@@ -21,6 +24,7 @@ class _InterviewResultPageState extends State<InterviewResultPage>
   late Animation<double> _scoreAnimation;
 
   MatchResult? _matchResult;
+  EvaluationReport? _report;
   late int _totalScore;
   List<StageScore> _stageScores = [];
   List<String> _strengths = [];
@@ -35,27 +39,24 @@ class _InterviewResultPageState extends State<InterviewResultPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_isInitialized) {
-      _animationController = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1500),
-      );
-      _totalScore = 0;
-      _scoreAnimation = Tween<double>(begin: 0, end: 0).animate(
-        CurvedAnimation(
-          parent: _animationController,
-          curve: Curves.easeOutCubic,
-        ),
-      );
-      _isInitialized = true;
+    if (_isInitialized) return;
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _totalScore = 0;
+    _scoreAnimation = Tween<double>(begin: 0, end: 0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
+    _isInitialized = true;
 
-      final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is MatchResult) {
-        _applyMatchResult(args);
-      } else {
-        _isLoadingReport = true;
-        unawaited(_loadPersistedResult(context.read<InterviewService>()));
-      }
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is MatchResult) {
+      _applyMatchResult(args);
+    } else {
+      _isLoadingReport = true;
+      _report = context.read<InterviewService>().evaluationReport;
+      unawaited(_loadPersistedResult(context.read<InterviewService>()));
     }
   }
 
@@ -65,13 +66,17 @@ class _InterviewResultPageState extends State<InterviewResultPage>
       if (!mounted) return;
       setState(() {
         _isLoadingReport = false;
+        _report = service.evaluationReport;
         _applyMatchResult(result);
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      final message = error.toString().replaceFirst('Bad state: ', '');
       setState(() {
         _isLoadingReport = false;
-        _reportError = '评估报告暂时无法生成，请稍后重试。';
+        _reportError = message.contains('尚未完成')
+            ? message
+            : '评估报告暂时无法生成，请稍后重试。$message';
       });
     }
   }
@@ -109,12 +114,6 @@ class _InterviewResultPageState extends State<InterviewResultPage>
   }
 
   @override
-  void initState() {
-    super.initState();
-    // Animation controller initialized in didChangeDependencies
-  }
-
-  @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
@@ -123,215 +122,232 @@ class _InterviewResultPageState extends State<InterviewResultPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Column(
           children: [
-            // 顶部导航栏
-            _buildTopBar(context),
-
-            // 主体内容
+            AppTopBar(
+              leading: BackButtonCircle(),
+              title: '面试结果',
+              subtitle: _report?.candidateName?.trim().isNotEmpty == true
+                  ? '${_report!.candidateName}'
+                  : null,
+            ),
             Expanded(
               child: _isLoadingReport
-                  ? const Center(child: CircularProgressIndicator())
-                  : _reportError != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          _reportError!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Color(0xFF6A7282)),
-                        ),
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 14),
+                          Text(
+                            '正在读取持久化评估报告...',
+                            style: TextStyle(color: AppColors.muted, fontSize: 13),
+                          ),
+                        ],
                       ),
                     )
+                  : _reportError != null
+                  ? EmptyState(
+                      icon: Icons.assessment_outlined,
+                      title: '暂无评估报告',
+                      message: _reportError!,
+                      actionLabel: '返回',
+                      onAction: () => Navigator.maybePop(context),
+                    )
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          // 恭喜区域
-                          _buildCongratulationSection(),
-                          const SizedBox(height: 32),
-
-                          // 总评分
-                          _buildTotalScoreSection(),
-                          const SizedBox(height: 32),
-
-                          // 各环节得分
-                          _buildStageScoresSection(),
-                          const SizedBox(height: 24),
-
-                          // 优点
-                          _buildStrengthsSection(),
-                          const SizedBox(height: 16),
-
-                          // 待改进
-                          _buildImprovementsSection(),
-                          const SizedBox(height: 32),
-                        ],
+                      padding: const EdgeInsets.all(20),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final body = Column(
+                            children: [
+                              _buildScoreHero(),
+                              const SizedBox(height: 18),
+                              if (_report != null) ...[
+                                _buildReportMeta(),
+                                const SizedBox(height: 18),
+                              ],
+                              _buildStageScores(),
+                              const SizedBox(height: 16),
+                              _buildStrengthsSection(),
+                              const SizedBox(height: 14),
+                              _buildImprovementsSection(),
+                              const SizedBox(height: 22),
+                              _buildActions(),
+                            ],
+                          );
+                          if (constraints.maxWidth >= 860) {
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 13, child: body),
+                                const SizedBox(width: 16),
+                                Expanded(flex: 7, child: _buildSideColumn()),
+                              ],
+                            );
+                          }
+                          return body;
+                        },
                       ),
                     ),
             ),
-
-            // 底部按钮
-            _buildBottomButtons(context),
           ],
         ),
       ),
     );
   }
 
-  /// 顶部导航栏
-  Widget _buildTopBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E7EB), width: 0.5),
-        ),
-      ),
-      child: Row(
-        children: [
-          // 返回按钮
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios_new,
-                size: 16,
-                color: Color(0xFF1E2939),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // 标题
-          const Text(
-            '面试结果',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1E2939),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 恭喜区域
-  Widget _buildCongratulationSection() {
+  Widget _buildSideColumn() {
     return Column(
       children: [
-        // 奖杯图标
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF3E0),
-            borderRadius: BorderRadius.circular(20),
+        if (_report?.summary.isNotEmpty == true)
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '评估摘要',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.fg,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _report!.summary,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.muted,
+                    height: 1.6,
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: const Icon(
-            Icons.emoji_events,
-            size: 48,
-            color: Color(0xFFFFB300),
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        // 恭喜文字
-        const Text(
-          '恭喜完成面试！',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1E2939),
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          '您的表现非常出色',
-          style: TextStyle(fontSize: 15, color: Color(0xFF6A7282)),
-        ),
       ],
     );
   }
 
-  /// 总评分区域
-  Widget _buildTotalScoreSection() {
-    return AnimatedBuilder(
-      animation: _scoreAnimation,
-      builder: (context, child) {
-        return Column(
-          children: [
-            // 环形进度
-            SizedBox(
-              width: 160,
-              height: 160,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // 背景圆环
-                  CustomPaint(
-                    size: const Size(160, 160),
-                    painter: CircleProgressPainter(
-                      progress: _scoreAnimation.value / 100,
-                      backgroundColor: const Color(0xFFE5E7EB),
-                      progressColor: const Color(0xFF00C950),
-                      strokeWidth: 12,
-                    ),
-                  ),
-                  // 分数
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildScoreHero() {
+    return AppCard(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final ring = SizedBox(
+            width: 150,
+            height: 150,
+            child: AnimatedBuilder(
+              animation: _scoreAnimation,
+              builder: (context, _) => CustomPaint(
+                painter: _ScoreRingPainter(
+                  progress: _scoreAnimation.value / 100,
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
                         '总评分',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF6A7282),
-                        ),
+                        style: TextStyle(fontSize: 12, color: AppColors.muted),
                       ),
                       Text(
                         _scoreAnimation.value.toInt().toString(),
                         key: const Key('evaluation-total-score'),
                         style: const TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E2939),
+                          fontSize: 40,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -1,
+                          color: AppColors.fg,
                         ),
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              '满分 100 分',
-              style: TextStyle(fontSize: 13, color: Color(0xFF99A1AF)),
-            ),
-          ],
-        );
-      },
+          );
+          final summary = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _matchResult?.matchLevel ?? '评估已完成',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.fg,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '满分 100 分。分数来自持久化评估报告。',
+                style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.5),
+              ),
+            ],
+          );
+          if (constraints.maxWidth >= 520) {
+            return Row(
+              children: [
+                ring,
+                const SizedBox(width: 32),
+                Expanded(child: summary),
+              ],
+            );
+          }
+          return Column(
+            children: [
+              ring,
+              const SizedBox(height: 18),
+              summary,
+            ],
+          );
+        },
+      ),
     );
   }
 
-  /// 各环节得分
-  Widget _buildStageScoresSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(16),
+  Widget _buildReportMeta() {
+    final report = _report;
+    if (report == null) return const SizedBox.shrink();
+    final items = <(String, String)>[
+      if (report.totalQuestions != null)
+        ('答题数', '${report.answeredQuestions ?? 0}/${report.totalQuestions}'),
+      if (report.durationMinutes != null)
+        ('时长', '${report.durationMinutes} 分钟'),
+      if (report.createdAt != null)
+        ('评估时间', report.createdAt!.toLocal().fullDisplay),
+    ];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return AppCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          for (final (label, value) in items)
+            Column(
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.fg,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+              ],
+            ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildStageScores() {
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -339,146 +355,117 @@ class _InterviewResultPageState extends State<InterviewResultPage>
             '各环节得分',
             style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1E2939),
+              fontWeight: FontWeight.w700,
+              color: AppColors.fg,
             ),
           ),
           const SizedBox(height: 16),
-          ...List.generate(_stageScores.length, (index) {
-            final stage = _stageScores[index];
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: index < _stageScores.length - 1 ? 16 : 0,
-              ),
-              child: _buildStageScoreItem(stage),
-            );
-          }),
+          if (_stageScores.isEmpty)
+            const Text('暂无环节评分', style: TextStyle(color: AppColors.muted))
+          else
+            ...List.generate(_stageScores.length, (index) {
+              final stage = _stageScores[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: index < _stageScores.length - 1 ? 16 : 0,
+                ),
+                child: _buildStageScoreItem(stage),
+              );
+            }),
         ],
       ),
     );
   }
 
-  /// 环节得分项
   Widget _buildStageScoreItem(StageScore stage) {
-    final progress = stage.score / stage.maxScore;
-    Color progressColor;
-    if (progress >= 0.8) {
-      progressColor = const Color(0xFF00C950);
-    } else if (progress >= 0.6) {
-      progressColor = const Color(0xFF2B7FFF);
-    } else {
-      progressColor = const Color(0xFFF0B100);
-    }
+    final progress = (stage.score / stage.maxScore).clamp(0.0, 1.0);
+    final progressColor = progress >= 0.8
+        ? AppColors.success
+        : progress >= 0.6
+        ? AppColors.accent
+        : AppColors.warn;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              stage.name,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF4A5565)),
+            SizedBox(
+              width: 76,
+              child: Text(
+                stage.name,
+                style: const TextStyle(fontSize: 13, color: AppColors.fg2),
+              ),
             ),
+            const SizedBox(width: 10),
+            Expanded(child: AppMeter(value: progress, color: progressColor)),
+            const SizedBox(width: 10),
             Text(
               '${stage.score.toStringAsFixed(1)}/${stage.maxScore.toInt()}',
-              style: TextStyle(
-                fontSize: 14,
+              style: const TextStyle(
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: progressColor,
+                color: AppColors.muted,
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          height: 8,
-          decoration: BoxDecoration(
-            color: const Color(0xFFE5E7EB),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: progress,
-            child: Container(
-              decoration: BoxDecoration(
-                color: progressColor,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ),
         ),
       ],
     );
   }
 
-  /// 优点区域
   Widget _buildStrengthsSection() {
     return _buildExpandableSection(
-      icon: Icons.check_circle,
-      iconColor: const Color(0xFF00C950),
-      iconBgColor: const Color(0xFFE8F8ED),
+      icon: Icons.check_circle_outline,
+      iconColor: AppColors.success,
       title: '优点',
       items: _strengths,
       isExpanded: _isStrengthsExpanded,
-      onToggle: () {
-        setState(() {
-          _isStrengthsExpanded = !_isStrengthsExpanded;
-        });
-      },
+      onToggle: () =>
+          setState(() => _isStrengthsExpanded = !_isStrengthsExpanded),
     );
   }
 
-  /// 待改进区域
   Widget _buildImprovementsSection() {
     return _buildExpandableSection(
-      icon: Icons.error,
-      iconColor: const Color(0xFFF0B100),
-      iconBgColor: const Color(0xFFFFF8E6),
+      icon: Icons.error_outline,
+      iconColor: AppColors.warn,
       title: '待改进',
       items: _improvements,
       isExpanded: _isImprovementsExpanded,
-      onToggle: () {
-        setState(() {
-          _isImprovementsExpanded = !_isImprovementsExpanded;
-        });
-      },
+      onToggle: () =>
+          setState(() => _isImprovementsExpanded = !_isImprovementsExpanded),
     );
   }
 
-  /// 可展开区域
   Widget _buildExpandableSection({
     required IconData icon,
     required Color iconColor,
-    required Color iconBgColor,
     required String title,
     required List<String> items,
     required bool isExpanded,
     required VoidCallback onToggle,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-      ),
+    return AppCard(
+      padding: EdgeInsets.zero,
       child: Column(
         children: [
-          // 标题栏
-          GestureDetector(
+          InkWell(
             onTap: onToggle,
-            child: Container(
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadius.lg),
+            ),
+            child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   Container(
-                    width: 32,
-                    height: 32,
+                    width: 30,
+                    height: 30,
                     decoration: BoxDecoration(
-                      color: iconBgColor,
-                      borderRadius: BorderRadius.circular(8),
+                      color: iconColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                     ),
-                    child: Icon(icon, size: 18, color: iconColor),
+                    child: Icon(icon, size: 17, color: iconColor),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -486,8 +473,8 @@ class _InterviewResultPageState extends State<InterviewResultPage>
                       title,
                       style: const TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E2939),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.fg,
                       ),
                     ),
                   ),
@@ -495,157 +482,123 @@ class _InterviewResultPageState extends State<InterviewResultPage>
                     isExpanded
                         ? Icons.keyboard_arrow_up
                         : Icons.keyboard_arrow_down,
-                    color: const Color(0xFF99A1AF),
+                    color: AppColors.meta,
                   ),
                 ],
               ),
             ),
           ),
-
-          // 内容
           if (isExpanded)
-            Container(
+            Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                children: items.map((item) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          margin: const EdgeInsets.only(top: 7),
-                          decoration: BoxDecoration(
-                            color: iconColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            item,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF4A5565),
-                              height: 1.5,
+              child: items.isEmpty
+                  ? const Text('暂无内容', style: TextStyle(color: AppColors.muted))
+                  : Column(
+                      children: items
+                          .map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    margin: const EdgeInsets.only(top: 7),
+                                    decoration: BoxDecoration(
+                                      color: iconColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      item,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.muted,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
+                          )
+                          .toList(),
                     ),
-                  );
-                }).toList(),
-              ),
             ),
         ],
       ),
     );
   }
 
-  /// 底部按钮
-  Widget _buildBottomButtons(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 查看详细对话
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: () {
-                // TODO: 查看详细对话
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2B7FFF),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                '查看详细对话',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // 保存结果和返回首页
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      // TODO: 保存结果
-                    },
-                    icon: const Icon(Icons.download, size: 18),
-                    label: const Text('保存结果'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF2B7FFF),
-                      side: const BorderSide(
-                        color: Color(0xFF2B7FFF),
-                        width: 1.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SizedBox(
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        '/home',
-                        (route) => false,
-                      );
-                    },
-                    icon: const Icon(Icons.home, size: 18),
-                    label: const Text('返回首页'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF6A7282),
-                      side: const BorderSide(
-                        color: Color(0xFFE5E7EB),
-                        width: 1.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+  Widget _buildActions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppButton(
+          label: '查看详细对话',
+          onPressed: _openTranscript,
+        ),
+        const SizedBox(height: 10),
+        AppButton(
+          label: '保存结果',
+          variant: AppButtonVariant.secondary,
+          icon: Icons.copy_outlined,
+          onPressed: _copyReport,
+        ),
+        const SizedBox(height: 10),
+        AppButton(
+          label: '返回首页',
+          variant: AppButtonVariant.ghost,
+          onPressed: () =>
+              Navigator.pushNamedAndRemoveUntil(context, '/home', (r) => false),
+        ),
+      ],
     );
+  }
+
+  void _openTranscript() {
+    final service = context.read<InterviewService>();
+    final lineageId = service.currentLineageId;
+    final branchId =
+        service.currentTranscript?.branchId ?? service.currentSessionId;
+    if (lineageId == null || branchId == null) {
+      showAppToast(context, '未找到当前面试谱系，请从面试历史进入回放');
+      return;
+    }
+    Navigator.pushNamed(context, '/history-detail', arguments: {
+      'lineageId': lineageId,
+      'branchId': branchId,
+    });
+  }
+
+  Future<void> _copyReport() async {
+    final report = _report;
+    final buffer = StringBuffer()
+      ..writeln('AI 面试评估报告')
+      ..writeln('总评分：$_totalScore / 100')
+      ..writeln('推荐结论：${_matchResult?.matchLevel ?? ''}');
+    if (report != null) {
+      if (report.summary.isNotEmpty) buffer.writeln('总结：${report.summary}');
+      if (report.strengths.isNotEmpty) buffer.writeln('优势：${report.strengths}');
+      if (report.weaknesses.isNotEmpty) {
+        buffer.writeln('待改进：${report.weaknesses}');
+      }
+    } else {
+      for (final item in _strengths) {
+        buffer.writeln(item);
+      }
+      for (final item in _improvements) {
+        buffer.writeln(item);
+      }
+    }
+    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    if (mounted) showAppToast(context, '评估结果已复制到剪贴板');
   }
 }
 
-/// 环节得分模型
 class StageScore {
   final String name;
   final double score;
@@ -654,53 +607,38 @@ class StageScore {
   StageScore({required this.name, required this.score, required this.maxScore});
 }
 
-/// 圆形进度绘制器
-class CircleProgressPainter extends CustomPainter {
-  final double progress;
-  final Color backgroundColor;
-  final Color progressColor;
-  final double strokeWidth;
+class _ScoreRingPainter extends CustomPainter {
+  _ScoreRingPainter({required this.progress});
 
-  CircleProgressPainter({
-    required this.progress,
-    required this.backgroundColor,
-    required this.progressColor,
-    required this.strokeWidth,
-  });
+  final double progress;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
+    final strokeWidth = 13.0;
     final radius = (size.width - strokeWidth) / 2;
 
-    // 背景圆环
     final bgPaint = Paint()
-      ..color = backgroundColor
+      ..color = AppColors.surface
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
+      ..strokeWidth = strokeWidth;
     canvas.drawCircle(center, radius, bgPaint);
 
-    // 进度圆环
     final progressPaint = Paint()
-      ..color = progressColor
+      ..color = AppColors.success
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
-
-    final sweepAngle = 2 * math.pi * progress;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -math.pi / 2,
-      sweepAngle,
+      2 * math.pi * progress.clamp(0.0, 1.0),
       false,
       progressPaint,
     );
   }
 
   @override
-  bool shouldRepaint(CircleProgressPainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
+  bool shouldRepaint(_ScoreRingPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

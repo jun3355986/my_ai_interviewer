@@ -6,10 +6,12 @@ import com.aiinterviewer.interview.dto.BranchTranscriptDTO;
 import com.aiinterviewer.interview.dto.ChatRequest;
 import com.aiinterviewer.interview.dto.LineageSummaryDTO;
 import com.aiinterviewer.interview.dto.LineageTreeDTO;
+import com.aiinterviewer.interview.dto.PracticeStatsDTO;
 import com.aiinterviewer.interview.dto.SessionDTO;
 import com.aiinterviewer.interview.service.InterviewHistoryService;
 import com.aiinterviewer.interview.service.InterviewService;
 import com.aiinterviewer.interview.service.LineageTreeService;
+import com.aiinterviewer.interview.service.PracticeStatsService;
 import com.aiinterviewer.interview.service.SSEProxyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -44,6 +46,7 @@ public class InterviewController {
     private final InterviewService interviewService;
     private final InterviewHistoryService interviewHistoryService;
     private final LineageTreeService lineageTreeService;
+    private final PracticeStatsService practiceStatsService;
 
     /**
      * 统一对话接口 - SSE流式响应
@@ -142,6 +145,16 @@ public class InterviewController {
             @PathVariable("lineageId") String lineageId,
             @RequestHeader("X-User-Id") Long userId) {
         return Result.success(lineageTreeService.getTree(lineageId, userId));
+    }
+
+    /**
+     * 个人练习统计，供用户客户端首页展示真实指标与近 14 天趋势。
+     */
+    @GetMapping("/my/stats")
+    @Operation(summary = "获取个人练习统计", description = "总练习次数、进行中练习、最近活动时间与近 14 天趋势")
+    public Result<PracticeStatsDTO> getMyStats(
+            @RequestHeader("X-User-Id") Long userId) {
+        return Result.success(practiceStatsService.getStats(userId));
     }
 
     /**

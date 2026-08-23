@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'api_client.dart';
 import '../models/evaluation_report.dart';
 import '../models/interview_history.dart';
+import '../models/practice_stats.dart';
 
 class InterviewApi {
   final ApiClient _apiClient;
@@ -68,6 +69,41 @@ class InterviewApi {
           data: {'turnId': turnId, 'resumeId': ?resumeId, 'jobId': ?jobId},
         );
     return StartAttempt.fromJson(_readMap(response, '启动面试响应格式错误'));
+  }
+
+  /// 个人练习统计（总次数/进行中/最近活动/近 14 天趋势）。
+  Future<PracticeStats> getMyStats() async {
+    final response = await _apiClient
+        .getServiceDio(ApiClient.interviewBaseUrl)
+        .get(ApiClient.interviewPath('/interviews/my/stats'));
+    return PracticeStats.fromJson(
+      _readMap(response, '练习统计响应格式错误'),
+    );
+  }
+
+  /// 个人评估统计（平均分/分数分布等）。
+  Future<EvaluationStatistics> getEvaluationStatistics() async {
+    final response = await _apiClient
+        .getServiceDio(ApiClient.evaluationBaseUrl)
+        .get(ApiClient.evaluationPath('/evaluations/statistics'));
+    return EvaluationStatistics.fromJson(
+      _readMap(response, '评估统计响应格式错误'),
+    );
+  }
+
+  /// 读取持久化评估报告；尚未生成时返回 null。
+  Future<EvaluationReport?> getEvaluationReport(String branchId) async {
+    final response = await _apiClient
+        .getServiceDio(ApiClient.evaluationBaseUrl)
+        .get(ApiClient.evaluationPath('/evaluations/$branchId'));
+    final body = response.data;
+    if (response.statusCode != 200 || body is! Map || body['code'] != 200) {
+      final message = body is Map ? body['message']?.toString() : null;
+      throw StateError(message ?? '请求失败');
+    }
+    final data = body['data'];
+    if (data is! Map) return null;
+    return EvaluationReport.fromJson(Map<String, dynamic>.from(data));
   }
 
   Future<EvaluationReport> generateEvaluationReport(String branchId) async {

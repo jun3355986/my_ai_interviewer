@@ -28,6 +28,7 @@ import org.springframework.util.StringUtils;
 public class StartAttemptService {
 
     static final String OPENING_TRIGGER = "我准备好了";
+    static final int DEFAULT_TARGET_PROJECT_QUESTIONS = 5;
 
     private final StartAttemptRepository startRepository;
     private final TurnAttemptRepository attemptRepository;
@@ -63,6 +64,7 @@ public class StartAttemptService {
                 resume == null ? null : normalize(resume.candidateName()),
                 resume == null ? null : resume.rawText(),
                 job == null ? null : job.requirements(),
+                resolveTargetProjectQuestions(),
                 now)) {
             throw new TurnAttemptConflictException("IDEMPOTENCY_CONFLICT");
         }
@@ -115,6 +117,16 @@ public class StartAttemptService {
             throw new TurnAttemptConflictException("IDEMPOTENCY_PAYLOAD_MISMATCH");
         }
         return response(rootId, attempt);
+    }
+
+    /**
+     * 独立项目题目标数量：默认 5，可由 admin 侧 t_system_config 的
+     * interview.project-questions.target 覆盖（共享库直读，配置缺失或非法时回退默认）。
+     */
+    private int resolveTargetProjectQuestions() {
+        return startRepository.findIntegerSystemConfig("interview.project-questions.target")
+                .filter(value -> value > 0 && value <= 20)
+                .orElse(DEFAULT_TARGET_PROJECT_QUESTIONS);
     }
 
     private ResumeContext resolveResume(Long resumeId, Long userId) {

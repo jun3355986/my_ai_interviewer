@@ -117,6 +117,29 @@ Python storage isolation variables:
 
 The durable ledger uses owner-and-status compare-and-swap fencing for stale takeover, completion, and failure cleanup. A successful completion writes the durable result and replaceable SQLite session cache in one transaction; only after that transaction commits may the in-memory cache be published. Storage/acquisition/replay failures cross the API boundary as sanitized durable errors.
 
+## Local Phoenix Agent-Evaluation Lab
+
+The first local Phoenix lab is intentionally separate from the existing LangSmith integration. It is a local-only trace viewer for `Agent 1 · 项目面试题生成`; it does not send traces to Phoenix Cloud and does not make an Experiment, Dataset, or Grader authoritative by itself.
+
+One-time dependency setup is already declared in the Python AI `dev` group. For a fresh environment:
+
+```bash
+cd ai_interviewer
+uv sync --group dev
+uv run python -m ipykernel install --user \
+  --name ai-interviewer-phoenix \
+  --display-name "Python (AI Interviewer · Phoenix Lab)"
+```
+
+Copy the non-secret local configuration and start Phoenix in a separate terminal:
+
+```bash
+cp tests/config/phoenix.local.env.example tests/config/phoenix.local.env
+tests/scripts/start-phoenix-local.sh
+```
+
+Open `http://127.0.0.1:6006` to inspect traces. The first trial must use only desensitized fixtures. Keep `LANGSMITH_TRACING=false`, `LANGSMITH_EVALUATION_SYNC=false`, and `MANUAL_FLOW_RECORDER_CAPTURE_RAW_PAYLOADS=false` until the user deliberately designs and reviews a different privacy boundary. `PHOENIX_TELEMETRY_ENABLED=false` disables Phoenix product analytics, while the local script disables Phoenix Agent web access and server-side Bash and hides Playground Providers. The ignored repository-root `.env.phoenix` lets Phoenix OTEL discover the local collector and project name automatically. The lab notebook and guidance live in `tests/labs/agent-eval-phoenix/`.
+
 ## Day 3 Local Durable Replay
 
 With the local Compose stack healthy and a valid model-provider configuration, run the complete durable flow through Gateway. Supply the OpenCode Go credential only through the shell or an uncommitted local secret manager; do not put it in `.env.example`, a report, or source control:
@@ -185,6 +208,8 @@ mvn -pl ai-interviewer-interview -Dtest=InterviewFlywayMigrationTest test
 The migration test deliberately keeps Interview Service history in `flyway_interview_schema_history`; the shared database's default `flyway_schema_history` belongs to the Admin service.
 
 `ai_interview_backend/sql/init.sql` intentionally remains the pre-Lineage shared-schema bootstrap. A fresh Docker database runs that file first, then Interview Service baselines the non-empty schema at version 0 and applies V1+. `InterviewFlywayMigrationTest.freshDockerBootstrapRemainsCompatibleWithAllInterviewMigrations` reads the real bootstrap file and prevents duplicate-object drift; do not copy versioned Lineage or Turn Attempt DDL into `init.sql`.
+
+Notification Service also runs Flyway with its own dedicated history table `flyway_notification_schema_history` (`V1__notification_preference.sql` creates `t_notification_preference`, idempotent `CREATE TABLE IF NOT EXISTS`). The same table is additionally declared in `sql/init.sql` for fresh bootstrap parity; keep both sources synchronized when changing notification domain schema.
 
 To verify a local PostgreSQL custom backup without connecting to the authoritative Compose database, provide the backup path to the isolated restore wrapper:
 
@@ -299,6 +324,17 @@ bash tests/scripts/run-smoke.sh
 | `SMOKE_DRY_RUN` | Skip network calls when truthy |
 | `CURL_MAX_TIME` | `45` |
 | `SSE_MAX_TIME` | `45` |
+
+### Admin Service Cross-Service Variables (interview portal)
+
+Java admin service (`ai_interviewer_admin`) proxies real interviews, resume parsing, and Python runtime config. Set these when the admin portal screens are exercised against live services:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INTERVIEW_SERVICE_BASE_URL` | `http://localhost:9003` | Proxy target for lineages/tree/transcript/start/turn/fork attempts |
+| `EVALUATION_SERVICE_BASE_URL` | `http://localhost:9005` | Proxy target for evaluation report generation |
+| `PYTHON_AI_RESUME_PARSE_URL` | `http://localhost:8000/resume/parse` | Structured resume parsing before `t_resume` insert |
+| `PYTHON_AI_RUNTIME_CONFIG_URL` | `http://localhost:8000/admin/runtime-config` | Model/retrieval runtime config GET/PUT/test passthrough |
 
 ## API Tests
 

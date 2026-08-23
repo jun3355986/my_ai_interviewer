@@ -56,6 +56,14 @@ admin:
 
 python-ai:
   question-bank-sync-url: ${PYTHON_AI_QUESTION_BANK_SYNC_URL:http://localhost:8000/admin/question-bank/sync}
+  resume-parse-url: ${PYTHON_AI_RESUME_PARSE_URL:http://localhost:8000/resume/parse}
+  runtime-config-url: ${PYTHON_AI_RUNTIME_CONFIG_URL:http://localhost:8000/admin/runtime-config}
+
+interview-service:
+  base-url: ${INTERVIEW_SERVICE_BASE_URL:http://localhost:9003}
+
+evaluation-service:
+  base-url: ${EVALUATION_SERVICE_BASE_URL:http://localhost:9005}
 
 management:
   endpoints:

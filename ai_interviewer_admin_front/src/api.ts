@@ -7,16 +7,28 @@ import type {
   AiRawPayloadType,
   AiTraceDetail,
   AiTraceRow,
+  BranchTranscript,
   DashboardOverview,
+  EvaluationDetail,
+  ForkAttemptResult,
   InterviewRow,
+  InterviewStrategy,
   JobCreatePayload,
   JobRow,
+  LineageSummary,
+  LineageTree,
   LoginResponse,
   LlmCallRawPayload,
+  ModelConfigTestResult,
+  ModelRuntimeConfig,
   PageResult,
   QuestionCreatePayload,
   QuestionImportBatch,
   QuestionRow,
+  ResumeUploadResult,
+  StartAttemptResult,
+  SystemConfigItem,
+  TurnAttempt,
   UserRow,
 } from './types';
 
@@ -197,5 +209,114 @@ export const adminApi = {
   },
   aiObservabilityStats(params: Record<string, unknown>) {
     return request<AiObservabilityStats>(`/ai-observability/stats${queryString(params)}`);
+  },
+  systemConfigs(configGroup?: string) {
+    return request<SystemConfigItem[]>(`/system/configs${queryString({ configGroup })}`);
+  },
+  updateSystemConfig(configKey: string, payload: { configValue: string; configGroup?: string; description?: string }) {
+    return request<void>(`/system/configs/${encodeURIComponent(configKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+  interviewStrategyDefault() {
+    return request<InterviewStrategy>('/system/interview-strategy/default');
+  },
+  saveInterviewStrategyDefault(payload: InterviewStrategy) {
+    return request<void>('/system/interview-strategy/default', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+  evaluationDetail(evaluationId: number) {
+    return request<EvaluationDetail>(`/evaluations/${evaluationId}`);
+  },
+  evaluationBySession(sessionId: string) {
+    return request<EvaluationDetail>(`/evaluations/by-session/${encodeURIComponent(sessionId)}`);
+  },
+  generateEvaluation(sessionId: string) {
+    return request<EvaluationDetail>(`/evaluations/${encodeURIComponent(sessionId)}/generate`, {
+      method: 'POST',
+    });
+  },
+
+  /* ─── 面试门户（透传 interview 微服务 durable 链路） ─── */
+
+  uploadPortalResume(file: File) {
+    const form = new FormData();
+    form.set('file', file);
+    return request<ResumeUploadResult>('/portal/resumes', {
+      method: 'POST',
+      body: form,
+    });
+  },
+  portalLineages(params: Record<string, unknown>) {
+    return request<PageResult<LineageSummary>>(`/interview-portal/lineages${queryString(params)}`);
+  },
+  portalLineageTree(lineageId: string) {
+    return request<LineageTree>(`/interview-portal/lineages/${encodeURIComponent(lineageId)}/tree`);
+  },
+  portalBranchTranscript(branchId: string) {
+    return request<BranchTranscript>(`/interview-portal/branches/${encodeURIComponent(branchId)}/transcript`);
+  },
+  portalTurnAttempt(turnId: string) {
+    return request<TurnAttempt>(`/interview-portal/turn-attempts/${encodeURIComponent(turnId)}`);
+  },
+  portalStartAttempt(payload: { turnId: string; resumeId?: number | null; jobId?: number | null }) {
+    return request<StartAttemptResult>('/interview-portal/start-attempts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  portalCreateTurnAttempt(
+    branchId: string,
+    payload: { turnId: string; candidateAnswer: string; expectedBranchVersion: number; expectedTailMessageId?: number | null },
+  ) {
+    return request<TurnAttempt>(`/interview-portal/branches/${encodeURIComponent(branchId)}/turn-attempts`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  portalRetryTurnAttempt(turnId: string) {
+    return request<TurnAttempt>(`/interview-portal/turn-attempts/${encodeURIComponent(turnId)}/retry`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+  portalForkAttempt(
+    branchId: string,
+    payload: {
+      turnId: string;
+      triggerMessageId: number;
+      candidateAnswer: string;
+      expectedFocusedBranchVersion: number;
+      expectedFocusedTailMessageId?: number | null;
+    },
+  ) {
+    return request<ForkAttemptResult>(`/interview-portal/branches/${encodeURIComponent(branchId)}/fork-attempts`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /* ─── 模型与检索运行时配置（透传 Python） ─── */
+
+  getModelConfig() {
+    return request<ModelRuntimeConfig>('/portal/model-config');
+  },
+  updateModelConfig(
+    config: Partial<Pick<ModelRuntimeConfig, 'chat_model' | 'chat_fallback_models' | 'embedding_model' | 'embedding_dimension' | 'vector_collection' | 'retrieval_top_k' | 'retrieval_keyword_fallback'>>,
+    confirmCollectionSwitch = false,
+  ) {
+    return request<{ status: string; applied_keys: string[]; config: ModelRuntimeConfig }>('/portal/model-config', {
+      method: 'PUT',
+      body: JSON.stringify({ confirm_collection_switch: confirmCollectionSwitch, config }),
+    });
+  },
+  testModelConfig() {
+    return request<ModelConfigTestResult>('/portal/model-config/test', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
   },
 };

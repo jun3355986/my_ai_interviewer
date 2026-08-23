@@ -16,4 +16,8 @@ public interface AdminEvaluationMapper {
             @Param("query") AdminEvaluationService.AdminEvaluationQuery query,
             @Param("limit") long limit,
             @Param("offset") long offset);
+
+    AdminEvaluationService.AdminEvaluationListItem selectEvaluationById(@Param("id") Long id);
+
+    AdminEvaluationService.AdminEvaluationListItem selectEvaluationBySessionId(@Param("sessionId") String sessionId);
 }

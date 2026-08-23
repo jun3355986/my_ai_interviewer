@@ -80,6 +80,27 @@ class AuthService {
     return null;
   }
 
+  /// 更新个人资料（昵称/手机号/头像 URL），返回更新后的用户。
+  Future<User?> updateMe({
+    String? nickname,
+    String? phone,
+    String? avatarUrl,
+  }) async {
+    try {
+      final response = await _userApi.updateMe({
+        if (nickname != null) 'nickname': nickname,
+        if (phone != null) 'phone': phone,
+        'avatarUrl': ?avatarUrl,
+      });
+      if (response.statusCode == 200 && response.data['code'] == 200) {
+        return User.fromJson(response.data['data']);
+      }
+    } catch (e) {
+      debugPrint('UpdateMe error: $e');
+    }
+    return null;
+  }
+
   Future<void> _saveTokens(String access, String refresh) async {
     await const SharedPreferencesPendingStartStore().clearAll();
     final prefs = await SharedPreferences.getInstance();

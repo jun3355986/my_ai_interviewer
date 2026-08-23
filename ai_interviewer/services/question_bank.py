@@ -122,40 +122,65 @@ class QuestionBank:
         
         return len(texts)
     
+    def switch_collection(self, collection_name: str) -> None:
+        """
+        运行时切换向量集合（管理端配置下发）。
+
+        直接重建 Chroma 句柄：同名集合复用既有持久化数据，新名称对应独立
+        向量空间。调用方（admin_router）已负责二次确认，语义空间匹配由管理端保证。
+        """
+        name = (collection_name or "").strip()
+        if not name:
+            raise ValueError("collection name is required")
+        if name == self.vectorstore._collection.name:
+            return
+        self.vectorstore = Chroma(
+            collection_name=name,
+            embedding_function=self.embeddings,
+            persist_directory=self.vectorstore._persist_directory if hasattr(self.vectorstore, "_persist_directory") else os.getenv("AI_INTERVIEW_VECTOR_DB_PATH") or str(Path(__file__).parent.parent / "storage" / "vector_db"),
+        )
+
     def search_questions(
         self,
         query: str,
         job_requirements: Optional[str] = None,
         question_types: Optional[List[str]] = None,
-        k: int = 10,
+        k: Optional[int] = None,
     ) -> List[Document]:
         """
         检索相关问题
-        
+
         Args:
             query: 查询文本（职位要求、候选人的强项/弱项等）
             job_requirements: 职位要求
             question_types: 问题类型列表（如 ["Java基础", "多线程"]）
-            k: 返回的问题数量
-            
+            k: 返回的问题数量；缺省时使用运行时配置 retrieval_top_k（默认 10）
+
         Returns:
             相关文档列表
         """
+        from core.runtime_config import keyword_fallback_enabled, retrieval_top_k
+
+        effective_k = retrieval_top_k(default=10) if k is None else k
+
         # 构建检索查询
         search_query = query
         if job_requirements:
             search_query = f"{job_requirements}\n{query}"
-        
+
         if question_types:
             type_filter = " ".join(question_types)
             search_query = f"{search_query}\n{type_filter}"
-        
-        fetch_k = max(k * 4, k, 20)
+
+        fetch_k = max(effective_k * 4, effective_k, 20)
         try:
             vector_results = self.vectorstore.similarity_search(search_query, k=fetch_k)
         except Exception as exc:
-            # Chat 与 embedding 可独立供应。向量服务暂不可用时，保留本地 Chroma
-            # 原文的关键词检索，确保技术面不会因单一 embedding 凭证或供应商故障中断。
+            # Chat 与 embedding 可独立供应。向量服务不可用时的行为由运行时配置
+            # retrieval_keyword_fallback 决定：默认降级关键词检索保住面试流程；
+            # 显式关闭时直接抛错，避免管理端想在向量异常期间熔断检索。
+            if not keyword_fallback_enabled():
+                raise
             logger.warning("vector retrieval unavailable; falling back to keyword retrieval: %s", type(exc).__name__)
             vector_results = []
         keyword_results = self._keyword_search(search_query, k=fetch_k)
@@ -165,7 +190,7 @@ class QuestionBank:
             keyword_results=keyword_results,
             query=search_query,
             question_types=question_types or [],
-            k=k,
+            k=effective_k,
         )
 
     def search_question_items(
@@ -173,7 +198,7 @@ class QuestionBank:
         query: str,
         job_requirements: Optional[str] = None,
         question_types: Optional[List[str]] = None,
-        k: int = 10,
+        k: Optional[int] = None,
     ) -> List[QuestionItem]:
         """检索结构化题目，兼容保留 search_questions 的 Document 返回。"""
         documents = self.search_questions(

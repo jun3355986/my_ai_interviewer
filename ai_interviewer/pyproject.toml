@@ -26,5 +26,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "arize-phoenix>=12",
+    "arize-phoenix-otel>=0.16.0",
+    "ipykernel>=7.3.0",
+    "openinference-instrumentation-langchain>=0.1.70",
     "pytest>=8,<10",
 ]

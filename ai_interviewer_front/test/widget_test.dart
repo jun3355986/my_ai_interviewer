@@ -15,7 +15,8 @@ void main() {
     await tester.pumpWidget(const AIInterviewerApp());
 
     // Verify that login page is displayed
-    expect(find.text('AI 面试官助手'), findsOneWidget);
-    expect(find.text('登录'), findsOneWidget);
+    expect(find.text('进入面试练习'), findsOneWidget);
+    expect(find.text('登录'), findsWidgets);
+    expect(find.text('注册'), findsOneWidget);
   });
 }

@@ -1,11 +1,14 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
-import 'services/resume_service.dart';
-import 'services/interview_service.dart';
 
-/// AI 面试官助手 - 简历上传页面
-/// 基于 Figma 设计实现
+import 'design/app_design.dart';
+import 'models/job.dart';
+import 'services/interview_service.dart';
+import 'services/job_service.dart';
+import 'services/resume_service.dart';
+
+/// 上传简历页：PDF 上传 + 目标岗位选择，继续/跳过后进入面试工作台。
 class UploadResumePage extends StatefulWidget {
   const UploadResumePage({super.key});
 
@@ -21,6 +24,9 @@ class _UploadResumePageState extends State<UploadResumePage> {
   bool _starting = false;
   bool _routeInitialized = false;
 
+  List<Job> _jobs = const [];
+  bool _loadingJobs = true;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -33,176 +39,330 @@ class _UploadResumePageState extends State<UploadResumePage> {
       String value => int.tryParse(value),
       _ => null,
     };
+    _loadJobs();
+  }
+
+  Future<void> _loadJobs() async {
+    // JobService 在部分测试/宿主中可能未注入，缺省时退化为不展示岗位选择。
+    final jobService = _lookupJobService();
+    if (jobService == null) {
+      if (mounted) setState(() => _loadingJobs = false);
+      return;
+    }
+    final jobs = await jobService.getJobs();
+    if (!mounted) return;
+    setState(() {
+      _jobs = jobs;
+      _loadingJobs = false;
+    });
+  }
+
+  JobService? _lookupJobService() {
+    try {
+      return context.read<JobService>();
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final resumeService = Provider.of<ResumeService>(context);
+    final resumeService = context.watch<ResumeService>();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Column(
           children: [
-            // 顶部导航栏
-            _buildTopBar(context),
-
-            // 主体内容
+            AppTopBar(
+              leading: BackButtonCircle(onTap: () => Navigator.pop(context)),
+              title: '上传简历',
+              subtitle: '新面试 · 步骤 1 / 2',
+            ),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 说明文字
-                    _buildDescription(),
-                    const SizedBox(height: 24),
-
-                    // 上传区域
-                    _buildUploadArea(resumeService),
-                    if (resumeService.isLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 16),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    if (resumeService.error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(
-                          resumeService.error!,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-
-                    // 格式提示
-                    _buildFormatHint(),
-                    const SizedBox(height: 32),
-
-                    // 上传提示列表
-                    _buildUploadTips(),
-                  ],
+                padding: const EdgeInsets.all(20),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final dropZone = _buildUploadArea(resumeService);
+                    final sideCard = _buildSideColumn();
+                    if (constraints.maxWidth >= 820) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 13, child: dropZone),
+                          const SizedBox(width: 16),
+                          Expanded(flex: 7, child: sideCard),
+                        ],
+                      );
+                    }
+                    return Column(
+                      children: [
+                        dropZone,
+                        const SizedBox(height: 16),
+                        sideCard,
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
-
-            // 底部按钮
-            _buildBottomButtons(context),
+            _buildBottomButtons(),
           ],
         ),
       ),
     );
   }
 
-  /// 顶部导航栏
-  Widget _buildTopBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E7EB), width: 0.5),
-        ),
-      ),
-      child: Row(
-        children: [
-          // 返回按钮
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios_new,
-                size: 16,
-                color: Color(0xFF1E2939),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // 标题
-          const Text(
-            '上传简历',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1E2939),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 说明文字
-  Widget _buildDescription() {
-    return const Text(
-      '上传您的简历，AI 面试官将根据您的背景进行针对性面试',
-      style: TextStyle(fontSize: 14, color: Color(0xFF6A7282), height: 1.5),
-    );
-  }
-
-  /// 上传区域
   Widget _buildUploadArea(ResumeService resumeService) {
     return GestureDetector(
       onTap: resumeService.isLoading || _starting ? null : _handleUpload,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 48),
+        constraints: const BoxConstraints(minHeight: 300),
+        padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 24),
         decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
-          borderRadius: BorderRadius.circular(16),
+          color: _hasUploadedFile
+              ? AppColors.accent.withValues(alpha: 0.04)
+              : AppColors.surfaceWarm,
+          borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(
             color: _hasUploadedFile
-                ? const Color(0xFF2B7FFF)
-                : const Color(0xFFE5E7EB),
-            width: 1.5,
-            style: BorderStyle.solid,
+                ? AppColors.accent
+                : AppColors.border,
+            width: 1.4,
           ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 上传图标
             Container(
-              width: 64,
-              height: 64,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
-                color: _hasUploadedFile
-                    ? const Color(0xFF2B7FFF).withValues(alpha: 0.1)
-                    : const Color(0xFFE8F0FE),
-                borderRadius: BorderRadius.circular(16),
+                color: AppColors.accentSoft,
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
               child: Icon(
                 _hasUploadedFile
-                    ? Icons.description
-                    : Icons.cloud_upload_outlined,
-                size: 32,
-                color: const Color(0xFF2B7FFF),
+                    ? Icons.description_outlined
+                    : Icons.upload_file_outlined,
+                size: 28,
+                color: AppColors.accent,
               ),
             ),
             const SizedBox(height: 16),
-
-            // 文字提示
             Text(
               _hasUploadedFile ? _uploadedFileName ?? '已上传文件' : '点击上传 PDF 简历',
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: _hasUploadedFile
-                    ? const Color(0xFF2B7FFF)
-                    : const Color(0xFF1E2939),
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: _hasUploadedFile ? AppColors.accent : AppColors.fg,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              _hasUploadedFile ? '点击重新上传' : '或拖拽文件到此处',
-              style: const TextStyle(fontSize: 14, color: Color(0xFF99A1AF)),
+              _hasUploadedFile ? '点击可重新上传' : '或拖拽文件到此处',
+              style: const TextStyle(fontSize: 13, color: AppColors.muted),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '支持 PDF 格式，最大 10MB',
+              style: TextStyle(fontSize: 12, color: AppColors.meta),
+            ),
+            if (resumeService.isLoading)
+              const Padding(
+                padding: EdgeInsets.only(top: 16),
+                child: SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSideColumn() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '上传提示',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.fg,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _buildTipItem(
+                '请确保简历内容清晰完整，包含教育背景和工作经验。',
+                AppColors.accent,
+              ),
+              const SizedBox(height: 12),
+              _buildTipItem('AI 将分析您的简历并生成针对性的面试问题。', AppColors.success),
+              const SizedBox(height: 12),
+              _buildTipItem('您的简历信息仅用于面试练习，我们会严格保护隐私。', AppColors.warn),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '目标岗位',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.fg,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const AppFieldLabel('选择岗位'),
+              const SizedBox(height: 6),
+              _buildJobSelector(),
+              const SizedBox(height: 10),
+              const Text(
+                '岗位来自职位服务；不指定岗位时使用通用面试大纲。',
+                style: TextStyle(fontSize: 12, color: AppColors.meta),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildJobSelector() {
+    if (_loadingJobs) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox.square(
+          dimension: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (_jobs.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Text(
+          '暂无可用岗位，将使用通用面试大纲',
+          style: TextStyle(fontSize: 13, color: AppColors.muted),
+        ),
+      );
+    }
+    final selectedJob = _jobs
+        .where((job) => int.tryParse(job.id ?? '') == _jobId)
+        .firstOrNull;
+    return GestureDetector(
+      onTap: () => _showJobPicker(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                selectedJob == null
+                    ? '不指定岗位'
+                    : selectedJob.title + (selectedJob.company != null ? ' · ${selectedJob.company}' : ''),
+                style: const TextStyle(fontSize: 14, color: AppColors.fg),
+              ),
+            ),
+            const Icon(Icons.unfold_more, size: 18, color: AppColors.meta),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showJobPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Text(
+                    '选择目标岗位',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.fg,
+                    ),
+                  ),
+                  const Spacer(),
+                  AppButton(
+                    label: '不指定',
+                    small: true,
+                    variant: AppButtonVariant.ghost,
+                    onPressed: () {
+                      setState(() => _jobId = null);
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.borderSoft),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  for (final job in _jobs)
+                    ListTile(
+                      title: Text(
+                        job.title,
+                        style: const TextStyle(fontSize: 14, color: AppColors.fg),
+                      ),
+                      subtitle: job.company == null
+                          ? null
+                          : Text(
+                              job.company!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.muted,
+                              ),
+                            ),
+                      trailing: int.tryParse(job.id ?? '') == _jobId
+                          ? const Icon(Icons.check, size: 20, color: AppColors.accent)
+                          : null,
+                      onTap: () {
+                        setState(() => _jobId = int.tryParse(job.id ?? ''));
+                        Navigator.pop(sheetContext);
+                      },
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -210,60 +370,14 @@ class _UploadResumePageState extends State<UploadResumePage> {
     );
   }
 
-  /// 格式提示
-  Widget _buildFormatHint() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.info_outline, size: 16, color: Colors.grey.shade500),
-        const SizedBox(width: 6),
-        Text(
-          '支持 PDF 格式，最大 10MB',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-        ),
-      ],
-    );
-  }
-
-  /// 上传提示列表
-  Widget _buildUploadTips() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '上传提示',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1E2939),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildTipItem('请确保简历内容清晰完整，包含教育背景和工作经验', const Color(0xFF2B7FFF)),
-          const SizedBox(height: 12),
-          _buildTipItem('AI 将分析您的简历并生成针对性的面试问题', const Color(0xFF00C950)),
-          const SizedBox(height: 12),
-          _buildTipItem('您的简历信息仅用于面试练习，我们会严格保护隐私', const Color(0xFFF0B100)),
-        ],
-      ),
-    );
-  }
-
-  /// 提示项
   Widget _buildTipItem(String text, Color dotColor) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 6,
-          height: 6,
-          margin: const EdgeInsets.only(top: 7),
+          width: 7,
+          height: 7,
+          margin: const EdgeInsets.only(top: 6),
           decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
         ),
         const SizedBox(width: 12),
@@ -271,8 +385,8 @@ class _UploadResumePageState extends State<UploadResumePage> {
           child: Text(
             text,
             style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF4A5565),
+              fontSize: 13,
+              color: AppColors.muted,
               height: 1.5,
             ),
           ),
@@ -281,64 +395,42 @@ class _UploadResumePageState extends State<UploadResumePage> {
     );
   }
 
-  /// 底部按钮
-  Widget _buildBottomButtons(BuildContext context) {
+  Widget _buildBottomButtons() {
+    final resumeService = context.watch<ResumeService>();
     return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -4),
-          ),
-        ],
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        16 + MediaQuery.paddingOf(context).bottom,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.borderSoft)),
+      ),
+      child: Row(
         children: [
-          // 继续按钮
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              key: const Key('start-with-resume'),
-              onPressed: _hasUploadedFile && !_starting
-                  ? _navigateToChat
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2B7FFF),
-                disabledBackgroundColor: const Color(0xFFE5E7EB),
-                foregroundColor: Colors.white,
-                disabledForegroundColor: const Color(0xFF99A1AF),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                _starting
-                    ? '正在创建面试...'
-                    : _hasUploadedFile
-                    ? '继续'
-                    : '请先上传简历',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          Expanded(
+            child: AppButton(
+              keyOverride: const Key('skip-resume-start'),
+              label: _starting ? '正在创建面试...' : '跳过此步骤',
+              variant: AppButtonVariant.ghost,
+              onPressed: _starting ? null : () => _navigateToChat(skip: true),
             ),
           ),
-          const SizedBox(height: 16),
-
-          // 跳过按钮
-          TextButton(
-            key: const Key('skip-resume-start'),
-            onPressed: _starting ? null : () => _navigateToChat(skip: true),
-            child: Text(
-              _starting ? '正在创建面试...' : '跳过此步骤',
-              style: const TextStyle(fontSize: 14, color: Color(0xFF6A7282)),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: AppButton(
+              keyOverride: const Key('start-with-resume'),
+              label: _starting
+                  ? '正在创建面试...'
+                  : _hasUploadedFile
+                  ? '继续'
+                  : '请先上传简历',
+              onPressed: _hasUploadedFile && !_starting && !resumeService.isLoading
+                  ? _navigateToChat
+                  : null,
             ),
           ),
         ],
@@ -346,9 +438,8 @@ class _UploadResumePageState extends State<UploadResumePage> {
     );
   }
 
-  /// 处理上传
   Future<void> _handleUpload() async {
-    final resumeService = Provider.of<ResumeService>(context, listen: false);
+    final resumeService = context.read<ResumeService>();
 
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -356,50 +447,43 @@ class _UploadResumePageState extends State<UploadResumePage> {
       withData: true,
     );
 
-    if (result != null && result.files.isNotEmpty) {
-      final file = result.files.single;
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
+    if (file.size > 10 * 1024 * 1024) {
+      if (mounted) showAppToast(context, '简历不能超过 10MB');
+      return;
+    }
 
-      if (!mounted) return;
+    if (!mounted) return;
 
-      final uploadedResumeId = await resumeService.uploadResume(file);
-      final resumeId = uploadedResumeId == null
-          ? null
-          : int.tryParse(uploadedResumeId);
+    final uploadedResumeId = await resumeService.uploadResume(file);
+    final resumeId = uploadedResumeId == null
+        ? null
+        : int.tryParse(uploadedResumeId);
 
-      if (resumeId != null) {
-        if (mounted) {
-          setState(() {
-            _hasUploadedFile = true;
-            _uploadedFileName = result.files.single.name;
-            _resumeId = resumeId;
-          });
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('上传成功')));
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                resumeService.error ??
-                    (uploadedResumeId == null ? '上传失败' : '简历 ID 格式无效'),
-              ),
-            ),
-          );
-        }
+    if (resumeId != null) {
+      if (mounted) {
+        setState(() {
+          _hasUploadedFile = true;
+          _uploadedFileName = file.name;
+          _resumeId = resumeId;
+        });
+        showAppToast(context, '上传成功');
+      }
+    } else {
+      if (mounted) {
+        showAppToast(
+          context,
+          resumeService.error ?? (uploadedResumeId == null ? '上传失败' : '简历 ID 格式无效'),
+        );
       }
     }
   }
 
-  /// 导航到面试对话页
   Future<void> _navigateToChat({bool skip = false}) async {
     if (_starting) return;
     setState(() => _starting = true);
-    final interviewService = Provider.of<InterviewService>(
-      context,
-      listen: false,
-    );
+    final interviewService = context.read<InterviewService>();
     try {
       await interviewService.startNewInterview(
         resumeId: skip ? null : _resumeId,
@@ -410,9 +494,7 @@ class _UploadResumePageState extends State<UploadResumePage> {
     } catch (error) {
       if (!mounted) return;
       final message = error.toString().replaceFirst('Bad state: ', '');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('创建面试失败：$message')));
+      showAppToast(context, '创建面试失败：$message');
     } finally {
       if (mounted) setState(() => _starting = false);
     }

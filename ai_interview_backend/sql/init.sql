@@ -248,6 +248,13 @@ CREATE TABLE IF NOT EXISTS t_notification (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS t_notification_preference (
+    user_id BIGINT PRIMARY KEY REFERENCES t_user(id),
+    progress_notify BOOLEAN NOT NULL DEFAULT TRUE,   -- 面试进度通知开关
+    evaluation_notify BOOLEAN NOT NULL DEFAULT TRUE, -- 评估完成通知开关
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ============================================
 -- 索引
 -- ============================================

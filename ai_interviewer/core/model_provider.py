@@ -4,6 +4,8 @@ from typing import Optional
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
+from core import runtime_config
+
 
 OPENAI_COMPAT_API_KEY_ENV = "AI_OPENAI_COMPAT_API_KEY"
 OPENAI_COMPAT_BASE_URL_ENV = "AI_OPENAI_COMPAT_BASE_URL"
@@ -128,20 +130,23 @@ def load_model_settings(
     )
     resolved_base_url = _normalize_openai_base_url(raw_endpoint)
 
-    resolved_chat_model = model or (
-        get_env(OPENAI_COMPAT_CHAT_MODEL_ENV)
-        or get_env(AZURE_OPENAI_CHAT_MODEL_ENV)
-        or DEFAULT_CHAT_MODEL
-    )
-    raw_fallback_models = (
-        get_env(OPENAI_COMPAT_FALLBACK_CHAT_MODELS_ENV)
-        or get_env(AZURE_OPENAI_BACKUP_CHAT_MODEL_ENV)
-        or ",".join(DEFAULT_FALLBACK_CHAT_MODELS)
-    )
-    resolved_fallback_models = _parse_fallback_models(
-        raw_fallback_models,
-        resolved_chat_model,
-    )
+    # 模型选择优先级：显式参数 > 运行时覆盖（管理端在线切换）> 环境变量 > 默认值。
+    resolved_chat_model = model or runtime_config.chat_model()
+    runtime_fallback_models = runtime_config.chat_fallback_models()
+    if model is None and runtime_fallback_models:
+        resolved_fallback_models = tuple(
+            item for item in runtime_fallback_models if item != resolved_chat_model
+        )
+    else:
+        raw_fallback_models = (
+            get_env(OPENAI_COMPAT_FALLBACK_CHAT_MODELS_ENV)
+            or get_env(AZURE_OPENAI_BACKUP_CHAT_MODEL_ENV)
+            or ",".join(DEFAULT_FALLBACK_CHAT_MODELS)
+        )
+        resolved_fallback_models = _parse_fallback_models(
+            raw_fallback_models,
+            resolved_chat_model,
+        )
 
     return AzureModelSettings(
         api_key=resolved_api_key,
@@ -209,21 +214,11 @@ def load_embedding_settings(
     )
     resolved_embedding_model = (
         model
-        or get_env(EMBEDDING_MODEL_ENV)
-        or get_env(AZURE_OPENAI_EMBEDDING_MODEL_ENV)
-        or DEFAULT_EMBEDDING_MODEL
+        or runtime_config.embedding_model()
     )
     resolved_embedding_dimension = embedding_dimension
     if resolved_embedding_dimension is None:
-        resolved_embedding_dimension = int(
-            get_env(
-                EMBEDDING_DIMENSION_ENV,
-                get_env(
-                    AZURE_OPENAI_EMBEDDING_DIMENSION_ENV,
-                    get_env(LEGACY_EMBEDDING_DIMENSION_ENV, str(DEFAULT_EMBEDDING_DIMENSION)),
-                ),
-            )
-        )
+        resolved_embedding_dimension = runtime_config.embedding_dimension()
     return AzureModelSettings(
         api_key=resolved_api_key,
         base_url=_normalize_openai_base_url(raw_endpoint),

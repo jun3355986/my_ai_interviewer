@@ -3,9 +3,12 @@ package com.aiinterviewer.notification.service;
 import com.aiinterviewer.common.exception.BusinessException;
 import com.aiinterviewer.common.model.ErrorCode;
 import com.aiinterviewer.notification.dto.NotificationDTO;
+import com.aiinterviewer.notification.dto.NotificationPreferenceDTO;
 import com.aiinterviewer.notification.dto.SendNotificationRequest;
 import com.aiinterviewer.notification.entity.Notification;
+import com.aiinterviewer.notification.entity.NotificationPreference;
 import com.aiinterviewer.notification.mapper.NotificationMapper;
+import com.aiinterviewer.notification.mapper.NotificationPreferenceMapper;
 import com.aiinterviewer.user.entity.User;
 import com.aiinterviewer.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +28,7 @@ import java.util.List;
 public class NotificationService {
 
     private final NotificationMapper notificationMapper;
+    private final NotificationPreferenceMapper preferenceMapper;
     private final UserMapper userMapper;
     private final EmailService emailService;
 
@@ -165,6 +169,32 @@ public class NotificationService {
         request.setRelatedType("EVALUATION");
         request.setRelatedId(sessionId);
         sendNotification(request);
+    }
+
+    /**
+     * 获取用户通知偏好；未设置过时返回默认开启。
+     */
+    public NotificationPreferenceDTO getPreferences(Long userId) {
+        NotificationPreference preference = preferenceMapper.selectById(userId);
+        NotificationPreferenceDTO dto = new NotificationPreferenceDTO();
+        dto.setProgressNotify(preference == null || !Boolean.FALSE.equals(preference.getProgressNotify()));
+        dto.setEvaluationNotify(preference == null || !Boolean.FALSE.equals(preference.getEvaluationNotify()));
+        return dto;
+    }
+
+    /**
+     * 更新用户通知偏好（upsert）。
+     */
+    @Transactional
+    public NotificationPreferenceDTO updatePreferences(
+            Long userId, NotificationPreferenceDTO request) {
+        NotificationPreference preference = new NotificationPreference();
+        preference.setUserId(userId);
+        preference.setProgressNotify(!Boolean.FALSE.equals(request.getProgressNotify()));
+        preference.setEvaluationNotify(!Boolean.FALSE.equals(request.getEvaluationNotify()));
+        preference.setUpdatedAt(LocalDateTime.now());
+        preferenceMapper.upsert(preference);
+        return getPreferences(userId);
     }
 
     private NotificationDTO toDTO(Notification notification) {

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:provider/provider.dart';
 
+import 'design/app_design.dart';
 import 'models/interview_history.dart';
 import 'services/interview_service.dart';
 
+/// 面试回放：分支树 + 当前分支回放 + 分叉 + 尾部补答。
 class HistoryDetailPage extends StatefulWidget {
   const HistoryDetailPage({super.key});
 
@@ -26,14 +29,25 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     if (_initialized) return;
     _initialized = true;
     final arguments = ModalRoute.of(context)?.settings.arguments;
+    InterviewLineageSummary? summary;
+    String? lineageId;
+    String? branchId;
     if (arguments is InterviewLineageSummary) {
-      _summary = arguments;
+      summary = arguments;
+      lineageId = arguments.lineageId;
+      branchId = arguments.focusedBranchId;
+    } else if (arguments is Map) {
+      lineageId = arguments['lineageId']?.toString();
+      branchId = arguments['branchId']?.toString();
+    }
+    if (lineageId != null && lineageId.isNotEmpty) {
+      _summary = summary;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         context.read<InterviewService>().loadReplay(
-          arguments.lineageId,
-          branchId: arguments.focusedBranchId,
-        );
+              lineageId!,
+              branchId: branchId,
+            );
       });
     }
   }
@@ -50,33 +64,55 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   Widget build(BuildContext context) {
     final narrow = MediaQuery.sizeOf(context).width < 900;
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
+        backgroundColor: AppColors.bg,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        leadingWidth: 64,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Center(child: BackButtonCircle()),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('面试回放', style: TextStyle(fontSize: 17)),
             Text(
-              _summary?.displayTitle ?? '面试记录',
-              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              _summary?.displayTitle ??
+                  context.watch<InterviewService>().currentTranscript?.branchLabel ??
+                  '面试记录',
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
             ),
           ],
         ),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: AppButton(
+              label: '重新加载',
+              variant: AppButtonVariant.ghost,
+              small: true,
+              onPressed: () =>
+                  context.read<InterviewService>().refreshReplay(),
+            ),
+          ),
           if (narrow)
-            IconButton(
-              key: const Key('open-branch-tree'),
-              tooltip: '打开分支树',
-              onPressed: _showBranchSheet,
-              icon: const Icon(Icons.account_tree_outlined),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: AppButton(
+                keyOverride: const Key('open-branch-tree'),
+                label: '选择分支',
+                variant: AppButtonVariant.secondary,
+                small: true,
+                onPressed: _showBranchSheet,
+              ),
             ),
         ],
       ),
       body: Consumer<InterviewService>(
         builder: (context, service, _) {
-          if (_summary == null) {
+          if (_summary == null && service.currentTranscript == null) {
             return const Center(child: Text('缺少面试回放参数'));
           }
           if (service.isLoadingReplay && service.currentTranscript == null) {
@@ -93,13 +129,14 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
             return _buildTranscript(service);
           }
           return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
                 key: const Key('branch-tree-panel'),
                 width: 320,
                 child: _buildTree(service, inSheet: false),
               ),
-              const VerticalDivider(width: 1),
+              const VerticalDivider(width: 1, color: AppColors.borderSoft),
               Expanded(child: _buildTranscript(service)),
             ],
           );
@@ -109,54 +146,61 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   }
 
   Widget _errorState(InterviewService service) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(service.replayError ?? '加载失败'),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: service.refreshReplay,
-            child: const Text('重新加载'),
-          ),
-        ],
-      ),
+    return EmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: '回放加载失败',
+      message: service.replayError ?? '加载失败',
+      actionLabel: '重新加载',
+      onAction: service.refreshReplay,
     );
   }
 
   Widget _buildTree(InterviewService service, {required bool inSheet}) {
     final nodes = service.tree?.nodes ?? const <LineageTreeNode>[];
-    final depths = _branchDepths(nodes);
+    final completedCount = nodes.where((node) => node.isCompleted).length;
     return Material(
-      color: Colors.white,
+      color: AppColors.surfaceWarm,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
-            child: Text(
-              inSheet ? '选择面试分支' : '分支树',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    inSheet ? '选择面试分支' : '分支树',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.fg,
+                    ),
+                  ),
+                ),
+                AppBadge('$completedCount 个完成', tone: AppBadgeTone.success),
+              ],
             ),
           ),
           Expanded(
             child: ListView.builder(
-              cacheExtent: 5000,
+              scrollCacheExtent: const ScrollCacheExtent.pixels(5000),
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 20),
               itemCount: nodes.length,
               itemBuilder: (context, index) {
                 final node = nodes[index];
+                final depths = _branchDepths(nodes);
+                final depth = depths[node.branchId] ?? 0;
                 final selected =
                     service.currentTranscript?.branchId == node.branchId;
                 return Padding(
                   key: Key('branch-depth-${node.branchId}'),
                   padding: EdgeInsets.only(
-                    left: (depths[node.branchId] ?? 0) * 18.0,
+                    left: depth * 18.0,
                     bottom: 8,
                   ),
                   child: InkWell(
                     key: Key('branch-node-${node.branchId}'),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                     onTap: () async {
                       if (inSheet) Navigator.pop(context);
                       await service.selectBranch(node.branchId);
@@ -164,14 +208,12 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: selected
-                            ? const Color(0xFFEFF6FF)
-                            : const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
+                        color: selected ? AppColors.accentSoft : AppColors.bg,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
                         border: Border.all(
                           color: selected
-                              ? const Color(0xFF3B82F6)
-                              : const Color(0xFFE2E8F0),
+                              ? AppColors.accent
+                              : AppColors.borderSoft,
                         ),
                       ),
                       child: Column(
@@ -182,19 +224,20 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                               Expanded(
                                 child: Text(
                                   node.branchLabel,
-                                  style: const TextStyle(
+                                  style: TextStyle(
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w600,
+                                    color: AppColors.fg,
                                   ),
                                 ),
                               ),
-                              _statusBadge(node.status),
+                              branchStatusBadge(node.status),
                             ],
                           ),
-                          const SizedBox(height: 7),
-                          LinearProgressIndicator(
+                          const SizedBox(height: 8),
+                          AppMeter(
                             value: node.progress.clamp(0, 100) / 100,
-                            minHeight: 5,
-                            borderRadius: BorderRadius.circular(4),
+                            color: node.isCompleted ? AppColors.success : AppColors.accent,
                           ),
                           const SizedBox(height: 7),
                           Text(
@@ -202,7 +245,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                             '自有 ${node.ownedAssessmentCount} / 继承 ${node.inheritedAssessmentCount}',
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Color(0xFF64748B),
+                              color: AppColors.muted,
                             ),
                           ),
                           if (node.completedScore != null)
@@ -210,15 +253,16 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                               '评分 ${node.completedScore}',
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: Color(0xFF15803D),
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.success,
                               ),
                             ),
                           if (node.latestBusinessActivityAt != null)
                             Text(
-                              '最新活动 ${_compactDateTime(node.latestBusinessActivityAt!)}',
+                              '最新活动 ${node.latestBusinessActivityAt.relativeDisplay}',
                               style: const TextStyle(
                                 fontSize: 11,
-                                color: Color(0xFF475569),
+                                color: AppColors.muted,
                               ),
                             ),
                           if (node.evaluationSummary?.trim().isNotEmpty == true)
@@ -228,7 +272,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 11,
-                                color: Color(0xFF475569),
+                                color: AppColors.muted,
                               ),
                             ),
                           if (node.recoverableTurnStatus != null)
@@ -236,7 +280,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                               '恢复状态：${node.recoverableTurnStatus}',
                               style: const TextStyle(
                                 fontSize: 11,
-                                color: Color(0xFFB45309),
+                                color: AppColors.warn,
                               ),
                             ),
                         ],
@@ -257,9 +301,9 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     _syncControllers(service);
     return Container(
       key: const Key('replay-transcript'),
-      color: const Color(0xFFF8FAFC),
+      color: AppColors.bg,
       child: ListView(
-        cacheExtent: 5000,
+        scrollCacheExtent: const ScrollCacheExtent.pixels(5000),
         padding: const EdgeInsets.all(18),
         children: [
           _overview(transcript),
@@ -278,7 +322,12 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
           if (transcript.status == 2 && !service.hasForkDraftForCurrentBranch)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 18),
-              child: Center(child: Text('该分支已完成，历史内容为只读。')),
+              child: Center(
+                child: Text(
+                  '该分支已完成，历史内容为只读。',
+                  style: TextStyle(color: AppColors.muted),
+                ),
+              ),
             ),
         ],
       ),
@@ -286,34 +335,32 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   }
 
   Widget _overview(BranchTranscript transcript) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    transcript.branchLabel ?? '原始分支',
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
+    return AppCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  transcript.branchLabel ?? '原始分支',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.fg,
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    '${transcript.stage ?? '未知阶段'} · 版本 ${transcript.branchVersion}',
-                    style: const TextStyle(color: Color(0xFF64748B)),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${transcript.stage ?? '未知阶段'} · 版本 ${transcript.branchVersion}',
+                  style: const TextStyle(color: AppColors.muted, fontSize: 13),
+                ),
+              ],
             ),
-            _statusBadge(transcript.status),
-          ],
-        ),
+          ),
+          branchStatusBadge(transcript.status),
+        ],
       ),
     );
   }
@@ -329,16 +376,14 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
       alignment: ai ? Alignment.centerLeft : Alignment.centerRight,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 720),
-        margin: const EdgeInsets.only(bottom: 12),
+        margin: const EdgeInsets.only(top: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: ai ? Colors.white : const Color(0xFF2563EB),
-          borderRadius: BorderRadius.circular(14),
+          color: ai ? AppColors.surface : AppColors.accentSoft,
+          borderRadius: BorderRadius.circular(AppRadius.md),
           border: isForkPoint
-              ? Border.all(color: const Color(0xFFF59E0B), width: 2)
-              : Border.all(
-                  color: ai ? const Color(0xFFE2E8F0) : Colors.transparent,
-                ),
+              ? Border.all(color: AppColors.warn, width: 1.6)
+              : Border.all(color: ai ? AppColors.borderSoft : AppColors.accent.withValues(alpha: 0.3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,17 +391,18 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
             Wrap(
               spacing: 6,
               children: [
-                if (message.inherited) _tag('继承前缀', const Color(0xFF7C3AED)),
-                if (isForkPoint) _tag('Fork Point', const Color(0xFFD97706)),
-                if (!message.inherited) _tag('当前分支增量', const Color(0xFF0284C7)),
+                if (message.inherited) _tag('继承前缀', AppColors.meta),
+                if (isForkPoint) _tag('Fork Point', AppColors.warn),
+                if (!message.inherited) _tag('当前分支增量', AppColors.accent),
               ],
             ),
-            const SizedBox(height: 7),
+            const SizedBox(height: 8),
             Text(
               message.content,
-              style: TextStyle(
-                height: 1.45,
-                color: ai ? const Color(0xFF0F172A) : Colors.white,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: AppColors.fg,
               ),
             ),
             if (message.media.isNotEmpty) ...[
@@ -368,7 +414,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
                         child: Image.network(
                           media.url,
                           width: 420,
@@ -377,8 +423,11 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                             width: 260,
                             height: 100,
                             alignment: Alignment.center,
-                            color: const Color(0xFFF1F5F9),
-                            child: const Text('图片加载失败'),
+                            color: AppColors.surface,
+                            child: const Text(
+                              '图片加载失败',
+                              style: TextStyle(color: AppColors.muted),
+                            ),
                           ),
                         ),
                       ),
@@ -386,11 +435,9 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                         const SizedBox(height: 5),
                         Text(
                           media.caption!,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
-                            color: ai
-                                ? const Color(0xFF64748B)
-                                : Colors.white70,
+                            color: AppColors.muted,
                           ),
                         ),
                       ],
@@ -403,12 +450,17 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
               const SizedBox(height: 8),
               TextButton.icon(
                 style: TextButton.styleFrom(
-                  foregroundColor: ai ? const Color(0xFF2563EB) : Colors.white,
+                  foregroundColor: AppColors.accent,
                   padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 onPressed: () => service.prepareFork(message),
-                icon: const Icon(Icons.call_split, size: 16),
-                label: const Text('从此处分支'),
+                icon: const Icon(Icons.call_split, size: 15),
+                label: const Text(
+                  '从此处分支',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ],
@@ -418,222 +470,266 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   }
 
   Widget _forkDraftCard(InterviewService service) {
-    return Card(
-      color: const Color(0xFFFFFBEB),
-      margin: const EdgeInsets.only(top: 6, bottom: 14),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '新分支草稿（尚未创建）',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              key: const Key('fork-draft-field'),
-              controller: _forkController,
-              minLines: 2,
-              maxLines: 5,
-              onChanged: service.updateForkDraft,
-              decoration: const InputDecoration(
-                hintText: '输入新分支的候选人回答',
-                border: OutlineInputBorder(),
+    return AppCard(
+      key: const Key('fork-draft-card'),
+      color: AppColors.warnSoft,
+      border: AppColors.warn.withValues(alpha: 0.4),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '新分支草稿（尚未创建）',
+            style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.fg),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            key: const Key('fork-draft-field'),
+            controller: _forkController,
+            minLines: 2,
+            maxLines: 5,
+            onChanged: service.updateForkDraft,
+            decoration: appInputDecoration(hint: '输入新分支的候选人回答'),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              AppButton(
+                label: '取消',
+                small: true,
+                variant: AppButtonVariant.ghost,
+                onPressed: service.clearForkDraft,
               ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: service.clearForkDraft,
-                  child: const Text('取消'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  key: const Key('submit-fork'),
-                  onPressed: service.isProcessing ? null : service.submitFork,
-                  child: const Text('创建分支并提交'),
-                ),
-              ],
-            ),
-          ],
-        ),
+              const SizedBox(width: 8),
+              AppButton(
+                keyOverride: const Key('submit-fork'),
+                label: service.isProcessing ? '创建中…' : '创建分支并提交',
+                small: true,
+                onPressed: service.isProcessing ? null : service.submitFork,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _otherBranchDraftNotice(InterviewService service) {
     final draft = service.branchDraft!;
-    return Card(
+    return AppCard(
       key: const Key('fork-draft-other-branch'),
-      color: const Color(0xFFFFFBEB),
-      margin: const EdgeInsets.only(top: 6, bottom: 14),
-      child: ListTile(
-        leading: const Icon(Icons.edit_note, color: Color(0xFFD97706)),
-        title: const Text('另一分支有未提交的草稿'),
-        subtitle: Text('草稿属于分支 ${draft.focusedBranchId}；切回该分支可继续编辑。'),
-        trailing: TextButton(
-          onPressed: service.clearForkDraft,
-          child: const Text('丢弃草稿'),
-        ),
+      color: AppColors.warnSoft,
+      border: AppColors.warn.withValues(alpha: 0.4),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const Icon(Icons.edit_note, color: AppColors.warn, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '另一分支有未提交的草稿（分支 ${draft.focusedBranchId}）；切回该分支可继续编辑。',
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+            ),
+          ),
+          TextButton(
+            onPressed: service.clearForkDraft,
+            child: const Text('丢弃草稿'),
+          ),
+        ],
       ),
     );
   }
 
   Widget _tailComposer(InterviewService service) {
-    return Card(
+    return AppCard(
       key: const Key('tail-composer'),
-      margin: const EdgeInsets.only(top: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                key: const Key('tail-composer-field'),
-                controller: _tailController,
-                minLines: 1,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  hintText: '回答当前分支最后一个问题',
-                  border: OutlineInputBorder(),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppFieldLabel('回答当前分支最后一个问题'),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const Key('tail-composer-field'),
+                  controller: _tailController,
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: appInputDecoration(hint: '继续补答当前分支'),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            FilledButton.icon(
-              key: const Key('submit-tail'),
-              onPressed: () async {
-                final answer = _tailController.text;
-                await service.submitTail(answer);
-                if (!service.hasTailDraftForCurrentBranch) {
-                  _tailController.clear();
-                }
-              },
-              icon: const Icon(Icons.send),
-              label: const Text('提交'),
-            ),
-          ],
-        ),
+              const SizedBox(width: 10),
+              AppButton(
+                keyOverride: const Key('submit-tail'),
+                label: '提交',
+                small: true,
+                onPressed: () async {
+                  final answer = _tailController.text;
+                  await service.submitTail(answer);
+                  if (!service.hasTailDraftForCurrentBranch) {
+                    _tailController.clear();
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '提交后才会写入当前分支尾部。',
+            style: TextStyle(fontSize: 12, color: AppColors.meta),
+          ),
+        ],
       ),
     );
   }
 
   Widget _processingCard(InterviewService service) {
-    return Card(
+    return AppCard(
       key: const Key('processing-card'),
-      color: const Color(0xFFEFF6FF),
-      margin: const EdgeInsets.only(top: 8, bottom: 12),
-      child: ListTile(
-        leading: const SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(strokeWidth: 2.5),
-        ),
-        title: const Text('本轮正在后台生成'),
-        subtitle: const Text('离开页面不会取消处理；返回后会自动重新连接。'),
-        trailing: TextButton(
-          onPressed: service.cancelActiveAttempt,
-          child: const Text('取消本轮'),
-        ),
+      color: AppColors.accentSoft,
+      border: AppColors.accent.withValues(alpha: 0.3),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2.2),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  '本轮正在后台生成',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.fg),
+                ),
+                Text(
+                  '离开页面不会取消处理；返回后会自动重新连接。',
+                  style: TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: service.cancelActiveAttempt,
+            child: const Text('取消本轮'),
+          ),
+        ],
       ),
     );
   }
 
   Widget _recoveryCard(InterviewService service) {
     final recovery = service.recoveryAttempt!;
-    return Card(
+    return AppCard(
       key: const Key('turn-recovery-card'),
-      color: const Color(0xFFFFF7ED),
-      margin: const EdgeInsets.only(top: 8, bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      color: AppColors.warnSoft,
+      border: AppColors.warn.withValues(alpha: 0.4),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '本轮需要恢复：${recovery.status}',
+            style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.fg),
+          ),
+          if (recovery.errorCode != null)
             Text(
-              '本轮需要恢复：${recovery.status}',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              '错误代码：${recovery.errorCode}',
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
             ),
-            if (recovery.errorCode != null) Text('错误代码：${recovery.errorCode}'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _recoveryController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              children: [
-                FilledButton(
-                  onPressed: () =>
-                      service.retryRecovery(_recoveryController.text),
-                  child: const Text('重试本轮'),
-                ),
-                OutlinedButton(
-                  onPressed: service.discardRecovery,
-                  child: const Text('丢弃本轮'),
-                ),
-              ],
-            ),
-          ],
-        ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _recoveryController,
+            minLines: 2,
+            maxLines: 4,
+            decoration: appInputDecoration(),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              AppButton(
+                label: '重试本轮',
+                small: true,
+                onPressed: () =>
+                    service.retryRecovery(_recoveryController.text),
+              ),
+              const SizedBox(width: 8),
+              AppButton(
+                label: '丢弃本轮',
+                small: true,
+                variant: AppButtonVariant.secondary,
+                onPressed: service.discardRecovery,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _conflictCard(InterviewService service) {
-    return Card(
-      color: const Color(0xFFFFF7ED),
-      child: ListTile(
-        leading: const Icon(Icons.sync_problem, color: Color(0xFFD97706)),
-        title: Text(service.conflictMessage!),
-        trailing: TextButton(
-          onPressed: service.refreshReplay,
-          child: const Text('刷新'),
-        ),
+    return AppCard(
+      color: AppColors.warnSoft,
+      border: AppColors.warn.withValues(alpha: 0.4),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const Icon(Icons.sync_problem, color: AppColors.warn, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              service.conflictMessage!,
+              style: const TextStyle(fontSize: 13, color: AppColors.fg),
+            ),
+          ),
+          TextButton(
+            onPressed: service.refreshReplay,
+            child: const Text('刷新'),
+          ),
+        ],
       ),
     );
   }
 
   Widget _inlineError(InterviewService service) {
-    return Card(
-      color: const Color(0xFFFEF2F2),
-      child: ListTile(
-        leading: const Icon(Icons.error_outline, color: Color(0xFFDC2626)),
-        title: Text(service.replayError!),
+    return AppCard(
+      color: AppColors.dangerSoft,
+      border: AppColors.danger.withValues(alpha: 0.3),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.danger, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              service.replayError!,
+              style: const TextStyle(fontSize: 13, color: AppColors.fg),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _tag(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(text, style: TextStyle(fontSize: 10, color: color)),
-    );
-  }
-
-  Widget _statusBadge(int status) {
-    final (label, color) = switch (status) {
-      1 => ('进行中', const Color(0xFF2563EB)),
-      2 => ('已完成', const Color(0xFF16A34A)),
-      _ => ('已结束', const Color(0xFF64748B)),
-    };
-    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
-      child: Text(label, style: TextStyle(fontSize: 11, color: color)),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+      ),
     );
   }
 
@@ -665,12 +761,6 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     return depth;
   }
 
-  String _compactDateTime(DateTime value) {
-    String two(int number) => number.toString().padLeft(2, '0');
-    return '${value.year}-${two(value.month)}-${two(value.day)} '
-        '${two(value.hour)}:${two(value.minute)}';
-  }
-
   void _syncControllers(InterviewService service) {
     final draft = service.branchDraft;
     if (draft != null && _forkTriggerId != draft.triggerMessageId) {
@@ -697,8 +787,12 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     final service = context.read<InterviewService>();
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor: AppColors.bg,
       isScrollControlled: true,
-      builder: (context) => SizedBox(
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (sheetContext) => SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.75,
         child: _buildTree(service, inSheet: true),
       ),

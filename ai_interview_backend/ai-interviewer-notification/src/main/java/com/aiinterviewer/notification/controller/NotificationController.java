@@ -2,6 +2,7 @@ package com.aiinterviewer.notification.controller;
 
 import com.aiinterviewer.common.model.Result;
 import com.aiinterviewer.notification.dto.NotificationDTO;
+import com.aiinterviewer.notification.dto.NotificationPreferenceDTO;
 import com.aiinterviewer.notification.dto.SendNotificationRequest;
 import com.aiinterviewer.notification.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -94,5 +95,27 @@ public class NotificationController {
     public Result<Void> sendNotification(@RequestBody SendNotificationRequest request) {
         notificationService.sendNotification(request);
         return Result.success(null);
+    }
+
+    /**
+     * 获取当前用户通知偏好
+     */
+    @Operation(summary = "获取通知偏好")
+    @GetMapping("/preferences")
+    public Result<NotificationPreferenceDTO> getPreferences(HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        return Result.success(notificationService.getPreferences(userId));
+    }
+
+    /**
+     * 更新当前用户通知偏好
+     */
+    @Operation(summary = "更新通知偏好")
+    @PutMapping("/preferences")
+    public Result<NotificationPreferenceDTO> updatePreferences(
+            @RequestBody NotificationPreferenceDTO preferenceRequest,
+            HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        return Result.success(notificationService.updatePreferences(userId, preferenceRequest));
     }
 }

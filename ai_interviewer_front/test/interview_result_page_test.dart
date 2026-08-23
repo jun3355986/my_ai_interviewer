@@ -52,6 +52,9 @@ class _EvaluationInterviewApi extends InterviewApi {
   final List<String> generatedBranchIds = [];
 
   @override
+  Future<EvaluationReport?> getEvaluationReport(String branchId) async => null;
+
+  @override
   Future<EvaluationReport> generateEvaluationReport(String branchId) async {
     generatedBranchIds.add(branchId);
     return EvaluationReport(

@@ -7,6 +7,7 @@ import '../models/chat_message.dart';
 import '../models/evaluation_report.dart';
 import '../models/interview_history.dart';
 import '../models/job.dart';
+import '../models/practice_stats.dart';
 import 'pending_start_store.dart';
 
 typedef TurnIdFactory = String Function();
@@ -236,6 +237,14 @@ class InterviewService extends ChangeNotifier {
 
   Future<BranchTranscript> getBranchTranscript(String branchId) {
     return _interviewApi.getBranchTranscript(branchId);
+  }
+
+  Future<PracticeStats> getMyStats() {
+    return _interviewApi.getMyStats();
+  }
+
+  Future<EvaluationStatistics> getEvaluationStatistics() {
+    return _interviewApi.getEvaluationStatistics();
   }
 
   void hydrateTranscript(BranchTranscript transcript) {
@@ -566,13 +575,24 @@ class InterviewService extends ChangeNotifier {
     if (branchId == null || !isCurrentBranchCompleted) {
       throw StateError('面试尚未完成，不能生成评估报告');
     }
-    final report = await _interviewApi.generateEvaluationReport(branchId);
+    // 优先读取持久化报告，避免重复触发生成。
+    EvaluationReport? report;
+    try {
+      report = await _interviewApi.getEvaluationReport(branchId);
+    } catch (_) {
+      report = null;
+    }
+    report ??= await _interviewApi.generateEvaluationReport(branchId);
     if (_currentSessionId == branchId) {
       _evaluationReport = report;
       notifyListeners();
     }
     return _matchResultFromReport(report);
   }
+
+  /// 当前谱系 ID（用于报告页跳转回放）。
+  String? get currentLineageId =>
+      _tree?.lineageId ?? _currentTranscript?.lineageId;
 
   Future<void> _restoreTreeAttempt(String branchId) async {
     final node = _tree?.nodes

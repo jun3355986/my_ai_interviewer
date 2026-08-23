@@ -47,6 +47,16 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
       }),
     });
   });
+  await page.route('**/admin/interviews**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 200,
+        message: 'OK',
+        data: { current: 1, size: 3, total: 0, pages: 1, records: [] },
+      }),
+    });
+  });
   await page.route('**/admin/ai-observability/stats**', async (route) => {
     statsRequests.push(route.request().url());
     await route.fulfill({
@@ -178,20 +188,25 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
   await page.getByRole('button', { name: /AI 观测/ }).click();
 
   await expect(page.getByRole('heading', { name: 'AI 观测' })).toBeVisible();
-  await expect(page.getByText('Provider Cache Token Hit Rate')).toBeVisible();
-  await expect(page.getByText('Provider Cache Call Hit Ratio')).toBeVisible();
-  await expect(page.getByText('Provider Cache Unreported Calls')).toBeVisible();
-  const traceRow = page.getByRole('row').filter({ hasText: 'session-smoke' });
+  await expect(page.getByText('Cache Token Hit')).toBeVisible();
+  await expect(page.getByText('Cache Call Hit')).toBeVisible();
+  await expect(page.getByText('Cache Unreported')).toBeVisible();
+
+  const traceRow = page.locator('.trace-row').filter({ hasText: 'list-provider / list-model' });
   await expect(traceRow).toBeVisible();
-  await expect(traceRow.getByText('list-provider / list-model')).toBeVisible();
-  await expect(traceRow.getByText('45.67%')).toBeVisible();
-  await expect(traceRow.getByText('33.33% calls')).toBeVisible();
   await expect(traceRow.getByText('2,048')).toBeVisible();
   await expect(traceRow.getByText('678ms')).toBeVisible();
 
-  await page.locator('form.ai-filter-row select').first().selectOption('ERROR');
-  await page.locator('form.ai-filter-row select').nth(1).selectOption('generate_opening');
-  await page.locator('form.ai-filter-row button[type="submit"]').click();
+  // 首条 trace 自动加载详情（Apple 布局：列表 + 详情双栏）
+  await expect(page.getByText('构造提示词')).toBeVisible();
+  await expect(page.getByText('deepseek-reasoner')).toBeVisible();
+  expect(rawRequests).toEqual([]);
+
+  // 筛选仍以精确匹配参数直传后端（status / callType）
+  const filterForm = page.locator('.toolbar.trace-filter');
+  await filterForm.locator('select').nth(0).selectOption('ERROR');
+  await filterForm.locator('select').nth(1).selectOption('generate_opening');
+  await filterForm.locator('button[type="submit"]').click();
 
   await expect
     .poll(() => traceRequests.some((url) => url.includes('status=ERROR') && url.includes('callType=generate_opening')))
@@ -201,17 +216,11 @@ test('admin web app shows AI observability traces, detail, stats, and reveals ra
     .toBeTruthy();
   await expect(traceRow).toBeVisible();
 
-  await traceRow.getByRole('button', { name: '查看' }).click();
-
-  await expect(page.getByText('构造提示词')).toBeVisible();
-  await expect(page.getByText('deepseek-reasoner')).toBeVisible();
-  expect(rawRequests).toEqual([]);
-
-  await page.getByRole('button', { name: 'Reveal Prompt' }).click();
+  await page.getByRole('button', { name: '查看 Prompt 原文' }).click();
   await expect(page.getByText('raw prompt smoke payload')).toBeVisible();
   expect(rawRequests.some((url) => url.includes('type=PROMPT'))).toBeTruthy();
 
-  await page.getByRole('button', { name: 'Reveal Response' }).click();
+  await page.getByRole('button', { name: '查看响应原文' }).click();
   await expect(page.getByText('raw response smoke payload')).toBeVisible();
   expect(rawRequests.some((url) => url.includes('type=RESPONSE'))).toBeTruthy();
   await app.expectNoConsoleErrors();

@@ -60,4 +60,30 @@
         ORDER BY e.created_at DESC, e.id DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
+
+    <select id="selectEvaluationById" resultMap="AdminEvaluationListItemMap">
+        SELECT e.id, e.session_id, e.user_id, u.username, e.job_id, j.title AS job_title,
+               e.overall_score, e.technical_score, e.communication_score, e.logic_score,
+               e.experience_score, e.summary, e.strengths, e.weaknesses, e.recommendation,
+               e.detailed_feedback::text AS detailed_feedback, e.total_questions,
+               e.answered_questions, e.average_score, e.duration_minutes, e.created_at, e.updated_at
+        FROM t_evaluation e
+        LEFT JOIN t_user u ON u.id = e.user_id
+        LEFT JOIN t_job j ON j.id = e.job_id
+        WHERE e.id = #{id}
+    </select>
+
+    <select id="selectEvaluationBySessionId" resultMap="AdminEvaluationListItemMap">
+        SELECT e.id, e.session_id, e.user_id, u.username, e.job_id, j.title AS job_title,
+               e.overall_score, e.technical_score, e.communication_score, e.logic_score,
+               e.experience_score, e.summary, e.strengths, e.weaknesses, e.recommendation,
+               e.detailed_feedback::text AS detailed_feedback, e.total_questions,
+               e.answered_questions, e.average_score, e.duration_minutes, e.created_at, e.updated_at
+        FROM t_evaluation e
+        LEFT JOIN t_user u ON u.id = e.user_id
+        LEFT JOIN t_job j ON j.id = e.job_id
+        WHERE e.session_id = #{sessionId}
+        ORDER BY e.created_at DESC, e.id DESC
+        LIMIT 1
+    </select>
 </mapper>
