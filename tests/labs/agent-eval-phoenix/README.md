@@ -2,6 +2,11 @@
 
 这个目录只提供实验环境约定；`agent1-case-001` 的 Case、Trace 初始化、Runner、Rubric 和实验结论由 Drake 亲自编写、运行和解释。
 
+| Notebook | 教学内容 | 状态 |
+|---|---|---|
+| `agent1_phoneix_lab.ipynb` | Lab 2（Tracing）+ Lab 3 扩展（Router & Skill Evals） | 已完成 |
+| `agent2_convergence_lab.ipynb` | Lab 4（Trajectory Evaluations / 收敛分数） | 已完成，首次运行收敛分数 1.0（17/17 路径长度=4） |
+
 ## 一次性准备
 
 1. 在仓库根目录复制本地配置：

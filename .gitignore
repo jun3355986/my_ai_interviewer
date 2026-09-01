@@ -67,3 +67,7 @@ tests/reports/durable-replay/*
 tests/reports/embedding-provider/*
 !tests/reports/durable-replay/.gitkeep
 !tests/reports/embedding-provider/.gitkeep
+
+# AI assistant workspace notes.
+# Persistent project memory, not a cache — keep the files, just don't commit them.
+.workbuddy/
