@@ -47,6 +47,11 @@ import java.util.concurrent.TimeoutException;
 @RequiredArgsConstructor
 public class ResumeService {
 
+    /**
+     * raw_text 最大保留长度，防止异常超大文件撑爆文本列
+     */
+    private static final int MAX_RAW_TEXT_LENGTH = 50000;
+
     private final ResumeMapper resumeMapper;
     private final ResumeVersionMapper resumeVersionMapper;
     private final FileStorageService fileStorageService;
@@ -141,14 +146,16 @@ public class ResumeService {
 
         try {
             // 获取文件流
-            ResumeContent content;
+            ParsedResume parsed;
             try (InputStream fileStream = fileStorageService.downloadFile(resume.getFilePath())) {
                 // 调用Python后端解析
-                content = callPythonParse(fileStream, resume.getContentType());
+                parsed = callPythonParse(fileStream, resume.getContentType());
             }
+            ResumeContent content = parsed.content();
 
-            // 更新简历解析结果
+            // 更新简历解析结果；原文一并落库，供 durable 面试与模拟面试使用
             resume.setParsedContent(content);
+            resume.setRawText(capRawText(parsed.rawText()));
             resume.setParseStatus(2);
             resume.setParseError(null);
             resume.setParsedAt(LocalDateTime.now());
@@ -309,7 +316,7 @@ public class ResumeService {
     /**
      * 调用Python后端解析简历
      */
-    private ResumeContent callPythonParse(InputStream fileStream, String contentType) {
+    private ParsedResume callPythonParse(InputStream fileStream, String contentType) {
         Path tempFile = null;
         WebClient webClient = webClientBuilder.baseUrl(pythonAiBaseUrl).build();
 
@@ -320,11 +327,11 @@ public class ResumeService {
 
             try {
                 String result = invokeParseEndpoint(webClient, tempFile, "/resume/parse");
-                return parseResumeContent(result);
+                return parseResumePayload(result);
             } catch (WebClientResponseException.NotFound notFound) {
                 log.warn("Python端点 /resume/parse 返回404，尝试兼容回退到 /interview/upload-resume");
                 String fallbackResult = invokeParseEndpoint(webClient, tempFile, "/interview/upload-resume");
-                return parseResumeContent(fallbackResult);
+                return parseResumePayload(fallbackResult);
             }
         } catch (WebClientResponseException e) {
             throw toAiServiceBusinessException(e, "Python解析接口调用失败");
@@ -359,9 +366,17 @@ public class ResumeService {
                 .block();
     }
 
-    private ResumeContent parseResumeContent(String result) {
+    ParsedResume parseResumePayload(String result) {
         try {
-            return objectMapper.readValue(result, ResumeContent.class);
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(result);
+            com.fasterxml.jackson.databind.JsonNode data = root;
+            if (root.hasNonNull("content")) {
+                data = root.get("content");
+            } else if (root.hasNonNull("parsedContent")) {
+                data = root.get("parsedContent");
+            }
+            ResumeContent content = objectMapper.treeToValue(data, ResumeContent.class);
+            return new ParsedResume(content, extractRawText(root, data));
         } catch (IOException ignored) {
             try {
                 com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(result);
@@ -371,12 +386,54 @@ public class ResumeService {
                 } else if (root.hasNonNull("parsedContent")) {
                     data = root.get("parsedContent");
                 }
-                return objectMapper.treeToValue(data, ResumeContent.class);
+                ResumeContent content = objectMapper.treeToValue(data, ResumeContent.class);
+                return new ParsedResume(content, extractRawText(root, data));
             } catch (Exception ex) {
                 log.error("Python简历解析响应反序列化失败，原始响应: {}", result, ex);
                 throw new BusinessException(ErrorCode.AI_SERVICE_ERROR, "简历解析服务异常: 响应格式不受支持");
             }
+        } catch (Exception ex) {
+            log.error("Python简历解析响应反序列化失败，原始响应: {}", result, ex);
+            throw new BusinessException(ErrorCode.AI_SERVICE_ERROR, "简历解析服务异常: 响应格式不受支持");
         }
+    }
+
+    /**
+     * 原文优先取响应顶层的 raw_text/rawText；缺失时回退 otherInfo
+     * （Python 解析结果中 otherInfo 即简历原文前 6000 字）。
+     */
+    private String extractRawText(com.fasterxml.jackson.databind.JsonNode root,
+                                  com.fasterxml.jackson.databind.JsonNode data) {
+        for (String field : new String[]{"raw_text", "rawText"}) {
+            String value = root.path(field).asText(null);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        for (com.fasterxml.jackson.databind.JsonNode node : new com.fasterxml.jackson.databind.JsonNode[]{data, root}) {
+            String value = node.path("otherInfo").asText(null);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String capRawText(String rawText) {
+        if (rawText == null) {
+            return null;
+        }
+        String trimmed = rawText.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed.length() <= MAX_RAW_TEXT_LENGTH ? trimmed : trimmed.substring(0, MAX_RAW_TEXT_LENGTH);
+    }
+
+    /**
+     * 解析结果：结构化内容 + 简历原文
+     */
+    record ParsedResume(ResumeContent content, String rawText) {
     }
 
     private BusinessException toAiServiceBusinessException(WebClientResponseException e, String prefix) {

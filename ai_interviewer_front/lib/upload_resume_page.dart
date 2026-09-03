@@ -462,13 +462,18 @@ class _UploadResumePageState extends State<UploadResumePage> {
         : int.tryParse(uploadedResumeId);
 
     if (resumeId != null) {
+      // 上传成功后立即解析：原文落库 raw_text，真实面试与模拟面试都依赖它。
+      final parsed = await resumeService.parseResume(uploadedResumeId!);
       if (mounted) {
         setState(() {
           _hasUploadedFile = true;
           _uploadedFileName = file.name;
           _resumeId = resumeId;
         });
-        showAppToast(context, '上传成功');
+        showAppToast(
+          context,
+          parsed ? '上传成功' : '上传成功，但解析失败，AI 面试将使用通用大纲',
+        );
       }
     } else {
       if (mounted) {
@@ -482,6 +487,18 @@ class _UploadResumePageState extends State<UploadResumePage> {
 
   Future<void> _navigateToChat({bool skip = false}) async {
     if (_starting) return;
+
+    var useMock = false;
+    if (!skip) {
+      final picked = await _pickInterviewMode();
+      if (picked == null || !mounted) return; // 用户取消选择
+      useMock = picked;
+      if (useMock && _resumeId == null) {
+        showAppToast(context, '模拟面试需要先成功上传简历');
+        return;
+      }
+    }
+
     setState(() => _starting = true);
     final interviewService = context.read<InterviewService>();
     try {
@@ -490,7 +507,13 @@ class _UploadResumePageState extends State<UploadResumePage> {
         jobId: _jobId,
       );
       if (!mounted) return;
-      Navigator.pushNamed(context, '/chat');
+      Navigator.pushNamed(
+        context,
+        '/chat',
+        arguments: skip
+            ? null
+            : {'autoDrive': useMock, 'resumeId': _resumeId, 'jobId': _jobId},
+      );
     } catch (error) {
       if (!mounted) return;
       final message = error.toString().replaceFirst('Bad state: ', '');
@@ -498,5 +521,116 @@ class _UploadResumePageState extends State<UploadResumePage> {
     } finally {
       if (mounted) setState(() => _starting = false);
     }
+  }
+
+  /// 进入面试前选择模式；返回 null 表示取消。
+  Future<bool?> _pickInterviewMode() {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: AppColors.bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '选择面试模式',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.fg,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '两种模式都走完整面试流程，记录均可回放与评估。',
+                style: TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
+              const SizedBox(height: 14),
+              _buildModeCard(
+                sheetContext,
+                value: false,
+                icon: Icons.person_outline,
+                title: '真实面试',
+                subtitle: '你亲自回答面试官提问（原流程）。',
+              ),
+              const SizedBox(height: 10),
+              _buildModeCard(
+                sheetContext,
+                value: true,
+                icon: Icons.smart_toy_outlined,
+                title: '模拟面试',
+                subtitle: 'AI 候选人代替你作答，自动走完面试全流程（上限 25 分钟），便于快速观察与测试。',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeCard(
+    BuildContext sheetContext, {
+    required bool value,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return GestureDetector(
+      onTap: () => Navigator.pop(sheetContext, value),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.accentSoft,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Icon(icon, size: 22, color: AppColors.accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.fg,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18, color: AppColors.meta),
+          ],
+        ),
+      ),
+    );
   }
 }

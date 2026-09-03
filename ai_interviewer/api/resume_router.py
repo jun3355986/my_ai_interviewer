@@ -146,4 +146,7 @@ async def parse_resume(file: Annotated[UploadFile, File(...)]) -> dict[str, obje
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Resume parsing internal error: {str(exc)}")
 
+    # 原文随解析结果一并返回，Java 侧持久化到 t_resume.raw_text，
+    # 供 durable 面试根分支与模拟面试候选人上下文使用。
+    parsed_content["rawText"] = resume_text
     return parsed_content

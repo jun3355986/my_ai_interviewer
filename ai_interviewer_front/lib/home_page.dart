@@ -473,53 +473,55 @@ class _HomePageState extends State<HomePage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 760;
-        final cards = metrics.map(_buildMetricCard).toList();
-        if (wide) {
-          return Row(
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (var i = 0; i < cards.length; i++) ...[
-                Expanded(child: cards[i]),
-                if (i < cards.length - 1) const SizedBox(width: 12),
+              for (var i = 0; i < metrics.length; i++) ...[
+                Expanded(child: _buildMetricCard(metrics[i], compact: !wide)),
+                if (i < metrics.length - 1) SizedBox(width: wide ? 12 : 10),
               ],
             ],
-          );
-        }
-        return Column(
-          children: [
-            for (var i = 0; i < cards.length; i++) ...[
-              cards[i],
-              if (i < cards.length - 1) const SizedBox(height: 12),
-            ],
-          ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildMetricCard(_MetricData metric) {
+  Widget _buildMetricCard(_MetricData metric, {required bool compact}) {
     return AppCard(
+      padding: EdgeInsets.all(compact ? 14 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             metric.label,
-            style: const TextStyle(fontSize: 13, color: AppColors.muted),
+            style: TextStyle(
+              fontSize: compact ? 12 : 13,
+              color: AppColors.muted,
+            ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: compact ? 6 : 10),
           Text(
             metric.value,
             style: TextStyle(
-              fontSize: metric.smallValue ? 26 : 34,
+              fontSize: compact
+                  ? (metric.smallValue ? 20 : 26)
+                  : (metric.smallValue ? 26 : 34),
               fontWeight: FontWeight.w700,
-              letterSpacing: -1,
+              letterSpacing: compact ? -0.5 : -1,
               color: AppColors.fg,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: compact ? 4 : 8),
           Text(
             metric.hint,
-            style: const TextStyle(fontSize: 12, color: AppColors.meta),
+            style: TextStyle(
+              fontSize: compact ? 11 : 12,
+              height: 1.3,
+              color: AppColors.meta,
+            ),
           ),
         ],
       ),

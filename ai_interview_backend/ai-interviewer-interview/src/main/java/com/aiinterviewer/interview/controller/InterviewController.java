@@ -6,11 +6,14 @@ import com.aiinterviewer.interview.dto.BranchTranscriptDTO;
 import com.aiinterviewer.interview.dto.ChatRequest;
 import com.aiinterviewer.interview.dto.LineageSummaryDTO;
 import com.aiinterviewer.interview.dto.LineageTreeDTO;
+import com.aiinterviewer.interview.dto.MockCandidateAnswerDTO;
+import com.aiinterviewer.interview.dto.MockCandidateAnswerRequest;
 import com.aiinterviewer.interview.dto.PracticeStatsDTO;
 import com.aiinterviewer.interview.dto.SessionDTO;
 import com.aiinterviewer.interview.service.InterviewHistoryService;
 import com.aiinterviewer.interview.service.InterviewService;
 import com.aiinterviewer.interview.service.LineageTreeService;
+import com.aiinterviewer.interview.service.MockCandidateProxyService;
 import com.aiinterviewer.interview.service.PracticeStatsService;
 import com.aiinterviewer.interview.service.SSEProxyService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,6 +50,7 @@ public class InterviewController {
     private final InterviewHistoryService interviewHistoryService;
     private final LineageTreeService lineageTreeService;
     private final PracticeStatsService practiceStatsService;
+    private final MockCandidateProxyService mockCandidateProxyService;
 
     /**
      * 统一对话接口 - SSE流式响应
@@ -91,6 +95,28 @@ public class InterviewController {
 
         return sseProxyService.proxyResume(sessionId, userId, username)
                 .timeout(Duration.ofMinutes(5));
+    }
+
+    /**
+     * 模拟面试候选人生成 - AI 代替用户生成回答
+     *
+     * 仅生成回答文本（无状态、不落库），由前端 MockAutoDriver 在轮到候选人时调用，
+     * 生成的回答仍通过既有 turn-attempt 接口提交，走真实面试管线。
+     */
+    @PostMapping("/mock/candidate-answer")
+    @Operation(summary = "模拟面试候选人生成",
+            description = "AI 代替候选人生成回答，仅用于测试观察；不创建会话、不落库")
+    public Result<MockCandidateAnswerDTO> mockCandidateAnswer(
+            @Valid @RequestBody MockCandidateAnswerRequest request,
+            @RequestHeader("X-User-Id") Long userId) {
+
+        log.info("Mock candidate answer: userId={}, resumeId={}, questionType={}, question={}",
+                userId, request.getResumeId(), request.getQuestionType(),
+                request.getQuestion().length() > 50 ?
+                        request.getQuestion().substring(0, 50) + "..." :
+                        request.getQuestion());
+
+        return Result.success(mockCandidateProxyService.generate(request, userId));
     }
 
     /**

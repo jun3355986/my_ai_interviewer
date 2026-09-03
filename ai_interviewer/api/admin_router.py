@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from core import runtime_config
-from core.config import get_embeddings
+from core.embeddings import get_embeddings
 from core.model_provider import build_chat_llm
 from services.question_bank import QuestionBank
 

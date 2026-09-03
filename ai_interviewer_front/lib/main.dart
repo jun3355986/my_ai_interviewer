@@ -50,6 +50,7 @@ void main() {
     MultiProvider(
       providers: [
         Provider<AuthService>.value(value: authService),
+        Provider<InterviewApi>.value(value: interviewApi),
         Provider<JobService>.value(value: jobService),
         ChangeNotifierProvider<ResumeService>.value(value: resumeService),
         ChangeNotifierProvider<InterviewService>.value(value: interviewService),

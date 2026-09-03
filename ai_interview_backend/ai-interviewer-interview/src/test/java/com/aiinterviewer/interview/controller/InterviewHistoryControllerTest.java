@@ -13,6 +13,7 @@ import com.aiinterviewer.interview.dto.LineageTreeDTO;
 import com.aiinterviewer.interview.service.InterviewHistoryService;
 import com.aiinterviewer.interview.service.InterviewService;
 import com.aiinterviewer.interview.service.LineageTreeService;
+import com.aiinterviewer.interview.service.MockCandidateProxyService;
 import com.aiinterviewer.interview.service.PracticeStatsService;
 import com.aiinterviewer.interview.service.SSEProxyService;
 import java.lang.reflect.Method;
@@ -73,7 +74,8 @@ class InterviewHistoryControllerTest {
                 mock(InterviewService.class),
                 historyService,
                 mock(LineageTreeService.class),
-                mock(PracticeStatsService.class));
+                mock(PracticeStatsService.class),
+                mock(MockCandidateProxyService.class));
 
         Result<PageResult<LineageSummaryDTO>> result = controller.listLineages(
                 42L,
@@ -99,7 +101,8 @@ class InterviewHistoryControllerTest {
                 mock(InterviewService.class),
                 historyService,
                 mock(LineageTreeService.class),
-                mock(PracticeStatsService.class));
+                mock(PracticeStatsService.class),
+                mock(MockCandidateProxyService.class));
 
         Result<BranchTranscriptDTO> result = controller.getBranchTranscript("branch-1", 42L);
 
@@ -118,7 +121,8 @@ class InterviewHistoryControllerTest {
                 mock(InterviewService.class),
                 mock(InterviewHistoryService.class),
                 treeService,
-                mock(PracticeStatsService.class));
+                mock(PracticeStatsService.class),
+                mock(MockCandidateProxyService.class));
 
         Result<LineageTreeDTO> result = controller.getLineageTree("lineage-1", 42L);
 

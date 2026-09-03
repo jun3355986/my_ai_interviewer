@@ -242,6 +242,35 @@ class InterviewApi {
     return TurnAttempt.fromJson(_readMap(response, '丢弃响应格式错误'));
   }
 
+  /// 模拟面试：AI 代替候选人生成回答（无状态，不创建会话、不落库）。
+  Future<String> generateMockCandidateAnswer({
+    required int resumeId,
+    int? jobId,
+    required String question,
+    required String questionType,
+    String? branchId,
+    List<Map<String, String>> recentHistory = const [],
+  }) async {
+    final response = await _apiClient
+        .getServiceDio(ApiClient.interviewBaseUrl)
+        .post(
+          ApiClient.interviewPath('/interviews/mock/candidate-answer'),
+          data: {
+            'resumeId': resumeId,
+            'jobId': ?jobId,
+            'question': question,
+            'questionType': questionType,
+            if (recentHistory.isNotEmpty) 'recentHistory': recentHistory,
+            'java_session_id': branchId,
+          },
+        );
+    final data = _readSuccessData(response);
+    if (data is! Map || data['answer'] == null) {
+      throw StateError('候选人生成响应格式错误');
+    }
+    return data['answer'].toString();
+  }
+
   Map<String, dynamic> _readMap(Response response, String errorMessage) {
     final data = _readSuccessData(response);
     if (data is! Map) {

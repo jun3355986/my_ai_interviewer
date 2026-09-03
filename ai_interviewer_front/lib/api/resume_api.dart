@@ -25,4 +25,14 @@ class ResumeApi {
         .getServiceDio(ApiClient.resumeBaseUrl)
         .post(ApiClient.resumePath('/resumes/upload'), data: formData);
   }
+
+  /// 触发简历解析（Python 结构化解析 + 原文落库 raw_text）
+  Future<Response> parseResume(String resumeId) {
+    return _apiClient
+        .getServiceDio(ApiClient.resumeBaseUrl)
+        .post(
+          ApiClient.resumePath('/resumes/$resumeId/parse'),
+          data: <String, dynamic>{},
+        );
+  }
 }

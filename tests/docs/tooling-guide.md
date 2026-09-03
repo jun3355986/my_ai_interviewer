@@ -336,6 +336,47 @@ Java admin service (`ai_interviewer_admin`) proxies real interviews, resume pars
 | `PYTHON_AI_RESUME_PARSE_URL` | `http://localhost:8000/resume/parse` | Structured resume parsing before `t_resume` insert |
 | `PYTHON_AI_RUNTIME_CONFIG_URL` | `http://localhost:8000/admin/runtime-config` | Model/retrieval runtime config GET/PUT/test passthrough |
 
+## Mock Interview Candidate Answer (AI 代答)
+
+模拟面试让 AI 候选人代替用户走真实 durable-turn 管线：Flutter `MockAutoDriver` 在 `canReplyAtTail`
+时调用无状态的候选人生成接口，再把回答经既有 turn-attempt 接口提交，因此产物全部是真实面试记录。
+
+### Files
+
+| File | Purpose |
+|---|---|
+| `ai_interviewer/services/mock_candidate.py` | 候选人生成服务（无状态，按问题类型组装 prompt）。 |
+| `ai_interviewer/api/mock_router.py` | Python `POST /interview/mock/candidate-answer`。 |
+| `ai_interviewer/tests/test_mock_candidate.py` | Prompt 组装与类型映射单元测试。 |
+| `ai_interview_backend/.../service/MockCandidateProxyService.java` | Java 薄代理：校验简历归属后转发 Python，不落库。 |
+| `ai_interviewer_front/lib/services/mock_auto_driver.dart` | 驱动器状态机（25 分钟预算上限，完成后/恢复受阻/手动停止即停）。 |
+| `ai_interviewer_front/lib/upload_resume_page.dart` | 上传后「真实面试 / 模拟面试」模式选择弹窗。 |
+| `ai_interviewer_front/lib/interview_chat_page.dart` | 面试工作台 AI 代答横幅（剩余预算 + 停止代答）。 |
+| `tests/scripts/smoke-mock-candidate-answer.sh` | 直连 Python 的 candidate-answer 冒烟。 |
+
+### Run
+
+```bash
+cd ai_interviewer && uv run pytest tests/test_mock_candidate.py -q
+bash tests/scripts/smoke-mock-candidate-answer.sh
+# 可用 PYTHON_BASE_URL 覆盖默认 http://127.0.0.1:8000
+```
+
+### Notes
+
+- 候选人生成端点无状态、不落库；模拟面试的会话数据与真实面试完全同源（lineage/branch/消息/评估），
+  没有独立的 mock 存储。
+- Java 代理要求 `resumeId` 属于当前用户；简历文本读取链为
+  `raw_text`（新上传解析后会写入）→ `parsed_content->>'otherInfo'`（解析保留的原文前 6000 字）
+  → `parsed_content::text`；`questionType` 仅接受
+  `self_introduction` / `project` / `technical`。
+- Python `/resume/parse` 响应包含顶层 `rawText`（完整原文），Java resume 服务在解析时
+  持久化到 `t_resume.raw_text`（上限 50000 字符）；Flutter 上传成功后会自动触发解析。
+- 通过网关调用示例（需要登录 token）：
+  `POST /api/v1/interviews/mock/candidate-answer`，body 字段 `resumeId/jobId/question/questionType/recentHistory/java_session_id`。
+- 候选人生成会写入 AI observability（`business_type=mock_interview`，`entrypoint=mock_candidate_answer`），
+  可在 admin 观测台按该 entrypoint 过滤查看。
+
 ## API Tests
 
 System-level API tests live in `tests/api/pytest`.

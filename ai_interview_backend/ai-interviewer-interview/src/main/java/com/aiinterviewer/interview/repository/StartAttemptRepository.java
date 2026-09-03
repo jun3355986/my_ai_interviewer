@@ -18,8 +18,13 @@ public class StartAttemptRepository {
         if (resumeId == null) {
             return Optional.empty();
         }
+        // raw_text 历史上从未写入（上传/解析只写 parsed_content），因此回退
+        // otherInfo（Python 解析保留的原文前 6000 字），再兜底整个 parsed_content。
         return jdbcTemplate.query("""
-                        SELECT id, raw_text, parsed_content ->> 'name' AS candidate_name
+                        SELECT id,
+                               COALESCE(NULLIF(raw_text, ''), NULLIF(parsed_content->>'otherInfo', ''),
+                                        parsed_content::text) AS raw_text,
+                               parsed_content ->> 'name' AS candidate_name
                         FROM t_resume
                         WHERE id = ? AND user_id = ?
                         """,

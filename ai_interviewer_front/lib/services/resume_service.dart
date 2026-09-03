@@ -38,4 +38,25 @@ class ResumeService extends ChangeNotifier {
     }
     return null;
   }
+
+  /// 触发解析；成功返回 true，失败写入 [error]（不抛异常，由调用方决定是否容错）。
+  Future<bool> parseResume(String resumeId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await _resumeApi.parseResume(resumeId);
+      if (response.statusCode == 200 && response.data['code'] == 200) {
+        return true;
+      }
+      _error = response.data['message'] ?? '解析失败';
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+    return false;
+  }
 }

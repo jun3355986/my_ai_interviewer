@@ -1,5 +1,6 @@
 package com.aiinterviewer.resume.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -9,6 +10,7 @@ import java.util.List;
  * 简历解析内容 (JSON结构)
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ResumeContent implements Serializable {
 
     private static final long serialVersionUID = 1L;

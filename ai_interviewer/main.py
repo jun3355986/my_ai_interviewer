@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.router import router as interview_router
 from api.resume_router import router as resume_router
 from api.admin_router import router as admin_router
+from api.mock_router import router as mock_router
 
 
 app = FastAPI(
@@ -24,6 +25,7 @@ app.add_middleware(
 app.include_router(interview_router)
 app.include_router(resume_router)
 app.include_router(admin_router)
+app.include_router(mock_router)
 
 
 @app.get("/")

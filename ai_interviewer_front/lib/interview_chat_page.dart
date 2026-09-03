@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'design/app_design.dart';
+import 'api/interview_api.dart';
 import 'models/chat_message.dart';
 import 'models/interview_history.dart';
 import 'models/question_media.dart';
 import 'services/interview_service.dart';
+import 'services/mock_auto_driver.dart';
 
 /// 面试工作台：大纲 / 对话 / 观察 三区联动，durable 流程不变。
 class InterviewChatPage extends StatefulWidget {
@@ -25,6 +27,8 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
   final ScrollController _scrollController = ScrollController();
   String? _recoveryTurnId;
   Timer? _ticker;
+  MockAutoDriver? _mockDriver;
+  bool _routeInitialized = false;
 
   static const List<String> _stages = ['开场', '自我介绍', '项目经验', '技术问答', '总结'];
 
@@ -41,8 +45,40 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_routeInitialized) return;
+    _routeInitialized = true;
+    final arguments = ModalRoute.of(context)?.settings.arguments;
+    if (arguments is! Map || arguments['autoDrive'] != true) return;
+    final resumeId = arguments['resumeId'];
+    final jobId = arguments['jobId'];
+    try {
+      final driver = MockAutoDriver(
+        interviewService: context.read<InterviewService>(),
+        interviewApi: context.read<InterviewApi>(),
+        resumeId: resumeId is int ? resumeId : (int.tryParse('$resumeId') ?? 0),
+        jobId: jobId is int ? jobId : int.tryParse('$jobId'),
+      );
+      driver.addListener(_onMockDriverChanged);
+      driver.start();
+      _mockDriver = driver;
+    } catch (_) {
+      // Provider 未注入等场景下退化为普通面试页。
+      _mockDriver = null;
+    }
+  }
+
+  void _onMockDriverChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
     _ticker?.cancel();
+    _mockDriver?.removeListener(_onMockDriverChanged);
+    _mockDriver?.stop('已退出面试页');
+    _mockDriver?.dispose();
     _messageController.dispose();
     _recoveryController.dispose();
     _scrollController.dispose();
@@ -69,6 +105,7 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
         child: Column(
           children: [
             _buildTopBar(interviewService),
+            if (_mockDriver != null) _buildMockBanner(_mockDriver!),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -180,6 +217,93 @@ class _InterviewChatPageState extends State<InterviewChatPage> {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  // ───────────── 模拟面试（AI 代答）横幅 ─────────────
+
+  Widget _buildMockBanner(MockAutoDriver driver) {
+    final remaining = _formatDuration(driver.remainingBudget);
+    final (icon, title, detail) = switch (driver.status) {
+      MockDriverStatus.answering => (
+        Icons.smart_toy_outlined,
+        '模拟面试 · AI 候选人生成回答中',
+        '面试流程与真实模式完全一致 · 剩余 $remaining',
+      ),
+      MockDriverStatus.waiting => (
+        Icons.smart_toy_outlined,
+        '模拟面试 · AI 代答中',
+        '等待面试官下一个问题 · 剩余 $remaining',
+      ),
+      MockDriverStatus.completed => (
+        Icons.verified_outlined,
+        '模拟面试已完成',
+        '可回放整场对话或查看评估报告',
+      ),
+      MockDriverStatus.blocked => (
+        Icons.report_problem_outlined,
+        '模拟面试已暂停',
+        driver.statusDetail,
+      ),
+      MockDriverStatus.stopped => (
+        Icons.pause_circle_outline,
+        '模拟面试已停止',
+        driver.statusDetail,
+      ),
+    };
+    final active =
+        driver.status == MockDriverStatus.waiting ||
+        driver.status == MockDriverStatus.answering;
+    final bannerColor = driver.status == MockDriverStatus.completed
+        ? AppColors.success
+        : driver.status == MockDriverStatus.blocked
+        ? AppColors.warn
+        : AppColors.accent;
+    return Container(
+      key: const Key('mock-driver-banner'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: bannerColor.withValues(alpha: 0.08),
+        border: Border(
+          bottom: BorderSide(color: bannerColor.withValues(alpha: 0.35)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: bannerColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: bannerColor,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: const TextStyle(fontSize: 11, color: AppColors.muted),
+                ),
+              ],
+            ),
+          ),
+          if (active)
+            AppButton(
+              keyOverride: const Key('mock-driver-stop'),
+              label: '停止代答',
+              small: true,
+              variant: AppButtonVariant.ghost,
+              onPressed: () =>
+                  driver.stop('已手动停止代答；面试进度已保存，可继续人工作答'),
+            ),
+        ],
+      ),
+    );
   }
 
   // ───────────── 大纲面板 ─────────────
